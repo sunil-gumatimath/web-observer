@@ -44,7 +44,7 @@ const features = [
 
 export default function HomePage() {
   return (
-    <div className="relative min-h-screen overflow-hidden text-slate-100">
+    <div className="relative min-h-screen overflow-hidden text-slate-900 dark:text-slate-100">
       <div className="pointer-events-none absolute inset-0 hero-grid" />
 
       <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
@@ -53,13 +53,19 @@ export default function HomePage() {
             M
           </span>
           <span>
-            Monitor<span className="text-slate-400">-the-</span>Web
+            Monitor<span className="text-slate-500 dark:text-slate-400">-the-</span>Web
           </span>
         </div>
         <div className="flex items-center gap-2">
           <Link
+            href="/docs"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+          >
+            Docs
+          </Link>
+          <Link
             href="/sign-in"
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:text-white"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
           >
             Sign in
           </Link>
@@ -78,14 +84,14 @@ export default function HomePage() {
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400" />
             Web change detection & high-signal alerts
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl md:text-6xl md:leading-[1.08]">
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl md:text-6xl md:leading-[1.08] dark:text-white">
             Know the moment{" "}
-            <span className="bg-gradient-to-r from-sky-300 via-cyan-200 to-indigo-300 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-sky-500 via-cyan-500 to-indigo-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-cyan-200 dark:to-indigo-300">
               pages you care about
             </span>{" "}
             change.
           </h1>
-          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-400 sm:text-lg">
+          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg dark:text-slate-400">
             Track public URLs or precise sections, get email and webhook alerts, and review clear
             before-and-after diffs. Built for product teams, founders, and researchers.
           </p>
@@ -98,13 +104,13 @@ export default function HomePage() {
             </Link>
             <Link
               href="/sign-in"
-              className="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-semibold text-slate-100 backdrop-blur transition hover:bg-white/10"
+              className="rounded-xl border border-slate-300 bg-white/60 px-6 py-3 text-sm font-semibold text-slate-800 backdrop-blur transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10"
             >
               Sign in
             </Link>
             <Link
               href="/dashboard"
-              className="rounded-xl px-4 py-3 text-sm font-medium text-slate-400 transition hover:text-white"
+              className="rounded-xl px-4 py-3 text-sm font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             >
               Go to dashboard →
             </Link>
@@ -115,22 +121,22 @@ export default function HomePage() {
           {features.map((f) => (
             <div
               key={f.title}
-              className="glass-card group transition hover:border-sky-500/25 hover:shadow-glow-sm"
+              className="glass-card group transition hover:border-sky-500/40 hover:shadow-glow-sm dark:hover:border-sky-500/25"
             >
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20 transition group-hover:bg-sky-500/15">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600 ring-1 ring-sky-500/25 transition group-hover:bg-sky-500/20 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20 dark:group-hover:bg-sky-500/15">
                 {f.icon}
               </div>
-              <h2 className="text-base font-semibold text-white">{f.title}</h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{f.body}</p>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">{f.title}</h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{f.body}</p>
             </div>
           ))}
         </div>
 
-        <div className="mx-auto mt-16 max-w-3xl rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-8 text-center shadow-card backdrop-blur">
-          <p className="text-sm font-medium text-slate-300">
+        <div className="mx-auto mt-16 max-w-3xl rounded-2xl border border-[var(--border)] bg-gradient-to-br from-white/80 to-slate-100/80 p-8 text-center shadow-card backdrop-blur dark:from-slate-900/80 dark:to-slate-950/80">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Whole page · CSS selector · JSON field · List items · Visual screenshots
           </p>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
             Auth powered by Clerk. After sign-in you land on the dashboard.
           </p>
         </div>
