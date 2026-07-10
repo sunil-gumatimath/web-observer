@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg
+
+# Env / secrets
+.env
+.env.local
+*.pem
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Node (Phase 2)
+node_modules/
+frontend/.next/
+frontend/out/
+
+# Local data (snapshots without MinIO)
+data/
+backend/data/
+*.log
+.docker-data/
+
+# Alembic
+# keep versions; ignore local ad-hoc
