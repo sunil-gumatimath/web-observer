@@ -1,0 +1,299 @@
+import {
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from "react";
+
+export function cn(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
+
+export function Button({
+  className,
+  variant = "primary",
+  size = "md",
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary" | "danger" | "ghost";
+  size?: "sm" | "md" | "lg";
+}) {
+  const styles = {
+    primary:
+      "bg-gradient-to-b from-sky-500 to-sky-600 text-white shadow-glow-sm hover:from-sky-400 hover:to-sky-500 border border-sky-400/30",
+    secondary:
+      "bg-slate-800/80 text-slate-100 hover:bg-slate-700/90 border border-white/10 shadow-sm",
+    danger:
+      "bg-rose-600/90 text-white hover:bg-rose-500 border border-rose-400/20 shadow-sm",
+    ghost: "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white border border-transparent",
+  }[variant];
+
+  const sizes = {
+    sm: "px-2.5 py-1.5 text-xs",
+    md: "px-3.5 py-2 text-sm",
+    lg: "px-5 py-2.5 text-sm",
+  }[size];
+
+  return (
+    <button
+      className={cn(
+        "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40",
+        "disabled:pointer-events-none disabled:opacity-45",
+        styles,
+        sizes,
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={cn("field", className)} {...props} />;
+}
+
+export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn("field resize-y", className)} {...props} />;
+}
+
+export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select className={cn("field appearance-none pr-8", className)} {...props}>
+      {children}
+    </select>
+  );
+}
+
+export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400"
+    >
+      {children}
+    </label>
+  );
+}
+
+export function Card({
+  children,
+  className,
+  hover = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  hover?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "glass-card",
+        hover && "transition hover:border-sky-500/25 hover:shadow-glow-sm",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function Badge({
+  children,
+  tone = "neutral",
+}: {
+  children: ReactNode;
+  tone?: "neutral" | "success" | "danger" | "warn" | "info";
+}) {
+  const styles = {
+    neutral: "bg-slate-800/90 text-slate-300 ring-1 ring-white/10",
+    success: "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/25",
+    danger: "bg-rose-500/10 text-rose-300 ring-1 ring-rose-500/25",
+    warn: "bg-amber-500/10 text-amber-200 ring-1 ring-amber-500/25",
+    info: "bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/25",
+  }[tone];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+        styles,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">{title}</h1>
+        {description ? (
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-400">{description}</p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+export function EmptyState({
+  title,
+  body,
+  action,
+  icon,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+  icon?: ReactNode;
+}) {
+  return (
+    <Card className="flex flex-col items-center py-12 text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20">
+        {icon ?? (
+          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+            />
+          </svg>
+        )}
+      </div>
+      <p className="text-base font-medium text-slate-100">{title}</p>
+      <p className="mt-1.5 max-w-sm text-sm text-slate-400">{body}</p>
+      {action ? <div className="mt-5">{action}</div> : null}
+    </Card>
+  );
+}
+
+export function ErrorBox({ message }: { message: string }) {
+  return (
+    <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3.5 py-3 text-sm text-rose-200">
+      <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+        />
+      </svg>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+export function SuccessBox({ message }: { message: string }) {
+  return (
+    <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3.5 py-3 text-sm text-emerald-200">
+      <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+      </svg>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+export function Spinner() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500/20 border-t-sky-400" />
+      <p className="text-sm text-slate-500">Loading…</p>
+    </div>
+  );
+}
+
+export function StatCard({
+  label,
+  value,
+  hint,
+  progress,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  progress?: number | null;
+}) {
+  const pct =
+    progress != null && Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : null;
+
+  return (
+    <Card className="relative overflow-hidden">
+      <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-sky-500/10 blur-2xl" />
+      <p className="section-label">{label}</p>
+      <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{value}</p>
+      {hint ? <p className="mt-1.5 text-xs text-slate-500">{hint}</p> : null}
+      {pct != null ? (
+        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-800">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-sky-500 to-indigo-400 transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="section-label">{children}</h2>
+      {action}
+    </div>
+  );
+}
+
+export function DataTable({
+  headers,
+  children,
+  empty,
+}: {
+  headers: string[];
+  children: ReactNode;
+  empty?: ReactNode;
+}) {
+  return (
+    <div className="surface overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-white/5 bg-slate-950/40">
+              {headers.map((h) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">{children}</tbody>
+        </table>
+      </div>
+      {empty}
+    </div>
+  );
+}
+
+export function ModeBadge({ mode }: { mode: string }) {
+  const labels: Record<string, string> = {
+    whole_page: "Whole page",
+    css_selector: "CSS selector",
+    json_field: "JSON field",
+    list_items: "List items",
+    visual: "Visual",
+  };
+  return <Badge tone="info">{labels[mode] ?? mode}</Badge>;
+}
