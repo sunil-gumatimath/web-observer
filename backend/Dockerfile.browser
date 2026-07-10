@@ -1,0 +1,16 @@
+# Browser worker image with Playwright Chromium
+FROM mcr.microsoft.com/playwright/python:v1.49.1-jammy
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Dramatiq worker listening only to browser_checks queue
+CMD ["dramatiq", "app.workers", "--queues", "browser_checks", "--processes", "1", "--threads", "1"]
