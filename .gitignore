@@ -40,3 +40,6 @@ backend/data/
 
 # Alembic
 # keep versions; ignore local ad-hoc
+
+# Local-only planning docs
+monitor-the-web-final-roadmap.md
