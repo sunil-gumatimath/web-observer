@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 export default {
+  darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -11,6 +12,14 @@ export default {
       colors: {
         background: "var(--bg)",
         foreground: "var(--text)",
+        elevated: "var(--bg-elevated)",
+        card: "var(--bg-card)",
+        muted: "var(--muted)",
+        "border-default": "var(--border)",
+        "border-strong": "var(--border-strong)",
+        accent: "var(--accent)",
+        "accent-strong": "var(--accent-strong)",
+        ring: "var(--ring)",
         brand: {
           50: "#f0f9ff",
           100: "#e0f2fe",
@@ -25,7 +34,7 @@ export default {
       boxShadow: {
         glow: "0 0 40px -8px rgba(14, 165, 233, 0.45)",
         "glow-sm": "0 0 20px -6px rgba(14, 165, 233, 0.35)",
-        card: "0 10px 40px -12px rgba(0, 0, 0, 0.55)",
+        card: "0 10px 40px -12px rgba(0, 0, 0, 0.18)",
       },
       fontFamily: {
         sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],

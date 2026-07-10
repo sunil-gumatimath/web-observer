@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,8 +37,11 @@ export default function RootLayout({
           signInFallbackRedirectUrl="/dashboard"
           signUpFallbackRedirectUrl="/dashboard"
           afterSignOutUrl="/"
+          appearance={{ variables: { colorPrimary: "#0ea5e9" } }}
         >
-          <Providers>{children}</Providers>
+          <ThemeProvider>
+            <Providers>{children}</Providers>
+          </ThemeProvider>
         </ClerkProvider>
       </body>
     </html>
