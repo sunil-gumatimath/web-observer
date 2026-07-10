@@ -23,10 +23,11 @@ export function Button({
     primary:
       "bg-gradient-to-b from-sky-500 to-sky-600 text-white shadow-glow-sm hover:from-sky-400 hover:to-sky-500 border border-sky-400/30",
     secondary:
-      "bg-slate-800/80 text-slate-100 hover:bg-slate-700/90 border border-white/10 shadow-sm",
+      "bg-slate-100 text-slate-800 hover:bg-slate-200 border border-slate-300 shadow-sm dark:bg-slate-800/80 dark:text-slate-100 dark:hover:bg-slate-700/90 dark:border-white/10",
     danger:
       "bg-rose-600/90 text-white hover:bg-rose-500 border border-rose-400/20 shadow-sm",
-    ghost: "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white border border-transparent",
+    ghost:
+      "bg-transparent text-slate-600 hover:bg-slate-200/60 hover:text-slate-900 border border-transparent dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white",
   }[variant];
 
   const sizes = {
@@ -70,7 +71,7 @@ export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: st
   return (
     <label
       htmlFor={htmlFor}
-      className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-slate-400"
+      className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400"
     >
       {children}
     </label>
@@ -90,9 +91,11 @@ export function Card({
     <div
       className={cn(
         "glass-card",
-        hover && "transition hover:border-sky-500/25 hover:shadow-glow-sm",
+        hover &&
+          "transition hover:border-sky-500/40 hover:shadow-glow-sm dark:hover:border-sky-500/25",
         className,
       )}
+      suppressHydrationWarning
     >
       {children}
     </div>
@@ -107,11 +110,16 @@ export function Badge({
   tone?: "neutral" | "success" | "danger" | "warn" | "info";
 }) {
   const styles = {
-    neutral: "bg-slate-800/90 text-slate-300 ring-1 ring-white/10",
-    success: "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/25",
-    danger: "bg-rose-500/10 text-rose-300 ring-1 ring-rose-500/25",
-    warn: "bg-amber-500/10 text-amber-200 ring-1 ring-amber-500/25",
-    info: "bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/25",
+    neutral:
+      "bg-slate-200/90 text-slate-700 ring-1 ring-slate-300 dark:bg-slate-800/90 dark:text-slate-300 dark:ring-white/10",
+    success:
+      "bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+    danger:
+      "bg-rose-500/15 text-rose-700 ring-1 ring-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
+    warn:
+      "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/25",
+    info:
+      "bg-sky-500/15 text-sky-700 ring-1 ring-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25",
   }[tone];
   return (
     <span
@@ -137,9 +145,13 @@ export function PageHeader({
   return (
     <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl dark:text-white">
+          {title}
+        </h1>
         {description ? (
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-400">{description}</p>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            {description}
+          </p>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
@@ -160,7 +172,7 @@ export function EmptyState({
 }) {
   return (
     <Card className="flex flex-col items-center py-12 text-center">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/20">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-600 ring-1 ring-sky-500/25 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20">
         {icon ?? (
           <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path
@@ -171,8 +183,8 @@ export function EmptyState({
           </svg>
         )}
       </div>
-      <p className="text-base font-medium text-slate-100">{title}</p>
-      <p className="mt-1.5 max-w-sm text-sm text-slate-400">{body}</p>
+      <p className="text-base font-medium text-slate-900 dark:text-slate-100">{title}</p>
+      <p className="mt-1.5 max-w-sm text-sm text-slate-500 dark:text-slate-400">{body}</p>
       {action ? <div className="mt-5">{action}</div> : null}
     </Card>
   );
@@ -180,7 +192,7 @@ export function EmptyState({
 
 export function ErrorBox({ message }: { message: string }) {
   return (
-    <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3.5 py-3 text-sm text-rose-200">
+    <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-3 text-sm text-rose-700 dark:border-rose-500/25 dark:text-rose-200">
       <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path
           strokeLinecap="round"
@@ -195,7 +207,7 @@ export function ErrorBox({ message }: { message: string }) {
 
 export function SuccessBox({ message }: { message: string }) {
   return (
-    <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3.5 py-3 text-sm text-emerald-200">
+    <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3 text-sm text-emerald-700 dark:border-emerald-500/25 dark:text-emerald-200">
       <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
       </svg>
@@ -205,10 +217,19 @@ export function SuccessBox({ message }: { message: string }) {
 }
 
 export function Spinner() {
+  // suppressHydrationWarning: extensions may inject attrs (e.g. rtrvr-ls) before hydrate
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500/20 border-t-sky-400" />
-      <p className="text-sm text-slate-500">Loading…</p>
+    <div
+      className="flex flex-col items-center justify-center gap-3 py-16"
+      suppressHydrationWarning
+    >
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500/20 border-t-sky-500"
+        suppressHydrationWarning
+      />
+      <p className="text-sm text-slate-500 dark:text-slate-500" suppressHydrationWarning>
+        Loading…
+      </p>
     </div>
   );
 }
@@ -231,10 +252,12 @@ export function StatCard({
     <Card className="relative overflow-hidden">
       <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-sky-500/10 blur-2xl" />
       <p className="section-label">{label}</p>
-      <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{value}</p>
-      {hint ? <p className="mt-1.5 text-xs text-slate-500">{hint}</p> : null}
+      <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+        {value}
+      </p>
+      {hint ? <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">{hint}</p> : null}
       {pct != null ? (
-        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
           <div
             className="h-full rounded-full bg-gradient-to-r from-sky-500 to-indigo-400 transition-all"
             style={{ width: `${pct}%` }}
@@ -268,18 +291,18 @@ export function DataTable({
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-white/5 bg-slate-950/40">
+            <tr className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-950/40">
               {headers.map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                  className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500"
                 >
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">{children}</tbody>
+          <tbody className="divide-y divide-[var(--border)]">{children}</tbody>
         </table>
       </div>
       {empty}

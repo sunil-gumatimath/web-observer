@@ -94,18 +94,18 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
       {error ? <ErrorBox message={error} /> : null}
 
       <Card>
-        <p className="mb-4 text-sm text-slate-400">
+        <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
           Enabled channels receive change alerts (and digests when configured).
         </p>
         <div className="space-y-2">
           {channels.map((c) => (
             <div
               key={c.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/40 px-3.5 py-3"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-slate-50/60 px-3.5 py-3 dark:bg-slate-950/40"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-100">{c.address}</p>
-                <p className="mt-0.5 text-xs capitalize text-slate-500">{c.type}</p>
+                <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{c.address}</p>
+                <p className="mt-0.5 text-xs capitalize text-slate-500 dark:text-slate-500">{c.type}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge tone={c.enabled ? "success" : "warn"}>
@@ -121,7 +121,7 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
             </div>
           ))}
           {channels.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-white/10 px-3 py-6 text-center text-sm text-slate-500">
+            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
               No channels yet.
             </p>
           ) : null}
