@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --bg: #05070f;
+  --bg-elevated: #0b1220;
+  --bg-card: rgba(15, 23, 42, 0.72);
+  --border: rgba(148, 163, 184, 0.12);
+  --border-strong: rgba(148, 163, 184, 0.22);
+  --accent: #38bdf8;
+  --accent-strong: #0ea5e9;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --ring: rgba(56, 189, 248, 0.35);
+}
+
+body {
+  @apply min-h-screen text-slate-100 antialiased;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(14, 165, 233, 0.16), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, rgba(99, 102, 241, 0.12), transparent 50%),
+    radial-gradient(800px 400px at 50% 100%, rgba(16, 185, 129, 0.06), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-feature-settings: "ss01" on, "cv11" on;
+}
+
+::selection {
+  background: rgba(14, 165, 233, 0.35);
+  color: #f8fafc;
+}
+
+/* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.45);
+  border-radius: 999px;
+}
+
+a {
+  @apply transition-colors;
+}
+
+/* Form controls shared look */
+@layer components {
+  .field {
+    @apply w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100
+      shadow-inner shadow-black/20 outline-none transition
+      placeholder:text-slate-600
+      focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/20;
+  }
+
+  .glass-card {
+    @apply rounded-2xl border border-white/10 bg-slate-900/50 p-5 shadow-xl shadow-black/20 backdrop-blur-md;
+  }
+
+  .surface {
+    @apply rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-sm;
+  }
+
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-[0.14em] text-slate-500;
+  }
+
+  .link-quiet {
+    @apply text-slate-400 hover:text-white;
+  }
+
+  .nav-link {
+    @apply rounded-lg px-3 py-1.5 text-sm font-medium text-slate-400 transition
+      hover:bg-white/5 hover:text-white;
+  }
+
+  .nav-link-active {
+    @apply bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/25 hover:bg-sky-500/15 hover:text-sky-200;
+  }
+}
+
+pre.diff {
+  @apply overflow-x-auto rounded-xl border border-white/10 bg-slate-950/80 p-4 text-xs leading-relaxed text-slate-300;
+}
+
+/* Diff line coloring helpers (optional class usage) */
+pre.diff .add {
+  color: #6ee7b7;
+}
+
+pre.diff .del {
+  color: #fda4af;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.45s ease-out both;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+/* Subtle grid overlay for hero sections */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
+}

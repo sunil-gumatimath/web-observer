@@ -1,0 +1,141 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorBox,
+  ModeBadge,
+  PageHeader,
+  Spinner,
+} from "@/components/ui";
+import { api } from "@/lib/api";
+import type { Monitor } from "@/lib/types";
+import { ensureWorkspace } from "@/lib/workspace";
+
+export default function MonitorsPage() {
+  const [monitors, setMonitors] = useState<Monitor[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ws = await ensureWorkspace();
+        const list = await api.listMonitors(ws);
+        if (!cancelled) setMonitors(list);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load monitors");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div>
+      <PageHeader
+        title="Monitors"
+        description="All page checks in this workspace."
+        actions={
+          <Link href="/monitors/new">
+            <Button type="button">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              New monitor
+            </Button>
+          </Link>
+        }
+      />
+      {error ? <ErrorBox message={error} /> : null}
+
+      {monitors.length === 0 ? (
+        <EmptyState
+          title="No monitors"
+          body="Create a monitor for a public URL or CSS selector section."
+          action={
+            <Link href="/monitors/new">
+              <Button type="button">Create monitor</Button>
+            </Link>
+          }
+        />
+      ) : (
+        <>
+          {/* Desktop table */}
+          <div className="surface hidden overflow-hidden md:block">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/5 bg-slate-950/40">
+                  {["Name", "URL", "Mode", "Schedule", "Status"].map((h) => (
+                    <th
+                      key={h}
+                      className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {monitors.map((m) => (
+                  <tr key={m.id} className="transition hover:bg-white/[0.03]">
+                    <td className="px-4 py-3.5">
+                      <Link
+                        href={`/monitors/${m.id}`}
+                        className="font-medium text-slate-100 hover:text-sky-300"
+                      >
+                        {m.name}
+                      </Link>
+                    </td>
+                    <td className="max-w-xs truncate px-4 py-3.5 text-slate-400">{m.url}</td>
+                    <td className="px-4 py-3.5">
+                      <ModeBadge mode={m.mode} />
+                    </td>
+                    <td className="px-4 py-3.5 text-slate-400">
+                      every {m.schedule_interval_minutes}m
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <Badge tone={m.enabled ? "success" : "warn"}>
+                        {m.enabled ? "active" : "paused"}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="space-y-2 md:hidden">
+            {monitors.map((m) => (
+              <Link key={m.id} href={`/monitors/${m.id}`} className="block">
+                <div className="glass-card !p-4 transition hover:border-sky-500/25">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-slate-100">{m.name}</p>
+                    <Badge tone={m.enabled ? "success" : "warn"}>
+                      {m.enabled ? "active" : "paused"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-slate-500">{m.url}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <ModeBadge mode={m.mode} />
+                    <Badge tone="neutral">{m.schedule_interval_minutes}m</Badge>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
