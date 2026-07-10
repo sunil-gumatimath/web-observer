@@ -111,16 +111,16 @@ export default function SettingsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Card className="!p-4">
             <p className="section-label">API</p>
-            <p className="mt-2 truncate text-sm font-medium text-slate-200">{config.apiBaseUrl}</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-2 truncate text-sm font-medium text-slate-800 dark:text-slate-200">{config.apiBaseUrl}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
               Health:{" "}
               <span
                 className={
                   apiStatus.startsWith("ok") || apiStatus.includes("ok")
-                    ? "text-emerald-400"
+                    ? "text-emerald-600 dark:text-emerald-400"
                     : apiStatus === "…"
-                      ? "text-slate-500"
-                      : "text-rose-400"
+                      ? "text-slate-500 dark:text-slate-500"
+                      : "text-rose-600 dark:text-rose-400"
                 }
               >
                 {apiStatus}
@@ -130,11 +130,11 @@ export default function SettingsPage() {
 
           <Card className="!p-4">
             <p className="section-label">Auth mode</p>
-            <p className="mt-2 text-sm font-medium text-slate-200">
+            <p className="mt-2 text-sm font-medium text-slate-800 dark:text-slate-200">
               {config.clerkEnabled ? "Clerk (Bearer JWT)" : "Internal token (dev)"}
             </p>
             {me ? (
-              <div className="mt-2 space-y-0.5 text-xs text-slate-400">
+              <div className="mt-2 space-y-0.5 text-xs text-slate-600 dark:text-slate-400">
                 <p>Email: {me.email ?? "—"}</p>
                 <p>Internal: {me.is_internal ? "yes" : "no"}</p>
                 <p className="truncate">
@@ -211,12 +211,12 @@ export default function SettingsPage() {
                 onChange={(e) => setDigestHour(Number(e.target.value))}
               />
             </div>
-            <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2.5 text-sm text-slate-300 transition hover:border-white/10">
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-400 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-white/10">
               <input
                 type="checkbox"
                 checked={aiEnabled}
                 onChange={(e) => setAiEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-sky-500 focus:ring-sky-500/30"
+                className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
               />
               AI summaries & categories (optional LLM; heuristic if no key)
             </label>
@@ -264,7 +264,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="space-y-4">
       <SectionTitle>Optional: API keys & webhooks</SectionTitle>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-500">
         Billing is disabled for solo use. Free plan already includes full personal limits.
       </p>
       {err ? <ErrorBox message={err} /> : null}
@@ -289,7 +289,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
           Create API key
         </Button>
         {apiKey ? (
-          <p className="break-all rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 font-mono text-xs text-amber-200">
+          <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
             {apiKey}
           </p>
         ) : null}
@@ -316,7 +316,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
           Add webhook
         </Button>
         {webhookSecret ? (
-          <p className="break-all rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 font-mono text-xs text-amber-200">
+          <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
             secret: {webhookSecret}
           </p>
         ) : null}

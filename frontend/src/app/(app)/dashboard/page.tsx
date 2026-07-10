@@ -98,7 +98,7 @@ export default function DashboardPage() {
       <SectionTitle
         action={
           monitors.length > 0 ? (
-            <Link href="/monitors" className="text-xs font-medium text-sky-400 hover:text-sky-300">
+            <Link href="/monitors" className="text-xs font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300">
               View all →
             </Link>
           ) : null
@@ -123,7 +123,7 @@ export default function DashboardPage() {
             <Link key={m.id} href={`/monitors/${m.id}`} className="block">
               <Card hover className="flex items-center justify-between gap-4 !py-4">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-800/80 text-sky-400 ring-1 ring-white/10">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-200/80 text-sky-600 ring-1 ring-slate-300 dark:bg-slate-800/80 dark:text-sky-400 dark:ring-white/10">
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path
                         strokeLinecap="round"
@@ -133,8 +133,8 @@ export default function DashboardPage() {
                     </svg>
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-100">{m.name}</p>
-                    <p className="truncate text-xs text-slate-500">{m.url}</p>
+                    <p className="truncate font-medium text-slate-900 dark:text-slate-100">{m.name}</p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-500">{m.url}</p>
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">

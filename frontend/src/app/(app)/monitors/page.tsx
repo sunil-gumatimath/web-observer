@@ -74,33 +74,33 @@ export default function MonitorsPage() {
           <div className="surface hidden overflow-hidden md:block">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-950/40">
+                <tr className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-950/40">
                   {["Name", "URL", "Mode", "Schedule", "Status"].map((h) => (
                     <th
                       key={h}
-                      className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                      className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500"
                     >
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border)]">
                 {monitors.map((m) => (
-                  <tr key={m.id} className="transition hover:bg-white/[0.03]">
+                  <tr key={m.id} className="transition hover:bg-slate-100/60 dark:hover:bg-white/[0.03]">
                     <td className="px-4 py-3.5">
                       <Link
                         href={`/monitors/${m.id}`}
-                        className="font-medium text-slate-100 hover:text-sky-300"
+                        className="font-medium text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-300"
                       >
                         {m.name}
                       </Link>
                     </td>
-                    <td className="max-w-xs truncate px-4 py-3.5 text-slate-400">{m.url}</td>
+                    <td className="max-w-xs truncate px-4 py-3.5 text-slate-600 dark:text-slate-400">{m.url}</td>
                     <td className="px-4 py-3.5">
                       <ModeBadge mode={m.mode} />
                     </td>
-                    <td className="px-4 py-3.5 text-slate-400">
+                    <td className="px-4 py-3.5 text-slate-600 dark:text-slate-400">
                       every {m.schedule_interval_minutes}m
                     </td>
                     <td className="px-4 py-3.5">
@@ -118,14 +118,14 @@ export default function MonitorsPage() {
           <div className="space-y-2 md:hidden">
             {monitors.map((m) => (
               <Link key={m.id} href={`/monitors/${m.id}`} className="block">
-                <div className="glass-card !p-4 transition hover:border-sky-500/25">
+                <div className="glass-card !p-4 transition hover:border-sky-500/40 dark:hover:border-sky-500/25">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-slate-100">{m.name}</p>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{m.name}</p>
                     <Badge tone={m.enabled ? "success" : "warn"}>
                       {m.enabled ? "active" : "paused"}
                     </Badge>
                   </div>
-                  <p className="mt-1 truncate text-xs text-slate-500">{m.url}</p>
+                  <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-500">{m.url}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <ModeBadge mode={m.mode} />
                     <Badge tone="neutral">{m.schedule_interval_minutes}m</Badge>

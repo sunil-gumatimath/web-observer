@@ -158,24 +158,24 @@ export default function MonitorDetailPage() {
             <ModeBadge mode={monitor.mode} />
           </div>
           {monitor.css_selector ? (
-            <p className="mt-2 truncate font-mono text-xs text-slate-500">{monitor.css_selector}</p>
+            <p className="mt-2 truncate font-mono text-xs text-slate-500 dark:text-slate-500">{monitor.css_selector}</p>
           ) : null}
         </Card>
         <Card className="!p-4">
           <p className="section-label">Renderer</p>
-          <p className="mt-2.5 text-sm font-medium text-slate-100">
+          <p className="mt-2.5 text-sm font-medium text-slate-900 dark:text-slate-100">
             {monitor.js_required ? "Playwright (JS)" : "HTTP"}
           </p>
         </Card>
         <Card className="!p-4">
           <p className="section-label">Schedule</p>
-          <p className="mt-2.5 text-sm font-medium text-slate-100">
+          <p className="mt-2.5 text-sm font-medium text-slate-900 dark:text-slate-100">
             Every {monitor.schedule_interval_minutes} min
           </p>
         </Card>
         <Card className="!p-4">
           <p className="section-label">Failures in a row</p>
-          <p className="mt-2.5 text-sm font-medium text-slate-100">
+          <p className="mt-2.5 text-sm font-medium text-slate-900 dark:text-slate-100">
             {monitor.consecutive_failures ?? 0}
           </p>
         </Card>
@@ -187,20 +187,20 @@ export default function MonitorDetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-950/40">
+                <tr className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-950/40">
                   {["Status", "HTTP", "Latency", "Error", "Finished"].map((h) => (
                     <th
                       key={h}
-                      className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+                      className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500"
                     >
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border)]">
                 {runs.map((r) => (
-                  <tr key={r.id} className="transition hover:bg-white/[0.02]">
+                  <tr key={r.id} className="transition hover:bg-slate-100/60 dark:hover:bg-white/[0.02]">
                     <td className="px-4 py-3">
                       <Badge
                         tone={
@@ -214,21 +214,21 @@ export default function MonitorDetailPage() {
                         {r.status}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-slate-400">{r.http_status ?? "—"}</td>
-                    <td className="px-4 py-3 text-slate-400">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{r.http_status ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                       {r.latency_ms != null ? `${r.latency_ms}ms` : "—"}
                     </td>
-                    <td className="max-w-xs truncate px-4 py-3 text-slate-400">
+                    <td className="max-w-xs truncate px-4 py-3 text-slate-600 dark:text-slate-400">
                       {r.error_code ?? "—"}
                     </td>
-                    <td className="px-4 py-3 text-slate-500">
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-500">
                       {r.finished_at ? new Date(r.finished_at).toLocaleString() : "—"}
                     </td>
                   </tr>
                 ))}
                 {runs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-slate-500">
+                    <td colSpan={5} className="px-4 py-10 text-center text-slate-500 dark:text-slate-500">
                       No runs yet. Click &quot;Run now&quot;.
                     </td>
                   </tr>
@@ -249,10 +249,10 @@ export default function MonitorDetailPage() {
                   {c.change_category ? <Badge tone="info">{c.change_category}</Badge> : null}
                   {c.is_noise ? <Badge tone="warn">noise</Badge> : null}
                 </div>
-                <p className="mt-2 text-sm text-slate-200">
+                <p className="mt-2 text-sm text-slate-800 dark:text-slate-200">
                   {c.ai_summary || c.diff_summary || "Content changed"}
                 </p>
-                <p className="mt-1.5 text-xs text-slate-500">
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">
                   {new Date(c.created_at).toLocaleString()}
                 </p>
               </Card>
@@ -260,7 +260,7 @@ export default function MonitorDetailPage() {
           ))}
           {changes.length === 0 ? (
             <Card>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-500">
                 No change events yet. First success creates a baseline without an alert.
               </p>
             </Card>

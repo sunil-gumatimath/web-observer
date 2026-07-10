@@ -91,20 +91,20 @@ export default function ChangeDetailPage() {
       {change.ai_summary ? (
         <Card className="mb-4">
           <p className="section-label">AI summary</p>
-          <p className="mt-2.5 text-sm leading-relaxed text-slate-200">{change.ai_summary}</p>
+          <p className="mt-2.5 text-sm leading-relaxed text-slate-800 dark:text-slate-200">{change.ai_summary}</p>
         </Card>
       ) : null}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <Card className="!p-4">
           <p className="section-label">Previous hash</p>
-          <p className="mt-2 break-all font-mono text-xs text-slate-300">
+          <p className="mt-2 break-all font-mono text-xs text-slate-700 dark:text-slate-300">
             {change.previous_hash ?? "—"}
           </p>
         </Card>
         <Card className="!p-4">
           <p className="section-label">New hash</p>
-          <p className="mt-2 break-all font-mono text-xs text-slate-300">{change.new_hash}</p>
+          <p className="mt-2 break-all font-mono text-xs text-slate-700 dark:text-slate-300">{change.new_hash}</p>
         </Card>
       </div>
 

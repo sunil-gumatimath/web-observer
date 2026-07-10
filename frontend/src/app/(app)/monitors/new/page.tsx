@@ -165,17 +165,17 @@ export default function NewMonitorPage() {
             />
           </div>
           {mode !== "visual" ? (
-            <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2.5 text-sm text-slate-300 transition hover:border-white/10">
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-400 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-white/10">
               <input
                 type="checkbox"
                 checked={jsRequired}
                 onChange={(e) => setJsRequired(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-sky-500 focus:ring-sky-500/30"
+                className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
               />
               JavaScript rendering required (Playwright)
             </label>
           ) : (
-            <p className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-200/90">
+            <p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
               Visual mode always uses the Playwright browser worker.
             </p>
           )}
@@ -191,7 +191,7 @@ export default function NewMonitorPage() {
               />
             </div>
           ) : null}
-          <div className="flex gap-2 border-t border-white/5 pt-5">
+          <div className="flex gap-2 border-t border-[var(--border)] pt-5">
             <Button type="submit" disabled={saving}>
               {saving ? "Creating…" : "Create monitor"}
             </Button>
