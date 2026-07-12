@@ -19,9 +19,10 @@ function ClerkTokenBridge({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isLoaded) return;
+    // getAuthToken() also races a timeout; keep this thin.
     setAuthTokenGetter(async () => {
       try {
-        return await getToken();
+        return (await getToken()) ?? null;
       } catch {
         return null;
       }
