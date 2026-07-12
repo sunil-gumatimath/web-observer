@@ -8,6 +8,11 @@ import { config } from "@/lib/config";
 /**
  * Bridges Clerk session tokens to the FastAPI client.
  * ClerkProvider is provided by root layout (clerk init).
+ *
+ * Important: do not return a different tree based on `isLoaded` during render.
+ * That causes React hydration mismatches (and browser extensions often make
+ * them worse by injecting attributes on the temporary Loading DOM node).
+ * API calls already wait for a token in `lib/api.ts`.
  */
 function ClerkTokenBridge({ children }: { children: ReactNode }) {
   const { getToken, isLoaded } = useAuth();
@@ -23,15 +28,6 @@ function ClerkTokenBridge({ children }: { children: ReactNode }) {
     });
     return () => setAuthTokenGetter(null);
   }, [getToken, isLoaded]);
-
-  // Avoid mounting app pages until Clerk is ready so API calls don't race the token bridge.
-  if (!isLoaded) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500">
-        Loading…
-      </div>
-    );
-  }
 
   return <>{children}</>;
 }
