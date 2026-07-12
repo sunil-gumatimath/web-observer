@@ -18,6 +18,7 @@ export type Monitor = {
   enabled: boolean;
   config_version: number;
   js_required?: boolean;
+  watch_note?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
   consecutive_failures?: number;
@@ -57,7 +58,19 @@ export type ChangeEvent = {
   ai_summary?: string | null;
   change_category?: string | null;
   is_noise?: boolean;
+  is_read?: boolean;
   created_at: string;
+};
+
+export type AlertInboxItem = ChangeEvent & {
+  monitor_name: string;
+  monitor_url: string;
+};
+
+export type AlertsSummary = {
+  total: number;
+  unread: number;
+  noise: number;
 };
 
 export type ChangeEventDetail = ChangeEvent & {
@@ -92,6 +105,7 @@ export type MonitorCreateInput = {
   timezone?: string;
   notification_email?: string;
   js_required?: boolean;
+  watch_note?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
 };
@@ -106,6 +120,7 @@ export type MonitorUpdateInput = {
   timeout_seconds?: number;
   enabled?: boolean;
   js_required?: boolean;
+  watch_note?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
 };

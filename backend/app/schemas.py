@@ -57,6 +57,7 @@ class MonitorCreate(BaseModel):
     max_response_bytes: int = Field(default=2_000_000, ge=1024, le=10_000_000)
     notification_email: EmailStr | None = None
     js_required: bool = False
+    watch_note: str | None = Field(default=None, max_length=2000)
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
 
@@ -102,6 +103,7 @@ class MonitorUpdate(BaseModel):
     max_response_bytes: int | None = Field(default=None, ge=1024, le=10_000_000)
     enabled: bool | None = None
     js_required: bool | None = None
+    watch_note: str | None = Field(default=None, max_length=2000)
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
 
@@ -143,6 +145,7 @@ class MonitorOut(BaseModel):
     enabled: bool
     config_version: int
     js_required: bool = False
+    watch_note: str | None = None
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
     consecutive_failures: int = 0
@@ -186,6 +189,7 @@ class ChangeEventOut(BaseModel):
     ai_summary: str | None = None
     change_category: str | None = None
     is_noise: bool = False
+    is_read: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -197,8 +201,25 @@ class ChangeEventDetail(ChangeEventOut):
     new_text: str | None = None
 
 
+class AlertInboxItem(ChangeEventOut):
+    """Change event with monitor context for the workspace alerts inbox."""
+
+    monitor_name: str
+    monitor_url: str
+
+
+class AlertsSummary(BaseModel):
+    total: int
+    unread: int
+    noise: int
+
+
 class NoiseFeedbackIn(BaseModel):
     is_noise: bool
+
+
+class ReadStateIn(BaseModel):
+    is_read: bool = True
 
 
 class SnapshotAccessOut(BaseModel):

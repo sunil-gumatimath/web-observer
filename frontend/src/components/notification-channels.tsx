@@ -95,7 +95,8 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
 
       <Card>
         <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
-          Enabled channels receive change alerts (and digests when configured).
+          Enabled channels receive change alerts (and digests when configured). Use a Slack or
+          Discord <strong>incoming webhook</strong> URL for team chat.
         </p>
         <div className="space-y-2">
           {channels.map((c) => (

@@ -52,29 +52,34 @@ def deliver_outbox_message(outbox_id: str) -> None:
 
         title = f"[Monitor-the-Web] {label}: {payload.get('monitor_name', 'workspace')}"
         body_lines = [
-            f"Monitor: {payload.get('monitor_name')}",
-            f"URL: {payload.get('url')}",
-            f"Category: {payload.get('category') or 'n/a'}",
-            f"Summary: {payload.get('summary')}",
+            f"*Monitor:* {payload.get('monitor_name')}",
+            f"*URL:* {payload.get('url')}",
+            f"*Category:* {payload.get('category') or 'n/a'}",
         ]
-        if payload.get("ai_summary"):
-            body_lines.append(f"AI: {payload.get('ai_summary')}")
+        if payload.get("watch_note"):
+            body_lines.append(f"*Watching:* {payload.get('watch_note')}")
+        body_lines.append(f"*Summary:* {payload.get('ai_summary') or payload.get('summary') or 'Content changed'}")
         if payload.get("diff"):
             body_lines.append("")
-            body_lines.append("Details (truncated):")
-            body_lines.append(str(payload.get("diff"))[:4000])
+            body_lines.append("*Diff (truncated):*")
+            body_lines.append(f"```{str(payload.get('diff'))[:2500]}```")
         if payload.get("body"):
             body_lines.append(str(payload.get("body"))[:8000])
         body = "\n".join(line for line in body_lines if line is not None)
+        # Plain-text variant for email (strip simple markdown markers)
+        plain_body = (
+            body.replace("*", "")
+            .replace("```", "")
+        )
         to_addr = payload.get("to") or channel.address
 
         try:
             if channel_type == "slack":
                 provider_id = _send_slack(to_addr, title, body)
             elif channel_type == "discord":
-                provider_id = _send_discord(to_addr, title, body)
+                provider_id = _send_discord(to_addr, title, plain_body)
             else:
-                provider_id = send_email(to=to_addr, subject=title, text=body)
+                provider_id = send_email(to=to_addr, subject=title, text=plain_body)
 
             outbox.status = OutboxStatus.SENT.value
             outbox.last_error = None
@@ -105,10 +110,34 @@ def deliver_outbox_message(outbox_id: str) -> None:
 
 
 def _send_slack(webhook_url: str, title: str, body: str) -> str:
-    text = f"*{title}*\n```{body[:3500]}```"
+    """Post a Block Kit message to a Slack incoming webhook."""
     if not webhook_url.startswith("https://"):
         raise ValueError("Slack webhook must be https URL")
-    resp = httpx.post(webhook_url, json={"text": text}, timeout=30.0)
+    # Prefer structured blocks; fall back fields live in the plain text body.
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": title[:150], "emoji": True},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": body[:2900]},
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "Monitor-the-Web · open the app Alerts inbox for full detail",
+                }
+            ],
+        },
+    ]
+    payload = {
+        "text": f"{title}\n{body[:500]}",  # notification fallback
+        "blocks": blocks,
+    }
+    resp = httpx.post(webhook_url, json=payload, timeout=30.0)
     resp.raise_for_status()
     return "slack"
 

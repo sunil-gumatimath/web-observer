@@ -396,6 +396,7 @@ def _create_change_event(
         deterministic_summary=ctx.summary,
         diff_text=ctx.diff_text,
         enabled=ai_enabled,
+        watch_note=getattr(monitor, "watch_note", None),
     )
     ctx.enrichment = enrichment
 
@@ -411,6 +412,7 @@ def _create_change_event(
         ai_summary=enrichment.summary,
         change_category=enrichment.category,
         is_noise=False,
+        is_read=False,
     )
     db.add(change)
     db.flush()
@@ -448,14 +450,17 @@ def _queue_notifications(
             change_event_id=change.id,
             channel_id=channel.id,
             payload={
+                "kind": "change",
                 "monitor_id": str(monitor.id),
                 "monitor_name": monitor.name,
                 "url": monitor.url,
                 "summary": ctx.summary,
-                "ai_summary": enrichment.summary,
-                "category": enrichment.category,
-                "diff": ctx.diff_text[:50_000],
+                "ai_summary": enrichment.summary if enrichment else None,
+                "category": enrichment.category if enrichment else None,
+                "diff": (ctx.diff_text or "")[:50_000],
                 "mode": monitor.mode,
+                "watch_note": getattr(monitor, "watch_note", None),
+                "change_event_id": str(change.id),
                 "channel_type": channel.type,
                 "to": channel.address,
             },

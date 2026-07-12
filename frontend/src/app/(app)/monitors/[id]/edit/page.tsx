@@ -35,6 +35,7 @@ export default function EditMonitorPage() {
   const [interval, setInterval] = useState(60);
   const [timezone, setTimezone] = useState("UTC");
   const [jsRequired, setJsRequired] = useState(false);
+  const [watchNote, setWatchNote] = useState("");
   const [ignoreSelectors, setIgnoreSelectors] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,7 @@ export default function EditMonitorPage() {
         setInterval(m.schedule_interval_minutes);
         setTimezone(m.timezone);
         setJsRequired(Boolean(m.js_required));
+        setWatchNote(m.watch_note ?? "");
         setIgnoreSelectors((m.ignore_selectors ?? []).join("\n"));
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load monitor");
@@ -88,6 +90,7 @@ export default function EditMonitorPage() {
         schedule_interval_minutes: interval,
         timezone,
         js_required: jsRequired || mode === "visual",
+        watch_note: watchNote.trim() || null,
         ignore_selectors: ignore,
       });
       router.push(`/monitors/${monitorId}`);
@@ -175,6 +178,15 @@ export default function EditMonitorPage() {
               JavaScript rendering required
             </label>
           ) : null}
+          <div>
+            <Label htmlFor="watch">Watch note (optional)</Label>
+            <Input
+              id="watch"
+              value={watchNote}
+              onChange={(e) => setWatchNote(e.target.value)}
+              placeholder="e.g. Only care about pricing plan changes"
+            />
+          </div>
           {mode === "whole_page" || mode === "css_selector" ? (
             <div>
               <Label htmlFor="ignore">Ignore CSS selectors (one per line)</Label>

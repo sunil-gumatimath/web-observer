@@ -1,6 +1,8 @@
 import { getAuthToken } from "@/lib/auth-token";
 import { config } from "@/lib/config";
 import type {
+  AlertInboxItem,
+  AlertsSummary,
   ChangeEvent,
   ChangeEventDetail,
   Monitor,
@@ -168,6 +170,34 @@ export const api = {
 
   getChange: (workspaceId: string, changeId: string) =>
     request<ChangeEventDetail>(`/api/v1/workspaces/${workspaceId}/changes/${changeId}`),
+
+  listAlerts: (
+    workspaceId: string,
+    opts?: { unread_only?: boolean; include_noise?: boolean; limit?: number },
+  ) => {
+    const q = new URLSearchParams();
+    if (opts?.unread_only) q.set("unread_only", "true");
+    if (opts?.include_noise) q.set("include_noise", "true");
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return request<AlertInboxItem[]>(
+      `/api/v1/workspaces/${workspaceId}/alerts${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  alertsSummary: (workspaceId: string) =>
+    request<AlertsSummary>(`/api/v1/workspaces/${workspaceId}/alerts/summary`),
+
+  markChangeRead: (workspaceId: string, changeId: string, isRead = true) =>
+    request<ChangeEvent>(`/api/v1/workspaces/${workspaceId}/changes/${changeId}/read`, {
+      method: "POST",
+      body: JSON.stringify({ is_read: isRead }),
+    }),
+
+  markAllAlertsRead: (workspaceId: string) =>
+    request<AlertsSummary>(`/api/v1/workspaces/${workspaceId}/alerts/read-all`, {
+      method: "POST",
+    }),
 
   getUsage: (workspaceId: string) =>
     request<Usage>(`/api/v1/workspaces/${workspaceId}/usage`),

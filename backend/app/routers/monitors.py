@@ -28,6 +28,8 @@ from app.models import (
 )
 from app.models.entities import RunStatus
 from app.schemas import (
+    AlertInboxItem,
+    AlertsSummary,
     ChangeEventDetail,
     ChangeEventOut,
     ManualRunOut,
@@ -36,6 +38,7 @@ from app.schemas import (
     MonitorRunOut,
     MonitorUpdate,
     NoiseFeedbackIn,
+    ReadStateIn,
     SnapshotAccessOut,
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
@@ -144,6 +147,7 @@ def create_monitor(
         timeout_seconds=body.timeout_seconds,
         max_response_bytes=body.max_response_bytes,
         js_required=js_required,
+        watch_note=(body.watch_note or None),
         ignore_selectors=body.ignore_selectors,
         ignore_regexes=body.ignore_regexes,
         base_interval_minutes=body.schedule_interval_minutes,
@@ -514,11 +518,97 @@ def get_change(
         ai_summary=change.ai_summary,
         change_category=change.change_category,
         is_noise=bool(change.is_noise),
+        is_read=bool(getattr(change, "is_read", False)),
         created_at=change.created_at,
         diff=diff,
         previous_text=prev_text,
         new_text=new_text,
     )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/alerts",
+    response_model=list[AlertInboxItem],
+)
+def list_alerts(
+    workspace_id: UUID,
+    db: Db,
+    _workspace: Workspace = Depends(require_workspace_member),
+    unread_only: bool = Query(default=False),
+    include_noise: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[AlertInboxItem]:
+    """Workspace-wide change inbox (all monitors)."""
+    q = (
+        select(ChangeEvent, Monitor)
+        .join(Monitor, Monitor.id == ChangeEvent.monitor_id)
+        .where(ChangeEvent.workspace_id == workspace_id)
+    )
+    if unread_only:
+        q = q.where(ChangeEvent.is_read.is_(False))
+    if not include_noise:
+        q = q.where(ChangeEvent.is_noise.is_(False))
+    q = q.order_by(ChangeEvent.created_at.desc()).limit(limit)
+    rows = db.execute(q).all()
+    items: list[AlertInboxItem] = []
+    for change, monitor in rows:
+        items.append(
+            AlertInboxItem(
+                id=change.id,
+                workspace_id=change.workspace_id,
+                monitor_id=change.monitor_id,
+                run_id=change.run_id,
+                previous_snapshot_id=change.previous_snapshot_id,
+                new_snapshot_id=change.new_snapshot_id,
+                previous_hash=change.previous_hash,
+                new_hash=change.new_hash,
+                diff_summary=change.diff_summary,
+                ai_summary=change.ai_summary,
+                change_category=change.change_category,
+                is_noise=bool(change.is_noise),
+                is_read=bool(getattr(change, "is_read", False)),
+                created_at=change.created_at,
+                monitor_name=monitor.name,
+                monitor_url=monitor.url,
+            )
+        )
+    return items
+
+
+@router.get(
+    "/workspaces/{workspace_id}/alerts/summary",
+    response_model=AlertsSummary,
+)
+def alerts_summary(
+    workspace_id: UUID,
+    db: Db,
+    _workspace: Workspace = Depends(require_workspace_member),
+) -> AlertsSummary:
+    from sqlalchemy import func
+
+    total = db.scalar(
+        select(func.count())
+        .select_from(ChangeEvent)
+        .where(ChangeEvent.workspace_id == workspace_id)
+    ) or 0
+    unread = db.scalar(
+        select(func.count())
+        .select_from(ChangeEvent)
+        .where(
+            ChangeEvent.workspace_id == workspace_id,
+            ChangeEvent.is_read.is_(False),
+            ChangeEvent.is_noise.is_(False),
+        )
+    ) or 0
+    noise = db.scalar(
+        select(func.count())
+        .select_from(ChangeEvent)
+        .where(
+            ChangeEvent.workspace_id == workspace_id,
+            ChangeEvent.is_noise.is_(True),
+        )
+    ) or 0
+    return AlertsSummary(total=int(total), unread=int(unread), noise=int(noise))
 
 
 @router.post(
@@ -544,6 +634,54 @@ def mark_change_noise(
     db.commit()
     db.refresh(change)
     return change
+
+
+@router.post(
+    "/workspaces/{workspace_id}/changes/{change_id}/read",
+    response_model=ChangeEventOut,
+)
+def mark_change_read(
+    workspace_id: UUID,
+    change_id: UUID,
+    body: ReadStateIn,
+    db: Db,
+    _workspace: Workspace = Depends(require_workspace_member),
+) -> ChangeEvent:
+    change = db.scalar(
+        select(ChangeEvent).where(
+            ChangeEvent.id == change_id,
+            ChangeEvent.workspace_id == workspace_id,
+        )
+    )
+    if change is None:
+        raise HTTPException(status_code=404, detail="Change event not found")
+    change.is_read = body.is_read
+    db.commit()
+    db.refresh(change)
+    return change
+
+
+@router.post(
+    "/workspaces/{workspace_id}/alerts/read-all",
+    response_model=AlertsSummary,
+)
+def mark_all_alerts_read(
+    workspace_id: UUID,
+    db: Db,
+    _workspace: Workspace = Depends(require_workspace_member),
+) -> AlertsSummary:
+    from sqlalchemy import update as sa_update
+
+    db.execute(
+        sa_update(ChangeEvent)
+        .where(
+            ChangeEvent.workspace_id == workspace_id,
+            ChangeEvent.is_read.is_(False),
+        )
+        .values(is_read=True)
+    )
+    db.commit()
+    return alerts_summary(workspace_id, db, _workspace)
 
 
 @router.get(

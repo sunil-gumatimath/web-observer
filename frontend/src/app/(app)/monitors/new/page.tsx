@@ -44,10 +44,17 @@ export default function NewMonitorPage() {
   const [interval, setInterval] = useState(60);
   const [email, setEmail] = useState("");
   const [jsRequired, setJsRequired] = useState(false);
+  const [watchNote, setWatchNote] = useState("");
   const [ignoreSelectors, setIgnoreSelectors] = useState("");
   const [runNow, setRunNow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const IGNORE_PRESETS: Record<string, string[]> = {
+    cookies: [".cookie-banner", "#cookie-consent", "[class*='cookie']", "#onetrust-banner-sdk"],
+    ads: [".ads", ".ad-slot", "[id*='google_ads']", "iframe[src*='doubleclick']"],
+    chat: [".intercom-lightweight-app", "#hubspot-messages-iframe-container", "[class*='chat-widget']"],
+  };
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -70,6 +77,7 @@ export default function NewMonitorPage() {
         schedule_interval_minutes: interval,
         notification_email: email || undefined,
         js_required: jsRequired || mode === "visual",
+        watch_note: watchNote.trim() || null,
         ignore_selectors: ignore.length ? ignore : null,
       });
 
@@ -190,9 +198,42 @@ export default function NewMonitorPage() {
               Visual mode always uses the Playwright browser worker.
             </p>
           )}
+          <div>
+            <Label htmlFor="watch">Watch note (optional)</Label>
+            <Input
+              id="watch"
+              value={watchNote}
+              onChange={(e) => setWatchNote(e.target.value)}
+              placeholder="e.g. Only care about pricing plan changes"
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+              Focuses AI summaries and helps you remember intent.
+            </p>
+          </div>
           {mode === "whole_page" || mode === "css_selector" ? (
             <div>
               <Label htmlFor="ignore">Ignore CSS selectors (one per line, optional)</Label>
+              <div className="mb-2 flex flex-wrap gap-2">
+                {Object.entries(IGNORE_PRESETS).map(([key, sels]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className="rounded-md border border-[var(--border)] px-2 py-1 text-xs capitalize text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+                    onClick={() => {
+                      const cur = new Set(
+                        ignoreSelectors
+                          .split("\n")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      );
+                      sels.forEach((s) => cur.add(s));
+                      setIgnoreSelectors([...cur].join("\n"));
+                    }}
+                  >
+                    + {key}
+                  </button>
+                ))}
+              </div>
               <Textarea
                 id="ignore"
                 rows={3}

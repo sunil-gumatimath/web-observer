@@ -15,12 +15,13 @@ import {
   StatCard,
 } from "@/components/ui";
 import { api } from "@/lib/api";
-import type { Monitor, Usage } from "@/lib/types";
+import type { AlertsSummary, Monitor, Usage } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 
 export default function DashboardPage() {
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [alerts, setAlerts] = useState<AlertsSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -29,10 +30,15 @@ export default function DashboardPage() {
     (async () => {
       try {
         const ws = await ensureWorkspace();
-        const [m, u] = await Promise.all([api.listMonitors(ws), api.getUsage(ws)]);
+        const [m, u, a] = await Promise.all([
+          api.listMonitors(ws),
+          api.getUsage(ws),
+          api.alertsSummary(ws).catch(() => null),
+        ]);
         if (!cancelled) {
           setMonitors(m);
           setUsage(u);
+          setAlerts(a);
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
@@ -75,13 +81,24 @@ export default function DashboardPage() {
       />
       {error ? <ErrorBox message={error} /> : null}
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Monitors"
           value={monitors.length}
           hint={`${active} active · limit ${usage?.max_monitors ?? "—"}`}
           progress={monitorsPct}
         />
+        <Link href="/alerts" className="block">
+          <StatCard
+            label="Unread alerts"
+            value={alerts?.unread ?? 0}
+            hint={
+              alerts
+                ? `${alerts.total} total · ${alerts.noise} noise`
+                : "Open inbox"
+            }
+          />
+        </Link>
         <StatCard
           label="Checks today"
           value={usage?.checks_count ?? 0}
