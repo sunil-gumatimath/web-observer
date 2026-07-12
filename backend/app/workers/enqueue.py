@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from app.models import Monitor
 from app.workers.browser_checks import run_browser_check
 from app.workers.checks import run_http_check
 
 
-def enqueue_check(run_id: str, monitor: Monitor) -> None:
-    # Visual always uses browser; js_required also uses browser
-    needs_browser = bool(getattr(monitor, "js_required", False)) or getattr(
-        monitor, "mode", None
-    ) == "visual"
+def enqueue_check(run_id: str, *, needs_browser: bool = False) -> None:
+    """Route a run to the appropriate Dramatiq queue.
+
+    Args:
+        run_id: The MonitorRun UUID as a string.
+        needs_browser: True for visual mode or js_required monitors.
+    """
     if needs_browser:
         run_browser_check.send(str(run_id))
     else:

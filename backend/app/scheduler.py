@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Monitor, MonitorRun
 from app.models.entities import RunStatus
+from app.services.run_reaper import reap_stuck_runs
 from app.services.usage import QuotaExceeded, assert_can_run_check
 from app.workers.broker import redis_broker  # noqa: F401
 from app.workers.enqueue import enqueue_check
@@ -145,15 +146,16 @@ def main() -> None:
     while _running:
         try:
             release_expired_logic()
+
+            # Recover stuck runs before scheduling new ones
+            with SessionLocal() as db:
+                reaped = reap_stuck_runs(db)
+                if reaped:
+                    logger.warning("reaped_stuck_runs count=%d", reaped)
+
             jobs = claim_due_monitors(settings.scheduler_batch_size)
             for run_id, needs_browser in jobs:
-                class _M:
-                    pass
-
-                m = _M()
-                m.js_required = needs_browser
-                m.mode = "visual" if needs_browser else "whole_page"
-                enqueue_check(str(run_id), m)  # type: ignore[arg-type]
+                enqueue_check(str(run_id), needs_browser=needs_browser)
         except Exception:  # noqa: BLE001
             logger.exception("scheduler_loop_error")
         time.sleep(settings.scheduler_poll_seconds)

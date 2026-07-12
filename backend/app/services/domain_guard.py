@@ -55,20 +55,23 @@ def assert_domain_allowed(url: str) -> str:
     if count > settings.per_domain_rate_per_minute:
         raise DomainBlocked(domain, "rate limit exceeded")
 
-    # Concurrency semaphore
-    conc_key = f"conc:{domain}"
-    current = int(r.get(conc_key) or 0)
-    if current >= settings.per_domain_concurrency:
-        raise DomainBlocked(domain, "domain concurrency limit")
-
     return domain
 
 
 def acquire_domain_slot(domain: str, *, ttl_seconds: int = 120) -> None:
+    """Atomically increment concurrency counter and check limit.
+
+    Raises DomainBlocked if the domain is at capacity.
+    """
+    settings = get_settings()
     r = _redis()
     key = f"conc:{domain}"
-    r.incr(key)
+    current = r.incr(key)
     r.expire(key, ttl_seconds)
+    if current > settings.per_domain_concurrency:
+        # Over limit — rollback and reject
+        r.decr(key)
+        raise DomainBlocked(domain, "domain concurrency limit")
 
 
 def release_domain_slot(domain: str) -> None:

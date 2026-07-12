@@ -1,0 +1,76 @@
+"""Reap stuck MonitorRuns that exceeded their time limit.
+
+If a Dramatiq worker crashes mid-run, the MonitorRun stays in RUNNING/QUEUED
+status forever. The scheduler skips monitors with active runs, so a stuck run
+permanently blocks that monitor. This reaper detects and recovers from that.
+
+Notifications are intentionally not sent for reaped runs (minimal recovery).
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
+
+from app.models import MonitorRun
+from app.models.entities import RunStatus
+
+logger = logging.getLogger(__name__)
+
+# Dramatiq time_limit is 2-3 min for most actors. A run that's been
+# RUNNING for 10+ minutes is definitely stuck.
+STUCK_RUNNING_MINUTES = 10
+# A QUEUED run that hasn't started in 15 minutes is also stuck
+# (worker may have crashed before picking it up).
+STUCK_QUEUED_MINUTES = 15
+
+
+def reap_stuck_runs(db: Session) -> int:
+    """Mark RUNNING/QUEUED runs as FAILED if they've been stuck too long.
+
+    Returns the number of reaped runs. Does not enqueue user notifications.
+    """
+    now = datetime.now(UTC)
+    running_cutoff = now - timedelta(minutes=STUCK_RUNNING_MINUTES)
+    queued_cutoff = now - timedelta(minutes=STUCK_QUEUED_MINUTES)
+
+    stuck = db.scalars(
+        select(MonitorRun).where(
+            or_(
+                # Stuck in RUNNING state (must have started_at)
+                (MonitorRun.status == RunStatus.RUNNING.value)
+                & (MonitorRun.started_at.is_not(None))
+                & (MonitorRun.started_at < running_cutoff),
+                # Stuck in QUEUED state (never picked up)
+                (MonitorRun.status == RunStatus.QUEUED.value)
+                & (MonitorRun.queued_at.is_not(None))
+                & (MonitorRun.queued_at < queued_cutoff),
+            )
+        )
+    ).all()
+
+    for run in stuck:
+        old_status = run.status
+        age_ref = run.started_at or run.queued_at or now
+        logger.warning(
+            "reaping_stuck_run run_id=%s status=%s monitor_id=%s age_minutes=%d",
+            run.id,
+            old_status,
+            run.monitor_id,
+            int((now - age_ref).total_seconds() / 60),
+        )
+        run.status = RunStatus.FAILED.value
+        run.error_code = "timeout_reaped"
+        run.error_message = (
+            f"Run stuck in {old_status} state for too long, reaped by cleanup. "
+            f"This usually means the worker crashed or was restarted mid-run."
+        )
+        run.finished_at = now
+
+    if stuck:
+        db.commit()
+
+    return len(stuck)
