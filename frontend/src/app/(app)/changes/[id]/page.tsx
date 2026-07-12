@@ -12,6 +12,7 @@ import {
   SectionTitle,
   Spinner,
 } from "@/components/ui";
+import { ReadableContent } from "@/components/readable-content";
 import { api } from "@/lib/api";
 import type { ChangeEventDetail } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
@@ -108,9 +109,38 @@ export default function ChangeDetailPage() {
         </Card>
       </div>
 
-      <SectionTitle>Deterministic diff</SectionTitle>
-      <Card>
-        <pre className="diff whitespace-pre-wrap">{change.diff || "No diff available."}</pre>
+      {(change.previous_text || change.new_text) && (
+        <div className="mb-6 grid gap-4 lg:grid-cols-2">
+          <div>
+            <SectionTitle>Before</SectionTitle>
+            <ReadableContent
+              text={change.previous_text || ""}
+              maxChars={4000}
+              emptyLabel="No previous text."
+            />
+          </div>
+          <div>
+            <SectionTitle>After</SectionTitle>
+            <ReadableContent
+              text={change.new_text || ""}
+              maxChars={4000}
+              emptyLabel="No new text."
+            />
+          </div>
+        </div>
+      )}
+
+      <SectionTitle>Line diff</SectionTitle>
+      <Card className="!p-0 overflow-hidden">
+        <div className="max-h-[min(70vh,32rem)] overflow-auto">
+          {change.diff ? (
+            <pre className="diff m-0 whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-6">
+              {change.diff}
+            </pre>
+          ) : (
+            <p className="p-4 text-sm text-slate-500">No diff available.</p>
+          )}
+        </div>
       </Card>
     </div>
   );

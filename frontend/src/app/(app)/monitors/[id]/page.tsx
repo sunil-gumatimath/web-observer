@@ -13,6 +13,7 @@ import {
   SectionTitle,
   Spinner,
 } from "@/components/ui";
+import { ReadableContent } from "@/components/readable-content";
 import { api, ApiError } from "@/lib/api";
 import type { ChangeEvent, Monitor, MonitorRun } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
@@ -20,7 +21,6 @@ import { ensureWorkspace } from "@/lib/workspace";
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 const POLL_MS = 1500;
 const POLL_MAX_MS = 60_000;
-const PREVIEW_CHARS = 800;
 
 function isActiveRun(r: MonitorRun) {
   return r.status === "queued" || r.status === "running";
@@ -341,15 +341,15 @@ function MonitorDetailInner() {
 
           {latestTerminal?.status === "succeeded" ? (
             <div className="mt-4 border-t border-[var(--border)] pt-4">
-              <p className="section-label mb-2">Content preview</p>
               {previewLoading ? (
-                <p className="text-sm text-slate-500">Loading snapshot…</p>
+                <p className="text-sm text-slate-500">Loading captured content…</p>
               ) : previewText != null && previewText.length > 0 ? (
-                <pre className="max-h-56 overflow-auto rounded-lg border border-[var(--border)] bg-slate-50/80 p-3 text-xs leading-relaxed text-slate-700 dark:bg-slate-950/50 dark:text-slate-300">
-                  {previewText.length > PREVIEW_CHARS
-                    ? `${previewText.slice(0, PREVIEW_CHARS)}\n…`
-                    : previewText}
-                </pre>
+                <ReadableContent
+                  title="What we captured"
+                  text={previewText}
+                  maxChars={2500}
+                  emptyLabel="No text content in this snapshot."
+                />
               ) : (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   No text preview available for this snapshot
@@ -359,6 +359,25 @@ function MonitorDetailInner() {
             </div>
           ) : null}
         </Card>
+      ) : null}
+
+      {/* Always available readable snapshot (not only right after create) */}
+      {!showResultCard && latestTerminal?.status === "succeeded" ? (
+        <section className="mb-8">
+          <SectionTitle>Latest captured content</SectionTitle>
+          {previewLoading ? (
+            <p className="text-sm text-slate-500">Loading…</p>
+          ) : previewText != null && previewText.length > 0 ? (
+            <ReadableContent text={previewText} maxChars={2500} />
+          ) : (
+            <Card>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No text preview for the latest successful run
+                {monitor.mode === "visual" ? " (visual mode stores image hashes)." : "."}
+              </p>
+            </Card>
+          )}
+        </section>
       ) : null}
 
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
