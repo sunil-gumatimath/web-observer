@@ -43,18 +43,24 @@ const features = [
 ];
 
 export default function HomePage() {
+  // suppressHydrationWarning: browser extensions (e.g. Retriever) inject attrs
+  // like `rtrvr-ls` into the DOM before React hydrates — not an app bug.
   return (
-    <div className="relative min-h-screen overflow-hidden text-slate-900 dark:text-slate-100">
+    <div
+      className="relative min-h-screen overflow-hidden text-slate-900 dark:text-slate-100"
+      suppressHydrationWarning
+    >
       <div className="pointer-events-none absolute inset-0 hero-grid" />
 
-      <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
+      <header
+        className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-4 py-5"
+        suppressHydrationWarning
+      >
         <div className="flex items-center gap-2.5 font-semibold tracking-tight">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white shadow-glow-sm">
-            M
+            W
           </span>
-          <span>
-            Monitor<span className="text-slate-500 dark:text-slate-400">-the-</span>Web
-          </span>
+          <span>Web Observer</span>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -78,9 +84,12 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-24 pt-12 sm:pt-20">
-        <div className="mx-auto max-w-3xl text-center animate-fade-in-up">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-sky-500/25 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-300">
+      <main
+        className="relative z-10 mx-auto max-w-6xl px-4 pb-24 pt-12 sm:pt-20"
+        suppressHydrationWarning
+      >
+        <div className="mx-auto max-w-3xl text-center animate-fade-in-up" suppressHydrationWarning>
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-sky-500/25 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-600 dark:text-sky-300">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400" />
             Web change detection & high-signal alerts
           </div>

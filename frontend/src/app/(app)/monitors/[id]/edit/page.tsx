@@ -16,12 +16,14 @@ import {
 import { api } from "@/lib/api";
 import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
+import { usePageTitle } from "@/lib/use-page-title";
 
 function needsPath(mode: MonitorMode): boolean {
   return mode === "css_selector" || mode === "json_field" || mode === "list_items";
 }
 
 export default function EditMonitorPage() {
+  usePageTitle("Edit monitor");
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const monitorId = params.id;

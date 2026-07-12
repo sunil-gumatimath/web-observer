@@ -15,6 +15,7 @@ import {
 import { api } from "@/lib/api";
 import type { MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
+import { usePageTitle } from "@/lib/use-page-title";
 
 function pathLabel(mode: MonitorMode): string {
   switch (mode) {
@@ -36,6 +37,7 @@ function needsPath(mode: MonitorMode): boolean {
 }
 
 export default function NewMonitorPage() {
+  usePageTitle("New monitor");
   const router = useRouter();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("https://example.com/");

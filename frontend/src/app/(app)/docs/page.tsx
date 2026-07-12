@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Card, PageHeader } from "@/components/ui";
 
+export const metadata = { title: "Documentation · Web Observer" };
+
 const toc = [
   { id: "what-it-is", label: "What it is" },
   { id: "how-it-works", label: "How it works" },

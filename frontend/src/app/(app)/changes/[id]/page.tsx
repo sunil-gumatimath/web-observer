@@ -16,8 +16,11 @@ import { ReadableContent } from "@/components/readable-content";
 import { api } from "@/lib/api";
 import type { ChangeEventDetail } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export default function ChangeDetailPage() {
+  usePageTitle("Change detail");
+
   const params = useParams<{ id: string }>();
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [change, setChange] = useState<ChangeEventDetail | null>(null);

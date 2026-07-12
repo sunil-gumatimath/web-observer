@@ -10,10 +10,12 @@ import {
   SuccessBox,
   Textarea,
 } from "@/components/ui";
-import { config } from "@/lib/config";
+import { api } from "@/lib/api";
 import { ensureWorkspace } from "@/lib/workspace";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export default function ImportPage() {
+  usePageTitle("Bulk import");
   const [csvText, setCsvText] = useState(
     "name,url,mode,schedule_interval_minutes\nExample,https://example.com/,whole_page,60\n",
   );
@@ -28,16 +30,7 @@ export default function ImportPage() {
     setResult(null);
     try {
       const ws = await ensureWorkspace();
-      const res = await fetch(`${config.apiBaseUrl}/api/v1/workspaces/${ws}/monitors/import`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Internal-Token": config.internalToken,
-        },
-        body: JSON.stringify({ csv_text: csvText }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(JSON.stringify(body.detail ?? body));
+      const body = await api.bulkImportMonitors(ws, csvText);
       setResult(
         `Created ${body.created_count}. Skipped ${body.skipped?.length ?? 0}. Errors ${body.errors?.length ?? 0}.`,
       );

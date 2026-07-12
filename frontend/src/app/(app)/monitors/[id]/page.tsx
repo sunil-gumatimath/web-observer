@@ -17,6 +17,7 @@ import { ReadableContent } from "@/components/readable-content";
 import { api, ApiError } from "@/lib/api";
 import type { ChangeEvent, Monitor, MonitorRun } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
+import { usePageTitle } from "@/lib/use-page-title";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 const POLL_MS = 1500;
@@ -37,6 +38,7 @@ export default function MonitorDetailPage() {
 
 function MonitorDetailInner() {
   const params = useParams<{ id: string }>();
+  usePageTitle("Monitor detail");
   const router = useRouter();
   const searchParams = useSearchParams();
   const monitorId = params.id;
@@ -233,7 +235,9 @@ function MonitorDetailInner() {
     <div>
       <PageHeader
         title={monitor.name}
-        description={monitor.url}
+        description={
+          <span className="block break-all">{monitor.url}</span>
+        }
         actions={
           <>
             <Link href={`/monitors/${monitor.id}/edit`}>

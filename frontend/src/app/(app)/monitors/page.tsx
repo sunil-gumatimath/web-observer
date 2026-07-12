@@ -14,8 +14,10 @@ import {
 import { api } from "@/lib/api";
 import type { Monitor } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export default function MonitorsPage() {
+  usePageTitle("Monitors");
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
