@@ -22,7 +22,7 @@
 
 ## Visual
 
-- Playwright screenshot (full page or region)  
+- Playwright screenshot (full page or region) via `visual.py` + subprocess `playwright_job` (Windows-safe)  
 - Average hash (aHash) via Pillow  
 - Alert only if hamming distance **>** `VISUAL_AHASH_THRESHOLD` (default 5)  
 - PNG stored in object storage; metadata in `normalized_text`  

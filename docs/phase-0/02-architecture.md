@@ -112,7 +112,7 @@ Beta: separately deployable API, scheduler, workers; managed Postgres + Redis; R
 |-------|------|
 | `http_checks` | Standard fetch checks |
 | `notifications` | Outbox delivery |
-| `browser_checks` | Later (Playwright) |
+| `browser_checks` | Shipped (Playwright visual/JS; dedicated worker `--threads 1`) |
 
 Separate concurrency, timeout, and retry per queue.
 

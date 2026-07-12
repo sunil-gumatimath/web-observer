@@ -33,7 +33,9 @@ Write-Host "Ensure Postgres and Redis are running on localhost." -ForegroundColo
 
 Start-BackendWindow "API" "& '$VenvUvicorn' app.main:app --reload --host 127.0.0.1 --port 8000"
 Start-Sleep -Seconds 1
-Start-BackendWindow "Worker" "& '$VenvDramatiq' app.workers --queues http_checks browser_checks notifications --processes 1 --threads 2"
+# HTTP + notifications can share threads; browser/Playwright is NOT thread-safe — use a dedicated worker.
+Start-BackendWindow "Worker-HTTP" "& '$VenvDramatiq' app.workers --queues http_checks notifications --processes 1 --threads 2"
+Start-BackendWindow "Worker-Browser" "& '$VenvDramatiq' app.workers --queues browser_checks --processes 1 --threads 1"
 Start-Sleep -Seconds 1
 Start-BackendWindow "Scheduler" "& '$VenvPython' -m app.scheduler"
 
@@ -41,5 +43,7 @@ Write-Host ""
 Write-Host "API:  http://127.0.0.1:8000/docs"
 Write-Host "Then: cd frontend; npm run dev  -> http://localhost:3000"
 Write-Host ""
-Write-Host "Optional browser worker:"
-Write-Host "  cd backend; .\.venv\Scripts\dramatiq app.workers --queues browser_checks --processes 1 --threads 1"
+Write-Host "Workers started:"
+Write-Host "  HTTP/notifications: --threads 2"
+Write-Host "  browser_checks:     --processes 1 --threads 1 (required for Visual/JS monitors)"
+Write-Host "Playwright screenshots run in a subprocess to avoid Windows FD errors."

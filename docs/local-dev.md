@@ -1,45 +1,64 @@
 # Local development **without Docker**
 
-You only need:
+You need:
 
-1. **Python 3.12+**
+1. **Python 3.11+** (3.12 fine)
 2. **Node.js 20+**
-3. **PostgreSQL** (local install)
-4. **Redis** (local install)
+3. **PostgreSQL** — **Neon** cloud URL or local install
+4. **Redis** (local install / WSL / Memurai)
 
 No Docker, no MinIO required. Snapshots go to `./data/snapshots`.
 
 ---
 
-## 1. Install Postgres & Redis (Windows)
+## Port alignment (important)
 
-**Postgres**
+| Service | Default in this doc | Notes |
+|---------|---------------------|--------|
+| Frontend | `3000` | `npm run dev` |
+| API | `8002` | Match `NEXT_PUBLIC_API_BASE_URL` |
+| Redis | `6379` | Required for workers |
 
-- Install from https://www.postgresql.org/download/windows/
-- Create user/db (pgAdmin or `psql`):
+If the UI shows **Failed to fetch**, the API is not listening or the frontend URL/port is wrong.
+
+---
+
+## 1. Database & Redis
+
+### Neon (recommended for this project)
+
+Set in `backend/.env`:
+
+```env
+DATABASE_URL=postgresql+psycopg://USER:PASS@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+```
+
+No local Postgres required. Neon can sleep when idle; first request may be slow.
+
+### Local Postgres (optional)
 
 ```sql
 CREATE USER monitor WITH PASSWORD 'monitor';
 CREATE DATABASE web_observer OWNER monitor;
 ```
 
-**Redis**
+```env
+DATABASE_URL=postgresql+psycopg://monitor:monitor@localhost:5432/web_observer
+```
 
-- Option A: [Memurai](https://www.memurai.com/) (Redis-compatible on Windows)
-- Option B: WSL2 `sudo apt install redis-server && redis-server`
-- Option C: Redis Windows port / Scoop: `scoop install redis`
+### Redis
 
-Default: `redis://localhost:6379/0`
+- WSL2 / Memurai / Scoop Redis  
+- Default: `redis://localhost:6379/0`
 
 ---
 
 ## 2. Backend env
 
-From repo root:
-
 ```powershell
-copy .env.example .env
-# .env already points at localhost + STORAGE_BACKEND=local
+cd backend
+# copy from example if needed; prefer real Neon URL
+# DATABASE_URL, REDIS_URL, STORAGE_BACKEND=local, INTERNAL_API_TOKEN, Clerk JWKS
 ```
 
 ---
@@ -51,99 +70,95 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+python -m playwright install chromium
 ```
 
-Optional (only if you use JS/visual monitors):
-
-```powershell
-playwright install chromium
-```
+Playwright Chromium is **required** for Visual mode and `js_required` monitors.
 
 ---
 
-## 4. Start backend processes (4 terminals)
+## 4. Start backend (4 windows) + frontend
 
-All from `backend` with venv activated, and env loaded from parent `.env`:
-
-```powershell
-# Terminal A — API
-cd backend
-$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
-$env:REDIS_URL="redis://localhost:6379/0"
-$env:STORAGE_BACKEND="local"
-.\.venv\Scripts\uvicorn app.main:app --reload --port 8000
-```
+Load env from `backend/.env` (or set variables). Working directory: `backend`.
 
 ```powershell
-# Terminal B — HTTP + notification workers
-cd backend
-$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
-$env:REDIS_URL="redis://localhost:6379/0"
-$env:STORAGE_BACKEND="local"
+# 1 — API (port must match frontend NEXT_PUBLIC_API_BASE_URL)
+.\.venv\Scripts\uvicorn app.main:app --host 127.0.0.1 --port 8002
+
+# 2 — HTTP + notifications
 .\.venv\Scripts\dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2
-```
 
-```powershell
-# Terminal C — Scheduler
-cd backend
-$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
-$env:REDIS_URL="redis://localhost:6379/0"
+# 3 — Browser / visual / JS (Playwright) — REQUIRED for visual monitors
+# Windows: always --threads 1 (sync Playwright is not multi-thread safe)
+.\.venv\Scripts\dramatiq app.workers --queues browser_checks --processes 1 --threads 1
+
+# 4 — Scheduler (scheduled checks; manual Run now works without it)
 .\.venv\Scripts\python -m app.scheduler
 ```
 
-Optional browser worker (JS/visual):
+**Playwright isolation:** screenshots and JS fetches run in a **subprocess** (`app.services.playwright_job`) so Dramatiq cannot share broken pipes with Chromium. Without this, Windows often fails with:
+
+`Screenshot failed: [Errno 9] Bad file descriptor`
+
+### Helper scripts
 
 ```powershell
-# Terminal D
-cd backend
-$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
-$env:REDIS_URL="redis://localhost:6379/0"
-.\.venv\Scripts\dramatiq app.workers --queues browser_checks --processes 1 --threads 1
-```
+# Preferred on Windows: kill stuck ports, load backend\.env, API :8002, dual workers
+powershell -File .\scripts\restart-stack.ps1
 
-Or use the helper script:
-
-```powershell
-# from repo root (starts API only in one window; open others as needed)
+# Older: hardcodes local Postgres + port 8000 (edit if using Neon / 8002)
 .\scripts\run-local.ps1
 ```
 
-API: http://localhost:8000/docs  
-Health: http://localhost:8000/health  
-
-Tables are created automatically on API startup (`create_all`).
-
----
-
-## 5. Frontend
+Then frontend:
 
 ```powershell
 cd frontend
-copy .env.example .env.local
-# NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-# NEXT_PUBLIC_INTERNAL_API_TOKEN=dev-internal-token
-npm install
+# NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8002
 npm run dev
 ```
 
-UI: http://localhost:3000  
+| URL | What |
+|-----|------|
+| http://127.0.0.1:3000 | UI |
+| http://127.0.0.1:8002/docs | API docs |
+| http://127.0.0.1:8002/health | API process |
+| http://127.0.0.1:8002/ready | DB connectivity |
 
-1. Open **Settings → Seed dev workspace** (or Ensure workspace)  
-2. Create a monitor  
-3. **Run now**
+Tables are created on API startup (`create_all`). Run Alembic for existing DBs when migrations ship.
 
 ---
 
-## 6. Minimum set for “does it work?”
+## 5. Frontend env
+
+`frontend/.env.local`:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8002
+NEXT_PUBLIC_INTERNAL_API_TOKEN=dev-internal-token
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+```
+
+With Clerk keys set, the app requires **sign-in**; it will not fall back to the internal token for API calls.
+
+1. Sign in via Clerk  
+2. Create a monitor  
+3. **Run now** (first success = baseline, no alert)
+
+---
+
+## 6. Minimum set
 
 | Process | Required? |
 |---------|-----------|
-| Postgres | Yes |
 | Redis | Yes (queue + rate limits) |
+| DB (Neon or local) | Yes |
 | API (`uvicorn`) | Yes |
-| Worker (`dramatiq` http+notifications) | Yes for checks/alerts |
-| Scheduler | Yes for scheduled checks (manual run works without it) |
-| Browser worker | Only for `js_required` / visual |
+| Worker HTTP + notifications | Yes for checks/alerts |
+| Worker browser (`threads 1`) | Yes for **visual** / `js_required` |
+| Scheduler | Yes for schedules; optional for manual Run now |
+| Frontend | Yes for UI |
 | MinIO / Docker | **No** |
 
 ---
@@ -152,15 +167,19 @@ UI: http://localhost:3000
 
 | Issue | Fix |
 |-------|-----|
-| Can't connect to DB | Check Postgres running; URL uses `localhost` not `postgres` |
+| **Failed to fetch** | API down or wrong port; start API; match `NEXT_PUBLIC_API_BASE_URL` |
+| Stuck **Loading…** | Sign in with Clerk; hard-refresh; ensure API up |
+| Hydration `rtrvr-ls` warning | Browser extension (Retriever); suppress or disable on localhost |
+| Can't connect to DB | Neon awake? `sslmode=require`? `postgresql+psycopg://`? |
 | Dramatiq / Redis errors | Start Redis; `REDIS_URL=redis://localhost:6379/0` |
-| Snapshot storage errors | `STORAGE_BACKEND=local` (default) |
-| Domain rate limit in tests | Redis must be up for live checks |
-| Frontend CORS | API allows `localhost:3000` already |
+| Visual: Bad file descriptor | Browser worker `--threads 1`; restart workers; Playwright install chromium |
+| Visual: Executable doesn't exist | `python -m playwright install chromium` |
+| Snapshot storage errors | `STORAGE_BACKEND=local` |
+| Frontend CORS | API allows `localhost:3000` and `127.0.0.1:3000` |
 
 ---
 
-## Unit tests (no Postgres/Redis needed for most)
+## Unit tests
 
 ```powershell
 cd backend
