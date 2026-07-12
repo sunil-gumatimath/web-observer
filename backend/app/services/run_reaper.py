@@ -20,12 +20,11 @@ from app.models.entities import RunStatus
 
 logger = logging.getLogger(__name__)
 
-# Dramatiq time_limit is 2-3 min for most actors. A run that's been
-# RUNNING for 10+ minutes is definitely stuck.
-STUCK_RUNNING_MINUTES = 10
-# A QUEUED run that hasn't started in 15 minutes is also stuck
-# (worker may have crashed before picking it up).
-STUCK_QUEUED_MINUTES = 15
+# Dramatiq time_limit is 2–3 min for most actors.
+# Keep these tight so a dead worker cannot block "first check" for long.
+STUCK_RUNNING_MINUTES = 5
+# QUEUED with no worker pickup — often a lost Redis message after restart.
+STUCK_QUEUED_MINUTES = 2
 
 
 def reap_stuck_runs(db: Session) -> int:

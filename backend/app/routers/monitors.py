@@ -360,20 +360,44 @@ def manual_run(
     except QuotaExceeded as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
 
+    now = datetime.now(UTC)
+    needs_browser = bool(monitor.js_required) or monitor.mode == "visual"
+
     active = db.scalar(
-        select(MonitorRun.id)
+        select(MonitorRun)
         .where(
             MonitorRun.monitor_id == monitor.id,
             MonitorRun.status.in_(
                 [RunStatus.SCHEDULED.value, RunStatus.QUEUED.value, RunStatus.RUNNING.value]
             ),
         )
+        .order_by(MonitorRun.created_at.desc())
         .limit(1)
     )
     if active is not None:
-        raise HTTPException(status_code=409, detail="Monitor already has an active run")
+        age_ref = active.started_at or active.queued_at or active.created_at or now
+        age = now - age_ref
+        # Lost queue message after worker restart: re-enqueue the same run.
+        if active.status == RunStatus.QUEUED.value and age >= timedelta(seconds=90):
+            enqueue_check(str(active.id), needs_browser=needs_browser)
+            return ManualRunOut(
+                run_id=active.id,
+                status=active.status,
+                message="Re-queued stuck run (worker may have been offline)",
+            )
+        # Stale running job: fail it so a new check can start.
+        if active.status == RunStatus.RUNNING.value and age >= timedelta(minutes=5):
+            active.status = RunStatus.FAILED.value
+            active.error_code = "timeout_reaped"
+            active.error_message = "Previous run stuck in RUNNING; reaped before manual retry."
+            active.finished_at = now
+            db.commit()
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail="Monitor already has an active run. Wait a moment or retry shortly.",
+            )
 
-    now = datetime.now(UTC)
     run = MonitorRun(
         monitor_id=monitor.id,
         workspace_id=workspace_id,
@@ -388,7 +412,6 @@ def manual_run(
     db.commit()
     db.refresh(run)
 
-    needs_browser = bool(monitor.js_required) or monitor.mode == "visual"
     enqueue_check(str(run.id), needs_browser=needs_browser)
     return ManualRunOut(run_id=run.id, status=run.status, message="Check enqueued")
 

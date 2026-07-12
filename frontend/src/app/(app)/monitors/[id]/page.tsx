@@ -20,7 +20,8 @@ import { ensureWorkspace } from "@/lib/workspace";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 const POLL_MS = 1500;
-const POLL_MAX_MS = 60_000;
+const POLL_SLOW_MS = 15_000;
+const POLL_MAX_MS = 45_000;
 
 function isActiveRun(r: MonitorRun) {
   return r.status === "queued" || r.status === "running";
@@ -49,6 +50,8 @@ function MonitorDetailInner() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
+  const [pollSlow, setPollSlow] = useState(false);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [showFreshBanner, setShowFreshBanner] = useState(isFresh);
@@ -96,28 +99,38 @@ function MonitorDetailInner() {
 
     if (!hasActive && !waitingForFirst) {
       setPolling(false);
+      setPollSlow(false);
       pollStartedAt.current = null;
       return;
     }
 
     setPolling(true);
+    setPollTimedOut(false);
     if (pollStartedAt.current == null) pollStartedAt.current = Date.now();
 
     const id = window.setInterval(async () => {
       try {
+        const started = pollStartedAt.current ?? Date.now();
+        const elapsed = Date.now() - started;
+        if (elapsed > POLL_SLOW_MS) setPollSlow(true);
+
         const { runs: next } = await load();
         const stillActive = next.some(isActiveRun);
         const hasTerminal = next.some((r) => TERMINAL.has(r.status));
-        const timedOut =
-          pollStartedAt.current != null && Date.now() - pollStartedAt.current > POLL_MAX_MS;
+        const timedOut = elapsed > POLL_MAX_MS;
 
-        if ((!stillActive && hasTerminal) || timedOut) {
+        if (!stillActive && hasTerminal) {
           setPolling(false);
+          setPollSlow(false);
+          setPollTimedOut(false);
           pollStartedAt.current = null;
-          // Drop ?fresh=1 from URL without full navigation.
           if (isFresh) {
             router.replace(`/monitors/${monitorId}`, { scroll: false });
           }
+        } else if (timedOut) {
+          setPolling(false);
+          setPollTimedOut(true);
+          pollStartedAt.current = null;
         }
       } catch {
         // keep polling until timeout
@@ -177,6 +190,30 @@ function MonitorDetailInner() {
       router.push("/monitors");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
+      setBusy(false);
+    }
+  }
+
+  async function retryCheck() {
+    if (!workspaceId || !monitor) return;
+    setBusy(true);
+    setError(null);
+    setPollTimedOut(false);
+    setPollSlow(false);
+    pollStartedAt.current = Date.now();
+    setPolling(true);
+    try {
+      try {
+        await api.runMonitor(workspaceId, monitor.id);
+      } catch (e) {
+        // Stuck active run: backend may re-queue after 90s; surface other errors.
+        if (!(e instanceof ApiError && e.status === 409)) throw e;
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start check");
+      setPolling(false);
+    } finally {
       setBusy(false);
     }
   }
@@ -259,16 +296,52 @@ function MonitorDetailInner() {
               <p className="section-label">
                 {showFreshBanner ? "First check result" : "Check result"}
               </p>
-              {polling || (latestRun && isActiveRun(latestRun)) || (showFreshBanner && !latestTerminal) ? (
+              {pollTimedOut && !latestTerminal ? (
+                <div className="mt-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="warn">taking too long</Badge>
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      Check is stuck or the worker is offline
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    The job stayed queued/running past {Math.round(POLL_MAX_MS / 1000)}s. Common causes:
+                    worker not listening on the right queue, Redis disconnect, or a lost job after restart.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" disabled={busy} onClick={retryCheck}>
+                      Retry check
+                    </Button>
+                    <Button type="button" variant="danger" disabled={busy} onClick={handleDelete}>
+                      Delete this monitor
+                    </Button>
+                  </div>
+                </div>
+              ) : polling || (latestRun && isActiveRun(latestRun)) || (showFreshBanner && !latestTerminal) ? (
                 <div className="mt-3 flex items-center gap-3">
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
                   <div>
                     <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                      Running first check…
+                      {latestRun?.status === "running" ? "Fetching page…" : "Waiting for worker…"}
+                      {latestRun ? ` (${latestRun.status})` : ""}
                     </p>
                     <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      Fetching the page and building a baseline. This usually takes a few seconds.
+                      {pollSlow
+                        ? "This is taking longer than usual. If it stays queued, the browser/HTTP worker may be offline."
+                        : "Fetching the page and building a baseline. This usually takes a few seconds."}
                     </p>
+                    {pollSlow ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="mt-2"
+                        disabled={busy}
+                        onClick={retryCheck}
+                      >
+                        Retry now
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ) : latestTerminal?.status === "succeeded" ? (

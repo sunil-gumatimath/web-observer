@@ -33,7 +33,7 @@ Write-Host "Ensure Postgres and Redis are running on localhost." -ForegroundColo
 
 Start-BackendWindow "API" "& '$VenvUvicorn' app.main:app --reload --host 127.0.0.1 --port 8000"
 Start-Sleep -Seconds 1
-Start-BackendWindow "Worker" "& '$VenvDramatiq' app.workers --queues http_checks notifications --processes 1 --threads 2"
+Start-BackendWindow "Worker" "& '$VenvDramatiq' app.workers --queues http_checks browser_checks notifications --processes 1 --threads 2"
 Start-Sleep -Seconds 1
 Start-BackendWindow "Scheduler" "& '$VenvPython' -m app.scheduler"
 
