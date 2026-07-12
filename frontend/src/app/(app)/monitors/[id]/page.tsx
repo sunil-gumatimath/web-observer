@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   Badge,
   Button,
@@ -13,14 +13,33 @@ import {
   SectionTitle,
   Spinner,
 } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { ChangeEvent, Monitor, MonitorRun } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 
+const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
+const POLL_MS = 1500;
+const POLL_MAX_MS = 60_000;
+const PREVIEW_CHARS = 800;
+
+function isActiveRun(r: MonitorRun) {
+  return r.status === "queued" || r.status === "running";
+}
+
 export default function MonitorDetailPage() {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <MonitorDetailInner />
+    </Suspense>
+  );
+}
+
+function MonitorDetailInner() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const monitorId = params.id;
+  const isFresh = searchParams.get("fresh") === "1";
 
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [monitor, setMonitor] = useState<Monitor | null>(null);
@@ -29,6 +48,13 @@ export default function MonitorDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [polling, setPolling] = useState(false);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [showFreshBanner, setShowFreshBanner] = useState(isFresh);
+
+  const pollStartedAt = useRef<number | null>(null);
+  const latestSnapshotId = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     const ws = await ensureWorkspace();
@@ -41,6 +67,7 @@ export default function MonitorDetailPage() {
     setMonitor(m);
     setRuns(r);
     setChanges(c);
+    return { ws, runs: r };
   }, [monitorId]);
 
   useEffect(() => {
@@ -59,6 +86,73 @@ export default function MonitorDetailPage() {
     };
   }, [load]);
 
+  // Poll while a run is active, or when landing with ?fresh=1 until first terminal run.
+  useEffect(() => {
+    if (loading || !workspaceId) return;
+
+    const hasActive = runs.some(isActiveRun);
+    const waitingForFirst =
+      showFreshBanner && (runs.length === 0 || runs.every((r) => !TERMINAL.has(r.status)));
+
+    if (!hasActive && !waitingForFirst) {
+      setPolling(false);
+      pollStartedAt.current = null;
+      return;
+    }
+
+    setPolling(true);
+    if (pollStartedAt.current == null) pollStartedAt.current = Date.now();
+
+    const id = window.setInterval(async () => {
+      try {
+        const { runs: next } = await load();
+        const stillActive = next.some(isActiveRun);
+        const hasTerminal = next.some((r) => TERMINAL.has(r.status));
+        const timedOut =
+          pollStartedAt.current != null && Date.now() - pollStartedAt.current > POLL_MAX_MS;
+
+        if ((!stillActive && hasTerminal) || timedOut) {
+          setPolling(false);
+          pollStartedAt.current = null;
+          // Drop ?fresh=1 from URL without full navigation.
+          if (isFresh) {
+            router.replace(`/monitors/${monitorId}`, { scroll: false });
+          }
+        }
+      } catch {
+        // keep polling until timeout
+      }
+    }, POLL_MS);
+
+    return () => window.clearInterval(id);
+  }, [loading, workspaceId, runs, showFreshBanner, load, isFresh, monitorId, router]);
+
+  // Load snapshot text preview for latest successful run.
+  useEffect(() => {
+    const latestOk = runs.find((r) => r.status === "succeeded" && r.snapshot_id);
+    const snapId = latestOk?.snapshot_id ?? null;
+    if (!workspaceId || !snapId || snapId === latestSnapshotId.current) {
+      if (!snapId) setPreviewText(null);
+      return;
+    }
+    latestSnapshotId.current = snapId;
+    let cancelled = false;
+    setPreviewLoading(true);
+    (async () => {
+      try {
+        const snap = await api.getSnapshot(workspaceId, snapId);
+        if (!cancelled) setPreviewText(snap.normalized_text || "");
+      } catch {
+        if (!cancelled) setPreviewText(null);
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [runs, workspaceId]);
+
   async function withAction(fn: () => Promise<void>) {
     if (!workspaceId) return;
     setBusy(true);
@@ -73,10 +167,30 @@ export default function MonitorDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!workspaceId || !monitor) return;
+    if (!confirm("Delete this monitor and all its check history?")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteMonitor(workspaceId, monitor.id);
+      router.push("/monitors");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setBusy(false);
+    }
+  }
+
   if (loading) return <Spinner />;
   if (!monitor) {
     return <ErrorBox message={error ?? "Monitor not found"} />;
   }
+
+  const latestRun = runs[0] ?? null;
+  const latestTerminal = runs.find((r) => TERMINAL.has(r.status)) ?? null;
+  // Full result panel: after create (?fresh=1), or while any check is in flight.
+  const showResultCard =
+    showFreshBanner || polling || Boolean(latestRun && isActiveRun(latestRun));
 
   return (
     <div>
@@ -91,10 +205,15 @@ export default function MonitorDetailPage() {
               </Button>
             </Link>
             <Button
-              disabled={busy}
+              disabled={busy || polling}
               onClick={() =>
                 withAction(async () => {
-                  await api.runMonitor(workspaceId!, monitor.id);
+                  try {
+                    await api.runMonitor(workspaceId!, monitor.id);
+                  } catch (e) {
+                    // Already-active run: just continue polling.
+                    if (!(e instanceof ApiError && e.status === 409)) throw e;
+                  }
                 })
               }
             >
@@ -125,23 +244,122 @@ export default function MonitorDetailPage() {
                 Resume
               </Button>
             )}
-            <Button
-              variant="danger"
-              disabled={busy}
-              onClick={() =>
-                withAction(async () => {
-                  if (!confirm("Delete this monitor and its history?")) return;
-                  await api.deleteMonitor(workspaceId!, monitor.id);
-                  router.push("/monitors");
-                })
-              }
-            >
+            <Button variant="danger" disabled={busy} onClick={handleDelete}>
               Delete
             </Button>
           </>
         }
       />
       {error ? <ErrorBox message={error} /> : null}
+
+      {showResultCard ? (
+        <Card className="mb-8 border-sky-500/25 bg-sky-500/5 dark:bg-sky-500/[0.06]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="section-label">
+                {showFreshBanner ? "First check result" : "Check result"}
+              </p>
+              {polling || (latestRun && isActiveRun(latestRun)) || (showFreshBanner && !latestTerminal) ? (
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+                  <div>
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      Running first check…
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      Fetching the page and building a baseline. This usually takes a few seconds.
+                    </p>
+                  </div>
+                </div>
+              ) : latestTerminal?.status === "succeeded" ? (
+                <div className="mt-3 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="success">succeeded</Badge>
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      Baseline captured
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    First success sets the baseline without an alert. Future checks will notify you
+                    only when content changes.
+                  </p>
+                  <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
+                    {latestTerminal.http_status != null ? (
+                      <span>HTTP {latestTerminal.http_status}</span>
+                    ) : null}
+                    {latestTerminal.latency_ms != null ? (
+                      <span>{latestTerminal.latency_ms} ms</span>
+                    ) : null}
+                    {latestTerminal.finished_at ? (
+                      <span>{new Date(latestTerminal.finished_at).toLocaleString()}</span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : latestTerminal?.status === "failed" ? (
+                <div className="mt-3 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="danger">failed</Badge>
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      {latestTerminal.error_code ?? "Check failed"}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    {latestTerminal.error_message || "The first check did not complete successfully."}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                  No finished run yet. If this stays empty, ensure the worker is running, then click
+                  Run now.
+                </p>
+              )}
+            </div>
+            {showFreshBanner && latestTerminal ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setShowFreshBanner(false);
+                    router.replace(`/monitors/${monitor.id}`, { scroll: false });
+                  }}
+                >
+                  Keep monitoring
+                </Button>
+                <Button type="button" variant="danger" disabled={busy} onClick={handleDelete}>
+                  Delete this monitor
+                </Button>
+                {latestTerminal.status === "failed" ? (
+                  <Link href={`/monitors/${monitor.id}/edit`}>
+                    <Button type="button" variant="secondary">
+                      Edit &amp; retry
+                    </Button>
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {latestTerminal?.status === "succeeded" ? (
+            <div className="mt-4 border-t border-[var(--border)] pt-4">
+              <p className="section-label mb-2">Content preview</p>
+              {previewLoading ? (
+                <p className="text-sm text-slate-500">Loading snapshot…</p>
+              ) : previewText != null && previewText.length > 0 ? (
+                <pre className="max-h-56 overflow-auto rounded-lg border border-[var(--border)] bg-slate-50/80 p-3 text-xs leading-relaxed text-slate-700 dark:bg-slate-950/50 dark:text-slate-300">
+                  {previewText.length > PREVIEW_CHARS
+                    ? `${previewText.slice(0, PREVIEW_CHARS)}\n…`
+                    : previewText}
+                </pre>
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  No text preview available for this snapshot
+                  {monitor.mode === "visual" ? " (visual mode stores image hashes)." : "."}
+                </p>
+              )}
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
 
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Card className="!p-4">
@@ -158,7 +376,9 @@ export default function MonitorDetailPage() {
             <ModeBadge mode={monitor.mode} />
           </div>
           {monitor.css_selector ? (
-            <p className="mt-2 truncate font-mono text-xs text-slate-500 dark:text-slate-500">{monitor.css_selector}</p>
+            <p className="mt-2 truncate font-mono text-xs text-slate-500 dark:text-slate-500">
+              {monitor.css_selector}
+            </p>
           ) : null}
         </Card>
         <Card className="!p-4">
@@ -214,7 +434,9 @@ export default function MonitorDetailPage() {
                         {r.status}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{r.http_status ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+                      {r.http_status ?? "—"}
+                    </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                       {r.latency_ms != null ? `${r.latency_ms}ms` : "—"}
                     </td>
@@ -229,7 +451,9 @@ export default function MonitorDetailPage() {
                 {runs.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-slate-500 dark:text-slate-500">
-                      No runs yet. Click &quot;Run now&quot;.
+                      {polling
+                        ? "First check is running…"
+                        : 'No runs yet. Click "Run now".'}
                     </td>
                   </tr>
                 ) : null}

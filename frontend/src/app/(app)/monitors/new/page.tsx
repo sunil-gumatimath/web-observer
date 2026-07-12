@@ -45,6 +45,7 @@ export default function NewMonitorPage() {
   const [email, setEmail] = useState("");
   const [jsRequired, setJsRequired] = useState(false);
   const [ignoreSelectors, setIgnoreSelectors] = useState("");
+  const [runNow, setRunNow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -71,7 +72,17 @@ export default function NewMonitorPage() {
         js_required: jsRequired || mode === "visual",
         ignore_selectors: ignore.length ? ignore : null,
       });
-      router.push(`/monitors/${monitor.id}`);
+
+      // Kick off first check so the detail page can show a live result.
+      if (runNow) {
+        try {
+          await api.runMonitor(ws, monitor.id);
+        } catch {
+          // Scheduler may already have queued a run — detail page will poll either way.
+        }
+      }
+
+      router.push(`/monitors/${monitor.id}?fresh=1`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create monitor");
       setSaving(false);
@@ -191,6 +202,15 @@ export default function NewMonitorPage() {
               />
             </div>
           ) : null}
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={runNow}
+              onChange={(e) => setRunNow(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+            />
+            Run first check immediately (see result, then keep or delete)
+          </label>
           <div className="flex gap-2 border-t border-[var(--border)] pt-5">
             <Button type="submit" disabled={saving}>
               {saving ? "Creating…" : "Create monitor"}

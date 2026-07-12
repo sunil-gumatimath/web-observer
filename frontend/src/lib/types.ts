@@ -118,3 +118,13 @@ export type NotificationChannel = {
   enabled: boolean;
   created_at: string;
 };
+
+export type SnapshotAccess = {
+  id: string;
+  content_hash: string;
+  content_type: string | null;
+  byte_size: number | null;
+  normalized_text: string;
+  raw_download_url: string | null;
+  created_at: string;
+};

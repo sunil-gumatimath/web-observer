@@ -9,6 +9,7 @@ import type {
   MonitorUpdateInput,
   NotificationChannel,
   SeedResponse,
+  SnapshotAccess,
   Usage,
 } from "@/lib/types";
 
@@ -158,6 +159,9 @@ export const api = {
 
   listRuns: (workspaceId: string, monitorId: string) =>
     request<MonitorRun[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/runs`),
+
+  getSnapshot: (workspaceId: string, snapshotId: string) =>
+    request<SnapshotAccess>(`/api/v1/workspaces/${workspaceId}/snapshots/${snapshotId}`),
 
   listChanges: (workspaceId: string, monitorId: string) =>
     request<ChangeEvent[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/changes`),
