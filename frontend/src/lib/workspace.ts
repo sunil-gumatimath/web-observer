@@ -5,7 +5,13 @@ const STORAGE_KEY = "mtw_workspace_id";
 
 export function getStoredWorkspaceId(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(STORAGE_KEY) || config.devWorkspaceId || null;
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) return stored;
+  // Only use the seeded dev workspace id when Clerk is off.
+  if (!config.clerkEnabled && config.devWorkspaceId) {
+    return config.devWorkspaceId;
+  }
+  return null;
 }
 
 export function setStoredWorkspaceId(id: string) {
@@ -21,7 +27,9 @@ export async function ensureWorkspace(): Promise<string> {
   if (config.clerkEnabled) {
     const me = await api.me();
     if (me.workspaces.length > 0) {
-      const preferred = getStoredWorkspaceId();
+      // Prefer a previously chosen id only if the user is still a member.
+      // Never use NEXT_PUBLIC_DEV_WORKSPACE_ID here — that is the internal seed workspace.
+      const preferred = localStorage.getItem(STORAGE_KEY);
       const match = preferred
         ? me.workspaces.find((w) => w.id === preferred)
         : undefined;

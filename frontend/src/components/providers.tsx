@@ -24,6 +24,15 @@ function ClerkTokenBridge({ children }: { children: ReactNode }) {
     return () => setAuthTokenGetter(null);
   }, [getToken, isLoaded]);
 
+  // Avoid mounting app pages until Clerk is ready so API calls don't race the token bridge.
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500">
+        Loading…
+      </div>
+    );
+  }
+
   return <>{children}</>;
 }
 

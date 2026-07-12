@@ -5,7 +5,8 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.orm import Session
 
 from app.rate_limit import limiter
@@ -244,19 +245,59 @@ def delete_monitor(
     db: Db,
     _workspace: Workspace = Depends(require_workspace_member),
 ) -> None:
-    monitor = _get_monitor(db, workspace_id, monitor_id)
+    """Delete a monitor and dependent rows.
 
+    Use bulk SQL deletes so SQLAlchemy does not try to NULL out non-nullable
+    monitor_id FKs via relationship handling when removing the parent.
+    """
+    monitor = _get_monitor(db, workspace_id, monitor_id)
+    mid = monitor.id
+
+    # Object storage cleanup first (best-effort)
     snapshots = db.scalars(
         select(Snapshot).where(
-            Snapshot.monitor_id == monitor.id,
+            Snapshot.monitor_id == mid,
             Snapshot.workspace_id == workspace_id,
         )
     ).all()
     for snap in snapshots:
-        if snap.raw_object_key:
-            delete_object(snap.raw_object_key)
+        for key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
+            if key:
+                try:
+                    delete_object(key)
+                except StorageError:
+                    pass
 
-    db.delete(monitor)
+    # Bulk SQL only — disable session sync so SA does not try to NULL out
+    # non-nullable monitor_id FKs on in-session relationship state.
+    sync_off = {"synchronize_session": False}
+    db.execute(
+        sa_delete(ChangeEvent).where(ChangeEvent.monitor_id == mid),
+        execution_options=sync_off,
+    )
+    db.execute(
+        sa_update(MonitorRun)
+        .where(MonitorRun.monitor_id == mid)
+        .values(snapshot_id=None),
+        execution_options=sync_off,
+    )
+    db.execute(
+        sa_delete(MonitorRun).where(MonitorRun.monitor_id == mid),
+        execution_options=sync_off,
+    )
+    db.execute(
+        sa_delete(Snapshot).where(Snapshot.monitor_id == mid),
+        execution_options=sync_off,
+    )
+    db.execute(
+        sa_delete(MonitorConfigVersion).where(MonitorConfigVersion.monitor_id == mid),
+        execution_options=sync_off,
+    )
+    db.execute(
+        sa_delete(Monitor).where(Monitor.id == mid),
+        execution_options=sync_off,
+    )
+    db.expunge_all()
     db.commit()
 
 

@@ -31,20 +31,36 @@ export type MeResponse = {
   workspaces: Array<{ id: string; name: string; created_at: string }>;
 };
 
+async function waitForClerkToken(maxAttempts = 40, delayMs = 50): Promise<string | null> {
+  // ClerkTokenBridge may not be mounted yet on the first paint; poll briefly.
+  for (let i = 0; i < maxAttempts; i++) {
+    const token = await getAuthToken();
+    if (token) return token;
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return null;
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
   if (config.clerkEnabled) {
-    const token = await getAuthToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-      return headers;
+    // Never fall back to the internal token while Clerk is enabled — that would
+    // expose every workspace (including seeded "Dev Workspace") via /me and then
+    // 404 on membership-scoped routes once the real JWT is used.
+    const token = await waitForClerkToken();
+    if (!token) {
+      throw new ApiError(401, "Not signed in (missing Clerk session token)", {
+        detail: "Not signed in",
+      });
     }
+    headers.Authorization = `Bearer ${token}`;
+    return headers;
   }
 
-  // Dev / smoke fallback
+  // Dev / smoke fallback (Clerk disabled)
   headers["X-Internal-Token"] = config.internalToken;
   return headers;
 }
