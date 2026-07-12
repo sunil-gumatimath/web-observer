@@ -95,17 +95,37 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, str 
     return text, None, None
 
 
-def apply_fetch_result(
+@dataclass
+class _ChangeContext:
+    """Mutable context passed between pipeline sub-steps."""
+
+    prev_run: MonitorRun | None = None
+    prev_snapshot_id: uuid.UUID | None = None
+    prev_hash: str | None = None
+    prev_text: str = ""
+    summary: str = ""
+    diff_text: str = ""
+    enrichment: object | None = None  # EnrichResult from ai_summary
+
+
+# ---------------------------------------------------------------------------
+# Step 1 – extract content, store raw snapshot, create Snapshot row
+# ---------------------------------------------------------------------------
+
+
+def _extract_and_store_snapshot(
     db: Session,
-    *,
     monitor: Monitor,
     run: MonitorRun,
     result: FetchResult,
-    store_raw: bool = True,
-) -> PipelineResult:
-    """Persist run outcome from an already-fetched response. Commits the session."""
-    increment_checks(db, monitor.workspace_id)
+    store_raw: bool,
+) -> tuple[Snapshot | None, str, str, PipelineResult | None]:
+    """Extract text, hash it, persist raw bytes and Snapshot row.
 
+    Returns ``(snapshot, normalized_text, content_hash, error_or_none)``.
+    When the fourth element is not *None* the caller should return it
+    immediately (extraction failed or HTTP error).
+    """
     if result.status_code >= 400:
         run.status = RunStatus.FAILED.value
         run.http_status = result.status_code
@@ -114,7 +134,7 @@ def apply_fetch_result(
         run.error_message = f"HTTP {result.status_code}"
         run.finished_at = datetime.now(UTC)
         db.commit()
-        return PipelineResult(
+        return None, "", "", PipelineResult(
             status=run.status,
             error_code=run.error_code,
             error_message=run.error_message,
@@ -130,7 +150,9 @@ def apply_fetch_result(
         run.error_message = str(exc)
         run.finished_at = datetime.now(UTC)
         db.commit()
-        return PipelineResult(status=run.status, error_code=exc.code, error_message=str(exc))
+        return None, "", "", PipelineResult(
+            status=run.status, error_code=exc.code, error_message=str(exc),
+        )
 
     if not normalized:
         run.status = RunStatus.FAILED.value
@@ -140,7 +162,7 @@ def apply_fetch_result(
         run.error_message = "Extracted content was empty"
         run.finished_at = datetime.now(UTC)
         db.commit()
-        return PipelineResult(
+        return None, "", "", PipelineResult(
             status=run.status,
             error_code=run.error_code,
             error_message=run.error_message,
@@ -148,7 +170,8 @@ def apply_fetch_result(
 
     digest = content_hash(normalized)
     object_key: str | None = None
-    content_type = result.content_type
+    text_key: str | None = None
+    ct = result.content_type
     if store_raw:
         try:
             object_key = snapshot_object_key(
@@ -157,31 +180,75 @@ def apply_fetch_result(
                 run_id=run.id,
             )
             # use extension-friendly key for images
-            if content_type and "image" in content_type:
+            if ct and "image" in ct:
                 object_key = object_key.rsplit(".", 1)[0] + ".png"
             put_bytes(
                 key=object_key,
                 data=result.content,
-                content_type=content_type or "text/html; charset=utf-8",
+                content_type=ct or "text/html; charset=utf-8",
             )
             add_storage_bytes(db, monitor.workspace_id, nbytes=len(result.content))
         except StorageError as exc:
             logger.warning("snapshot_storage_failed run_id=%s error=%s", run.id, exc)
             object_key = None
 
+        # Store full normalized text in object storage
+        try:
+            text_key = object_key + ".norm.txt" if object_key else snapshot_object_key(
+                workspace_id=monitor.workspace_id,
+                monitor_id=monitor.id,
+                run_id=run.id,
+            ) + ".norm.txt"
+            put_bytes(
+                key=text_key,
+                data=normalized.encode("utf-8"),
+                content_type="text/plain; charset=utf-8",
+            )
+        except StorageError as exc:
+            logger.warning("snapshot_text_storage_failed run_id=%s error=%s", run.id, exc)
+            text_key = None
+
+    # Truncate normalized_text for the Postgres column to save space
+    db_normalized = normalized[:500] if normalized else ""
+
     snapshot = Snapshot(
         workspace_id=monitor.workspace_id,
         monitor_id=monitor.id,
         run_id=run.id,
         content_hash=digest,
-        normalized_text=normalized,
+        normalized_text=db_normalized,
         raw_object_key=object_key,
-        content_type=content_type,
+        text_object_key=text_key,
+        content_type=ct,
         byte_size=len(result.content),
     )
     db.add(snapshot)
     db.flush()
 
+    return snapshot, normalized, digest, None
+
+
+# ---------------------------------------------------------------------------
+# Step 2 – detect whether the content actually changed
+# ---------------------------------------------------------------------------
+
+
+def _detect_change(
+    db: Session,
+    monitor: Monitor,
+    run: MonitorRun,
+    snapshot: Snapshot,
+    normalized: str,
+    digest: str,
+    result: FetchResult,
+    ctx: _ChangeContext,
+) -> PipelineResult | None:
+    """Compare against the previous successful run with the same config version.
+
+    Populates *ctx* with ``prev_text``, ``summary``, ``diff_text`` when a
+    real change is found and returns *None*.  Returns a ``PipelineResult``
+    for baseline / unchanged cases (the caller should return it directly).
+    """
     prev = db.scalar(
         select(MonitorRun)
         .where(
@@ -210,9 +277,38 @@ def apply_fetch_result(
         db.commit()
         return PipelineResult(status=run.status, content_hash=digest, is_baseline=True)
 
+    ctx.prev_run = prev
+    ctx.prev_snapshot_id = prev.snapshot_id
+    ctx.prev_hash = prev.content_hash
+
     # Visual: compare perceptual distance, not only exact hash
     prev_snapshot = db.get(Snapshot, prev.snapshot_id) if prev.snapshot_id else None
-    prev_text = prev_snapshot.normalized_text if prev_snapshot else ""
+    prev_text = ""
+    if prev_snapshot:
+        if prev_snapshot.text_object_key:
+            from app.services.storage import get_bytes
+
+            stored_bytes = get_bytes(prev_snapshot.text_object_key)
+            if stored_bytes:
+                prev_text = stored_bytes.decode("utf-8")
+            else:
+                # Object missing — fall back to DB preview (may be truncated to 500 chars).
+                logger.warning(
+                    "snapshot_text_storage_miss key=%s snapshot_id=%s falling_back_to_db_preview",
+                    prev_snapshot.text_object_key,
+                    prev_snapshot.id,
+                )
+                prev_text = prev_snapshot.normalized_text or ""
+        else:
+            prev_text = prev_snapshot.normalized_text or ""
+            if prev_text and len(prev_text) >= 500:
+                logger.info(
+                    "snapshot_text_db_preview_only snapshot_id=%s len=%d "
+                    "(full text may be truncated; diffs can be incomplete)",
+                    prev_snapshot.id,
+                    len(prev_text),
+                )
+    ctx.prev_text = prev_text
 
     if monitor.mode == "visual":
         from app.config import get_settings
@@ -238,6 +334,9 @@ def apply_fetch_result(
             note_check_outcome(monitor, changed=False, succeeded=True)
             db.commit()
             return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
+
+        ctx.summary = summary
+        ctx.diff_text = diff_text
     elif monitor.mode == "list_items":
         if prev.content_hash == digest:
             from app.services.adaptive import note_check_outcome
@@ -256,8 +355,8 @@ def apply_fetch_result(
             if line.strip()
         ]
         ld = diff_lists(before_items, after_items)
-        summary = ld.summary
-        diff_text = ld.as_text_diff()
+        ctx.summary = ld.summary
+        ctx.diff_text = ld.as_text_diff()
     else:
         if prev.content_hash == digest:
             from app.services.adaptive import note_check_outcome
@@ -265,39 +364,75 @@ def apply_fetch_result(
             note_check_outcome(monitor, changed=False, succeeded=True)
             db.commit()
             return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
-        diff_text = unified_diff(prev_text, normalized)
-        summary = short_summary(prev_text, normalized)
+        ctx.diff_text = unified_diff(prev_text, normalized)
+        ctx.summary = short_summary(prev_text, normalized)
 
     from app.services.adaptive import note_check_outcome
 
     note_check_outcome(monitor, changed=True, succeeded=True)
 
+    return None  # change detected – continue to next steps
+
+
+# ---------------------------------------------------------------------------
+# Step 3 – AI enrichment + ChangeEvent creation
+# ---------------------------------------------------------------------------
+
+
+def _create_change_event(
+    db: Session,
+    monitor: Monitor,
+    run: MonitorRun,
+    snapshot: Snapshot,
+    ctx: _ChangeContext,
+) -> ChangeEvent:
+    """Run AI enrichment and persist the :class:`ChangeEvent` row."""
     workspace = db.get(Workspace, monitor.workspace_id)
     ai_enabled = bool(workspace.ai_summaries_enabled) if workspace is not None else True
     enrichment = enrich_change(
         monitor_name=monitor.name,
         url=monitor.url,
         mode=monitor.mode,
-        deterministic_summary=summary,
-        diff_text=diff_text,
+        deterministic_summary=ctx.summary,
+        diff_text=ctx.diff_text,
         enabled=ai_enabled,
     )
+    ctx.enrichment = enrichment
 
     change = ChangeEvent(
         workspace_id=monitor.workspace_id,
         monitor_id=monitor.id,
         run_id=run.id,
-        previous_snapshot_id=prev.snapshot_id,
+        previous_snapshot_id=ctx.prev_snapshot_id,
         new_snapshot_id=snapshot.id,
-        previous_hash=prev.content_hash,
-        new_hash=digest,
-        diff_summary=summary,
+        previous_hash=ctx.prev_hash,
+        new_hash=run.content_hash,
+        diff_summary=ctx.summary,
         ai_summary=enrichment.summary,
         change_category=enrichment.category,
         is_noise=False,
     )
     db.add(change)
     db.flush()
+    return change
+
+
+# ---------------------------------------------------------------------------
+# Step 4 – notification outbox + webhooks
+# ---------------------------------------------------------------------------
+
+
+def _queue_notifications(
+    db: Session,
+    monitor: Monitor,
+    change: ChangeEvent,
+    ctx: _ChangeContext,
+) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
+    """Create ``NotificationOutbox`` entries and enqueue webhook deliveries.
+
+    Returns ``(outbox_ids, webhook_ids)``.
+    """
+    enrichment = ctx.enrichment
 
     channels = db.scalars(
         select(NotificationChannel).where(
@@ -316,10 +451,10 @@ def apply_fetch_result(
                 "monitor_id": str(monitor.id),
                 "monitor_name": monitor.name,
                 "url": monitor.url,
-                "summary": summary,
+                "summary": ctx.summary,
                 "ai_summary": enrichment.summary,
                 "category": enrichment.category,
-                "diff": diff_text[:50_000],
+                "diff": ctx.diff_text[:50_000],
                 "mode": monitor.mode,
                 "channel_type": channel.type,
                 "to": channel.address,
@@ -343,13 +478,51 @@ def apply_fetch_result(
             "monitor_id": str(monitor.id),
             "monitor_name": monitor.name,
             "url": monitor.url,
-            "summary": summary,
+            "summary": ctx.summary,
             "ai_summary": enrichment.summary,
             "category": enrichment.category,
             "mode": monitor.mode,
         },
         idempotency_base=f"change:{change.id}",
     )
+
+    return outbox_ids, webhook_ids
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
+
+
+def apply_fetch_result(
+    db: Session,
+    *,
+    monitor: Monitor,
+    run: MonitorRun,
+    result: FetchResult,
+    store_raw: bool = True,
+) -> PipelineResult:
+    """Persist run outcome from an already-fetched response. Commits the session."""
+    increment_checks(db, monitor.workspace_id)
+
+    # Step 1 – extract & store snapshot
+    snapshot, normalized, digest, error = _extract_and_store_snapshot(
+        db, monitor, run, result, store_raw,
+    )
+    if error:
+        return error
+
+    # Step 2 – detect change vs. baseline / unchanged
+    ctx = _ChangeContext()
+    early = _detect_change(db, monitor, run, snapshot, normalized, digest, result, ctx)
+    if early:
+        return early
+
+    # Step 3 – AI enrichment & ChangeEvent
+    change = _create_change_event(db, monitor, run, snapshot, ctx)
+
+    # Step 4 – notification outbox & webhooks
+    outbox_ids, webhook_ids = _queue_notifications(db, monitor, change, ctx)
 
     db.commit()
 

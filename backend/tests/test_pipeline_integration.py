@@ -123,6 +123,39 @@ def test_first_success_is_baseline_no_change(db_session, monkeypatch):
     assert counter.checks_count == 1
 
 
+def test_snapshot_stores_text_object_key_and_truncates_db_preview(db_session, monkeypatch):
+    """Full text goes to object storage; Postgres keeps a short preview."""
+    stored: dict[str, bytes] = {}
+
+    def _put(**kwargs):
+        stored[kwargs["key"]] = kwargs["data"]
+        return kwargs["key"]
+
+    monkeypatch.setattr("app.services.pipeline.put_bytes", _put)
+    _ws, mon = _seed_monitor(db_session)
+    run = _make_run(db_session, mon)
+
+    long_body = "x" * 800
+    result = apply_fetch_result(
+        db_session,
+        monitor=mon,
+        run=run,
+        result=_fetch(long_body),
+        store_raw=True,
+    )
+    assert result.is_baseline is True
+
+    snap = db_session.scalar(select(Snapshot).where(Snapshot.run_id == run.id))
+    assert snap is not None
+    assert snap.text_object_key is not None
+    assert snap.text_object_key.endswith(".norm.txt")
+    assert snap.normalized_text is not None
+    assert len(snap.normalized_text) <= 500
+    assert snap.text_object_key in stored
+    # Full normalized text is what we stored (extracted from HTML), not raw body length alone
+    assert len(stored[snap.text_object_key]) > 500
+
+
 def test_failed_run_does_not_replace_baseline(db_session, monkeypatch):
     monkeypatch.setattr("app.services.pipeline.put_bytes", lambda **kwargs: kwargs["key"])
     _ws, mon = _seed_monitor(db_session)

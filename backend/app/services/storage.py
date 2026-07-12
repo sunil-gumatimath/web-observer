@@ -84,6 +84,25 @@ def put_bytes(
         raise StorageError("storage_failed", f"Failed to store object: {exc}") from exc
     return key
 
+def get_bytes(key: str) -> bytes | None:
+    if _use_local():
+        path = _local_root() / key
+        try:
+            if path.exists():
+                return path.read_bytes()
+        except OSError as exc:
+            logger.warning("storage_get_failed key=%s error=%s", key, exc)
+        return None
+
+    from botocore.exceptions import BotoCoreError, ClientError
+    settings = get_settings()
+    try:
+        response = _client().get_object(Bucket=settings.s3_bucket, Key=key)
+        return response["Body"].read()
+    except (BotoCoreError, ClientError) as exc:
+        logger.warning("storage_get_failed key=%s error=%s", key, exc)
+        return None
+
 
 def delete_object(key: str) -> None:
     if _use_local():

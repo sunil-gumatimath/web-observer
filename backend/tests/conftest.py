@@ -32,7 +32,12 @@ def postgres_available() -> bool:
     if not _url_is_safe_for_drop(url):
         return False
     try:
-        engine = create_engine(url, pool_pre_ping=True)
+        # Fail fast when Postgres is down / unreachable (avoid multi-minute hangs).
+        engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 3},
+        )
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         engine.dispose()
