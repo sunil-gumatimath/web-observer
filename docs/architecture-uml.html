@@ -1,12 +1,23 @@
-# Web Observer — Architecture as UML
-
-Generated from a code review of the `backend/` and `frontend/` trees.
-Stack: FastAPI + Dramatiq/Redis workers, Next.js, Neon Postgres, Clerk, Resend, local-disk object storage, optional Playwright.
-
-## 1. Component / Deployment Diagram
-
-```mermaid
-flowchart TB
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web Observer — UML</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #0d1117; color: #e6edf3; }
+  header { padding: 16px 24px; border-bottom: 1px solid #30363d; }
+  h1 { margin: 0; font-size: 20px; }
+  main { display: grid; gap: 24px; padding: 24px; }
+  .card { border: 1px solid #30363d; border-radius: 8px; padding: 16px; background: #161b22; }
+  .card h2 { margin-top: 0; font-size: 16px; color: #58a6ff; }
+  .mermaid { overflow: auto; }
+</style>
+</head>
+<body>
+<header><h1>Web Observer — Architecture UML</h1></header>
+<main>
+<section class="card"><h2>1. Component / Deployment Diagram</h2><div class="mermaid">flowchart TB
     subgraph Client
         UI["Next.js Frontend :3000"]
     end
@@ -61,12 +72,8 @@ flowchart TB
     DIGEST --> REDIS
     RETENT --> NEO
     RETENT --> OBJ
-```
-
-## 2. Backend Module Structure (Package Diagram)
-
-```mermaid
-flowchart LR
+</div></section>
+<section class="card"><h2>2. Backend Module Structure (Package Diagram)</h2><div class="mermaid">flowchart LR
     subgraph App["backend/app"]
         main["main.py\nrouter wiring"]
         auth["auth.py\nprincipal + rbac"]
@@ -92,12 +99,8 @@ flowchart LR
     jobs --> svc
     main --> rt
     main --> db
-```
-
-## 3. Data Model (Class Diagram / ERD)
-
-```mermaid
-classDiagram
+</div></section>
+<section class="card"><h2>3. Data Model (Class Diagram / ERD)</h2><div class="mermaid">classDiagram
     class User {
         +UUID id
         +String clerk_user_id
@@ -223,12 +226,8 @@ classDiagram
     NotificationChannel "1" --> "*" NotificationOutbox
     NotificationOutbox "1" --> "*" NotificationDelivery
     WebhookEndpoint "1" --> "*" WebhookDelivery
-```
-
-## 4. Sequence Diagram — Scheduled Live Check
-
-```mermaid
-sequenceDiagram
+</div></section>
+<section class="card"><h2>4. Sequence — Scheduled Live Check</h2><div class="mermaid">sequenceDiagram
     participant S as Scheduler
     participant DB as Postgres
     participant R as Redis
@@ -269,12 +268,8 @@ sequenceDiagram
     end
     W->>DB: RunStatus = succeeded/failed + run_guard outcome
     W->>G: release_domain_slot
-```
-
-## 5. Sequence Diagram — Manual / API-Triggered Run
-
-```mermaid
-sequenceDiagram
+</div></section>
+<section class="card"><h2>5. Sequence — Manual / API-Triggered Run</h2><div class="mermaid">sequenceDiagram
     participant UI as Frontend
     participant API as FastAPI (routers)
     participant DB as Postgres
@@ -293,12 +288,8 @@ sequenceDiagram
     API->>R: enqueue_check(run_id, needs_browser)
     API-->>UI: 202 ManualRunOut (run_id)
     R->>W: (continues as Sequence 4)
-```
-
-## 6. Pipeline Decision Flow (Activity Diagram)
-
-```mermaid
-flowchart TD
+</div></section>
+<section class="card"><h2>6. Pipeline Decision Flow (Activity Diagram)</h2><div class="mermaid">flowchart TD
     A[FetchResult] --> B{status >= 400?}
     B -->|yes| F1[Run FAILED\nhttp_client/server_error]
     B -->|no| C[extract_normalized by mode\nwhole_page / css_selector / json_field / list_items / visual]
@@ -314,13 +305,8 @@ flowchart TD
     L --> M[queue NotificationOutbox\nper enabled channel]
     M --> N[enqueue WebhookDelivery\nper enabled endpoint]
     N --> O[(CHANGE DETECTED\nnotify out)]
-```
-
-## Notes
-
-* **Auth modes** (`auth.py`): Clerk JWT (`Authorization: Bearer`), workspace API keys (`mtw_...`), and internal token (`X-Internal-Token`) for dev/smoke tests. RBAC via `require_workspace_member` / `require_role(min_role)`.
-* **Mode routing** (`workers/enqueue.py`): `visual` mode or `js_required` flag routes to the `browser_checks` queue (Playwright); everything else goes to `http_checks`.
-* **Outbox pattern**: change detection writes `NotificationOutbox` + `WebhookDelivery` rows, then workers fan out. This decouples detection from delivery and gives at-least-once send with retry (`max_retries=5`).
-* **SSRF guard** (`security/ssrf.py`): blocks private/loopback/link-local/metadata IPs and credentialed URLs before any fetch; redirects are re-validated in the fetcher.
-* **Quotas/plans** (`services/usage.py`, `services/plans.py`): daily check/notification/storage counters per workspace, gated by plan.
-* **Lease + reaper**: scheduler claims monitors with a 60s lease; `run_reaper` recovers stuck runs so HA scheduler/workers don't double-run.
+</div></section>
+</main>
+<script> mermaid.initialize({ startOnLoad: true, theme: "dark" }); </script>
+</body>
+</html>
