@@ -3,6 +3,8 @@ import { config } from "@/lib/config";
 import type {
   AlertInboxItem,
   AlertsSummary,
+  ApiKeyCreated,
+  BulkImportResponse,
   ChangeEvent,
   ChangeEventDetail,
   Monitor,
@@ -13,6 +15,7 @@ import type {
   SeedResponse,
   SnapshotAccess,
   Usage,
+  WebhookOut,
 } from "@/lib/types";
 
 export class ApiError extends Error {
@@ -34,8 +37,9 @@ export type MeResponse = {
   workspaces: Array<{ id: string; name: string; created_at: string }>;
 };
 
-async function waitForClerkToken(maxAttempts = 40, delayMs = 50): Promise<string | null> {
-  // ClerkTokenBridge may not be mounted yet on the first paint; poll briefly.
+async function waitForClerkToken(maxAttempts = 30, delayMs = 100): Promise<string | null> {
+  // ClerkTokenBridge may not be mounted yet on the first paint; poll briefly (~3s).
+  // Each getAuthToken() itself times out so a hung Clerk getToken cannot block forever.
   for (let i = 0; i < maxAttempts; i++) {
     const token = await getAuthToken();
     if (token) return token;
@@ -68,16 +72,44 @@ async function authHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
+const FETCH_TIMEOUT_MS = 20_000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = await authHeaders();
-  const res = await fetch(`${config.apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      ...headers,
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  // Honour caller abort if provided
+  const parentSignal = init?.signal;
+  if (parentSignal) {
+    if (parentSignal.aborted) controller.abort();
+    else parentSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${config.apiBaseUrl}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        ...headers,
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new ApiError(0, `Request timed out after ${FETCH_TIMEOUT_MS / 1000}s: ${path}`, {
+        detail: "timeout",
+      });
+    }
+    throw new ApiError(
+      0,
+      err instanceof Error ? err.message : `Network error calling ${path}`,
+      { detail: "network_error" },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (res.status === 204) {
     return undefined as T;
@@ -273,5 +305,25 @@ export const api = {
   deleteNotificationChannel: (workspaceId: string, channelId: string) =>
     request<void>(`/api/v1/workspaces/${workspaceId}/notification-channels/${channelId}`, {
       method: "DELETE",
+    }),
+
+  // Enterprise (Phase 6–7) — all go through the same authHeaders() so
+  // Clerk JWT (or dev internal token) is attached consistently.
+  bulkImportMonitors: (workspaceId: string, csvText: string) =>
+    request<BulkImportResponse>(
+      `/api/v1/workspaces/${workspaceId}/monitors/import`,
+      { method: "POST", body: JSON.stringify({ csv_text: csvText }) },
+    ),
+
+  createApiKey: (workspaceId: string, name: string) =>
+    request<ApiKeyCreated>(`/api/v1/workspaces/${workspaceId}/api-keys`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+
+  createWebhook: (workspaceId: string, url: string) =>
+    request<WebhookOut>(`/api/v1/workspaces/${workspaceId}/webhooks`, {
+      method: "POST",
+      body: JSON.stringify({ url }),
     }),
 };

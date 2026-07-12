@@ -61,9 +61,23 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn("field appearance-none pr-8", className)} {...props}>
-      {children}
-    </select>
+    <div className="relative">
+      <select className={cn("field appearance-none pr-8", className)} {...props}>
+        {children}
+      </select>
+      <svg
+        className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </div>
   );
 }
 
@@ -139,7 +153,7 @@ export function PageHeader({
   actions,
 }: {
   title: string;
-  description?: string;
+  description?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
@@ -216,7 +230,7 @@ export function SuccessBox({ message }: { message: string }) {
   );
 }
 
-export function Spinner() {
+export function Spinner({ label = "Loading…" }: { label?: string }) {
   // suppressHydrationWarning: extensions may inject attrs (e.g. rtrvr-ls) before hydrate
   return (
     <div
@@ -228,7 +242,7 @@ export function Spinner() {
         suppressHydrationWarning
       />
       <p className="text-sm text-slate-500 dark:text-slate-500" suppressHydrationWarning>
-        Loading…
+        {label}
       </p>
     </div>
   );

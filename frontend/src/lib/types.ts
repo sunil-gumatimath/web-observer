@@ -143,3 +143,28 @@ export type SnapshotAccess = {
   raw_download_url: string | null;
   created_at: string;
 };
+
+export type BulkImportResponse = {
+  created: Array<{ id: string; name: string; url: string }>;
+  skipped: Array<{ url: string; reason: string }>;
+  errors: Array<{ row: number; url: string | null; error: string }>;
+  created_count: number;
+};
+
+export type ApiKeyCreated = {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  raw_key: string;
+};
+
+export type WebhookOut = {
+  id: string;
+  url: string;
+  enabled: boolean;
+  created_at: string;
+  secret: string | null;
+};

@@ -15,7 +15,6 @@ const nav = [
     match: (p: string) => p.startsWith("/monitors") && p !== "/monitors/new",
   },
   { href: "/alerts", label: "Alerts", match: (p: string) => p.startsWith("/alerts") },
-  { href: "/monitors/new", label: "New", match: (p: string) => p === "/monitors/new" },
   { href: "/import", label: "Import", match: (p: string) => p.startsWith("/import") },
   { href: "/docs", label: "Docs", match: (p: string) => p.startsWith("/docs") },
   { href: "/settings", label: "Settings", match: (p: string) => p.startsWith("/settings") },

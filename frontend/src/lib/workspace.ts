@@ -33,38 +33,58 @@ export function setStoredWorkspaceId(id: string) {
  * Resolve the active workspace:
  * - Clerk mode: GET /me (auto-provisions default workspace)
  * - Dev mode: seed internal workspace if needed
+ *
+ * Concurrent callers within the same tick share the in-flight promise so we
+ * don't fire N redundant /me (or seed) requests on a single page mount.
+ * Call `invalidateWorkspace()` to force a re-resolution.
  */
+let workspacePromise: Promise<string> | null = null;
+
+export function invalidateWorkspace(): void {
+  workspacePromise = null;
+}
+
 export async function ensureWorkspace(): Promise<string> {
-  if (config.clerkEnabled) {
-    const me = await api.me();
-    if (me.workspaces.length > 0) {
-      // Prefer a previously chosen id only if the user is still a member.
-      // Never use NEXT_PUBLIC_DEV_WORKSPACE_ID here — that is the internal seed workspace.
-      const preferred = localStorage.getItem(STORAGE_KEY);
-      const match = preferred
-        ? me.workspaces.find((w) => w.id === preferred)
-        : undefined;
-      const id = match?.id ?? me.workspaces[0].id;
-      setStoredWorkspaceId(id);
-      return id;
-    }
-    const created = await api.createWorkspace("My workspace");
-    setStoredWorkspaceId(created.id);
-    return created.id;
-  }
+  if (workspacePromise) return workspacePromise;
 
-  const existing = getStoredWorkspaceId();
-  if (existing) {
-    // Validate still accessible
-    try {
-      await api.getUsage(existing);
-      return existing;
-    } catch {
-      // fall through to seed
+  workspacePromise = (async () => {
+    if (config.clerkEnabled) {
+      const me = await api.me();
+      if (me.workspaces.length > 0) {
+        // Prefer a previously chosen id only if the user is still a member.
+        // Never use NEXT_PUBLIC_DEV_WORKSPACE_ID here — that is the internal seed workspace.
+        const preferred = localStorage.getItem(STORAGE_KEY);
+        const match = preferred
+          ? me.workspaces.find((w) => w.id === preferred)
+          : undefined;
+        const id = match?.id ?? me.workspaces[0].id;
+        setStoredWorkspaceId(id);
+        return id;
+      }
+      const created = await api.createWorkspace("My workspace");
+      setStoredWorkspaceId(created.id);
+      return created.id;
     }
-  }
 
-  const seed = await api.seed();
-  setStoredWorkspaceId(seed.workspace_id);
-  return seed.workspace_id;
+    const existing = getStoredWorkspaceId();
+    if (existing) {
+      // Validate still accessible
+      try {
+        await api.getUsage(existing);
+        return existing;
+      } catch {
+        // fall through to seed
+      }
+    }
+
+    const seed = await api.seed();
+    setStoredWorkspaceId(seed.workspace_id);
+    return seed.workspace_id;
+  })().catch((err) => {
+    // Don't cache failures; let the next caller retry.
+    workspacePromise = null;
+    throw err;
+  });
+
+  return workspacePromise;
 }
