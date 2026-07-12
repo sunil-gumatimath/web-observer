@@ -1,12 +1,12 @@
 # Product Scope — Phase 0
 
 Status: **Approved for MVP implementation**  
-Source: `monitor-the-web-final-roadmap.md`  
+Source: `Web Observer-final-roadmap.md`  
 Date: 2026-07-10
 
 ## Product vision
 
-Monitor-the-Web detects changes on public web pages (or selected sections) and sends high-signal alerts with clear before-and-after text diffs.
+Web Observer detects changes on public web pages (or selected sections) and sends high-signal alerts with clear before-and-after text diffs.
 
 > Tell me when the web pages I care about change and clearly explain what changed.
 

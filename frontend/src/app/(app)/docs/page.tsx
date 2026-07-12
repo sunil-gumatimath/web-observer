@@ -55,7 +55,7 @@ export default function DocsPage() {
     <div>
       <PageHeader
         title="Documentation"
-        description="How Monitor-the-Web works, and how to set up monitors, alerts, and imports."
+        description="How Web Observer works, and how to set up monitors, alerts, and imports."
       />
 
       <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
@@ -94,7 +94,7 @@ export default function DocsPage() {
 
           <DocSection id="what-it-is" title="What it is">
             <p>
-              <strong className="text-slate-800 dark:text-slate-200">Monitor-the-Web</strong> watches
+              <strong className="text-slate-800 dark:text-slate-200">Web Observer</strong> watches
               public web pages (or parts of them) on a schedule. When content changes, it stores a
               clear before/after diff and can notify you by email, Slack, or Discord.
             </p>

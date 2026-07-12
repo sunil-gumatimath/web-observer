@@ -1,6 +1,6 @@
 # Clerk setup (this project)
 
-Linked app: **monitor-the-web** (`app_3GJz6qgIFDXNyyMSm9ayJgXpZ6q`)  
+Linked app: **Web Observer** (`app_3GJz6qgIFDXNyyMSm9ayJgXpZ6q`)  
 Frontend API host: `suited-emu-70.clerk.accounts.dev` (development)
 
 ## What was configured

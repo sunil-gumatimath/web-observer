@@ -1,10 +1,20 @@
 import { api } from "@/lib/api";
 import { config } from "@/lib/config";
 
-const STORAGE_KEY = "mtw_workspace_id";
+const STORAGE_KEY = "web_observer_workspace_id";
+const LEGACY_STORAGE_KEY = "mtw_workspace_id";
+
+function migrateWorkspaceKey() {
+  if (typeof window === "undefined") return;
+  const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (legacy && !localStorage.getItem(STORAGE_KEY)) {
+    localStorage.setItem(STORAGE_KEY, legacy);
+  }
+}
 
 export function getStoredWorkspaceId(): string | null {
   if (typeof window === "undefined") return null;
+  migrateWorkspaceKey();
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) return stored;
   // Only use the seeded dev workspace id when Clerk is off.
@@ -16,6 +26,7 @@ export function getStoredWorkspaceId(): string | null {
 
 export function setStoredWorkspaceId(id: string) {
   localStorage.setItem(STORAGE_KEY, id);
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
 /**

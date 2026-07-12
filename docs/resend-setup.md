@@ -1,6 +1,6 @@
 # Resend email setup
 
-Monitor-the-Web sends alert emails through the **notification worker** using the official Resend SDK.
+Web Observer sends alert emails through the **notification worker** using the official Resend SDK.
 
 ## Configure (root `.env`)
 

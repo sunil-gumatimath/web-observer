@@ -11,13 +11,13 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     internal_api_token: str = "dev-internal-token"
 
-    database_url: str = "postgresql+psycopg://monitor:monitor@localhost:5432/monitor_the_web"
+    database_url: str = "postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
     redis_url: str = "redis://localhost:6379/0"
 
     default_timeout_seconds: int = 30
     default_max_response_bytes: int = 2_000_000
     http_user_agent: str = (
-        "MonitorTheWeb/0.1 (+https://example.com/bot; contact=ops@example.com)"
+        "WebObserver/0.1 (+https://example.com/bot; contact=ops@example.com)"
     )
 
     # Quotas (beta defaults)

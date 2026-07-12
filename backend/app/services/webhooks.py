@@ -97,7 +97,7 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
                 "Content-Type": "application/json",
                 "X-MTW-Timestamp": ts,
                 "X-MTW-Signature": sig,
-                "User-Agent": "MonitorTheWeb-Webhooks/1.0",
+                "User-Agent": "WebObserver-Webhooks/1.0",
             },
             timeout=15.0,
         )

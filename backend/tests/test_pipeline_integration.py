@@ -2,7 +2,7 @@
 
 Run with Docker Postgres:
   docker compose up -d postgres
-  $env:TEST_DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/monitor_the_web"
+  $env:TEST_DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
   pytest backend/tests/test_pipeline_integration.py -q
 """
 

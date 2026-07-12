@@ -1,6 +1,6 @@
 # Clerk Production setup
 
-Your app is linked as **monitor-the-web** (`app_3GJz6qgIFDXNyyMSm9ayJgXpZ6q`).
+Your app is linked as **Web Observer** (`app_3GJz6qgIFDXNyyMSm9ayJgXpZ6q`).
 
 Right now only **Development** exists. Production is **not created yet**, so the UI shows **“Development mode”**.
 
@@ -14,7 +14,7 @@ Right now only **Development** exists. Production is **not created yet**, so the
 ## Create Production (you do this in the browser)
 
 1. Open [Clerk Dashboard](https://dashboard.clerk.com/)
-2. Select app **monitor-the-web**
+2. Select app **Web Observer**
 3. Open **Configure** / **Production** (or “Deploy to production”)
 4. Complete the production checklist, typically:
    - Add your **production domain** (or use Clerk’s provisional host if offered)

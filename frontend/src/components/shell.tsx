@@ -29,13 +29,9 @@ function Logo({ compact = false }: { compact?: boolean }) {
     >
       <span className="relative flex h-9 w-9 items-center justify-center">
         <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 opacity-90 shadow-glow-sm transition group-hover:opacity-100" />
-        <span className="relative text-sm font-bold text-white">M</span>
+        <span className="relative text-sm font-bold text-white">W</span>
       </span>
-      {!compact ? (
-        <span className="hidden sm:inline">
-          Monitor<span className="text-slate-500 dark:text-slate-400">-the-</span>Web
-        </span>
-      ) : null}
+      {!compact ? <span className="hidden sm:inline">Web Observer</span> : null}
     </Link>
   );
 }

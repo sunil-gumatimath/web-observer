@@ -15,7 +15,7 @@ if (-not (Test-Path $VenvPython)) {
 }
 
 $envBlock = @"
-`$env:DATABASE_URL = 'postgresql+psycopg://monitor:monitor@localhost:5432/monitor_the_web'
+`$env:DATABASE_URL = 'postgresql+psycopg://monitor:monitor@localhost:5432/web_observer'
 `$env:REDIS_URL = 'redis://localhost:6379/0'
 `$env:STORAGE_BACKEND = 'local'
 `$env:LOCAL_STORAGE_PATH = '$Root\data\snapshots'

@@ -50,7 +50,7 @@ def deliver_outbox_message(outbox_id: str) -> None:
             "digest": "Digest",
         }.get(kind, "Change")
 
-        title = f"[Monitor-the-Web] {label}: {payload.get('monitor_name', 'workspace')}"
+        title = f"[Web Observer] {label}: {payload.get('monitor_name', 'workspace')}"
         body_lines = [
             f"*Monitor:* {payload.get('monitor_name')}",
             f"*URL:* {payload.get('url')}",
@@ -128,7 +128,7 @@ def _send_slack(webhook_url: str, title: str, body: str) -> str:
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": "Monitor-the-Web · open the app Alerts inbox for full detail",
+                    "text": "Web Observer · open the app Alerts inbox for full detail",
                 }
             ],
         },

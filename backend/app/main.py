@@ -28,12 +28,12 @@ Db = Annotated[Session, Depends(get_db)]
 async def lifespan(_app: FastAPI):
     logging.basicConfig(level=settings.log_level)
     Base.metadata.create_all(bind=engine)
-    logger.info("monitor-the-web api starting version=%s env=%s", __version__, settings.app_env)
+    logger.info("web-observer api starting version=%s env=%s", __version__, settings.app_env)
     yield
 
 
 app = FastAPI(
-    title="Monitor-the-Web API",
+    title="Web Observer API",
     version=__version__,
     lifespan=lifespan,
 )

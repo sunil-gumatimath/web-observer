@@ -16,7 +16,7 @@ from app.models import *  # noqa: F401,F403
 def _pg_url() -> str:
     return os.environ.get(
         "TEST_DATABASE_URL",
-        "postgresql+psycopg://monitor:monitor@localhost:5432/monitor_the_web_test",
+        "postgresql+psycopg://monitor:monitor@localhost:5432/web_observer_test",
     )
 
 
@@ -51,7 +51,7 @@ def db_session() -> Generator[Session, None, None]:
     if not postgres_available():
         pytest.skip(
             "PostgreSQL test DB not available. "
-            "Create DB monitor_the_web_test or set TEST_DATABASE_URL (must contain 'test')."
+            "Create DB web_observer_test or set TEST_DATABASE_URL (must contain 'test')."
         )
     url = _pg_url()
     engine = create_engine(url, pool_pre_ping=True)

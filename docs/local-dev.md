@@ -20,7 +20,7 @@ No Docker, no MinIO required. Snapshots go to `./data/snapshots`.
 
 ```sql
 CREATE USER monitor WITH PASSWORD 'monitor';
-CREATE DATABASE monitor_the_web OWNER monitor;
+CREATE DATABASE web_observer OWNER monitor;
 ```
 
 **Redis**
@@ -68,7 +68,7 @@ All from `backend` with venv activated, and env loaded from parent `.env`:
 ```powershell
 # Terminal A — API
 cd backend
-$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/monitor_the_web"
+$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
 $env:REDIS_URL="redis://localhost:6379/0"
 $env:STORAGE_BACKEND="local"
 .\.venv\Scripts\uvicorn app.main:app --reload --port 8000
@@ -77,7 +77,7 @@ $env:STORAGE_BACKEND="local"
 ```powershell
 # Terminal B — HTTP + notification workers
 cd backend
-$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/monitor_the_web"
+$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
 $env:REDIS_URL="redis://localhost:6379/0"
 $env:STORAGE_BACKEND="local"
 .\.venv\Scripts\dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2
@@ -86,7 +86,7 @@ $env:STORAGE_BACKEND="local"
 ```powershell
 # Terminal C — Scheduler
 cd backend
-$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/monitor_the_web"
+$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
 $env:REDIS_URL="redis://localhost:6379/0"
 .\.venv\Scripts\python -m app.scheduler
 ```
@@ -96,7 +96,7 @@ Optional browser worker (JS/visual):
 ```powershell
 # Terminal D
 cd backend
-$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/monitor_the_web"
+$env:DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
 $env:REDIS_URL="redis://localhost:6379/0"
 .\.venv\Scripts\dramatiq app.workers --queues browser_checks --processes 1 --threads 1
 ```

@@ -1,5 +1,5 @@
 [project]
-name = "monitor-the-web"
+name = "web-observer"
 version = "0.1.0"
 description = "Web change-detection and alerting platform"
 requires-python = ">=3.12"

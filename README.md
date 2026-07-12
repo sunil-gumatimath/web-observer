@@ -1,4 +1,4 @@
-# Monitor-the-Web
+# Web Observer
 
 Web change-detection and alerting platform.
 
@@ -14,7 +14,7 @@ Phases **0–7** core complete. Billing is optional (solo use: skip Stripe).
 | [docs/clerk-setup.md](docs/clerk-setup.md) | Clerk auth |
 | [docs/resend-setup.md](docs/resend-setup.md) | Email alerts |
 | [docs/phase-6-7.md](docs/phase-6-7.md) | Plans, webhooks, API keys |
-| `monitor-the-web-final-roadmap.md` | Original roadmap |
+| `web-observer-final-roadmap.md` | Original roadmap |
 
 ## How monitoring works (short)
 

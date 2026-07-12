@@ -61,11 +61,11 @@ def main() -> None:
 
     msg_id = send_email(
         to=args.to,
-        subject="Hello from Monitor-the-Web",
-        text="Congrats on sending your first email with Resend + Monitor-the-Web.",
+        subject="Hello from Web Observer",
+        text="Congrats on sending your first email with Resend + Web Observer.",
         html_body=(
             "<p>Congrats on sending your <strong>first email</strong> "
-            "from <em>Monitor-the-Web</em> via Resend.</p>"
+            "from <em>Web Observer</em> via Resend.</p>"
         ),
     )
     print(f"Sent OK. provider_id={msg_id}")

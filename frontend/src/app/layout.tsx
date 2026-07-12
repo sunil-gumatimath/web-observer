@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Monitor-the-Web",
+  title: "Web Observer",
   description: "Detect web page changes and get high-signal alerts with diffs.",
 };
 
