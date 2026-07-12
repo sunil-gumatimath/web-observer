@@ -17,8 +17,10 @@ import {
 import { api } from "@/lib/api";
 import type { AlertsSummary, Monitor, Usage } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export default function DashboardPage() {
+  usePageTitle("Overview");
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [alerts, setAlerts] = useState<AlertsSummary | null>(null);
@@ -51,7 +53,7 @@ export default function DashboardPage() {
     };
   }, []);
 
-  if (loading) return <Spinner />;
+  if (loading) return <Spinner label="Loading workspace…" />;
 
   const active = monitors.filter((m) => m.enabled).length;
   const checksPct =
@@ -88,17 +90,15 @@ export default function DashboardPage() {
           hint={`${active} active · limit ${usage?.max_monitors ?? "—"}`}
           progress={monitorsPct}
         />
-        <Link href="/alerts" className="block">
-          <StatCard
-            label="Unread alerts"
-            value={alerts?.unread ?? 0}
-            hint={
-              alerts
-                ? `${alerts.total} total · ${alerts.noise} noise`
-                : "Open inbox"
-            }
-          />
-        </Link>
+        <StatCard
+          label="Unread alerts"
+          value={alerts?.unread ?? 0}
+          hint={
+            alerts
+              ? `${alerts.total} total · ${alerts.noise} noise`
+              : "Open inbox"
+          }
+        />
         <StatCard
           label="Checks today"
           value={usage?.checks_count ?? 0}

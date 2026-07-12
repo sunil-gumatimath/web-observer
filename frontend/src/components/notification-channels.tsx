@@ -20,7 +20,8 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
   const [address, setAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     const list = await api.listNotificationChannels(workspaceId);
@@ -42,10 +43,9 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
       cancelled = true;
     };
   }, [load]);
-
   async function onAdd(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
+    setAdding(true);
     setError(null);
     try {
       await api.createNotificationChannel(workspaceId, { type, address });
@@ -54,12 +54,11 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add channel");
     } finally {
-      setBusy(false);
+      setAdding(false);
     }
   }
-
   async function toggle(channel: NotificationChannel) {
-    setBusy(true);
+    setBusyId(channel.id);
     setError(null);
     try {
       await api.updateNotificationChannel(workspaceId, channel.id, {
@@ -69,13 +68,13 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update channel");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   }
 
   async function remove(channel: NotificationChannel) {
     if (!confirm(`Remove ${channel.type} channel?`)) return;
-    setBusy(true);
+    setBusyId(channel.id);
     setError(null);
     try {
       await api.deleteNotificationChannel(workspaceId, channel.id);
@@ -83,11 +82,9 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete channel");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   }
-
-  if (loading) return <Spinner />;
 
   return (
     <div className="space-y-4">
@@ -112,10 +109,10 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
                 <Badge tone={c.enabled ? "success" : "warn"}>
                   {c.enabled ? "enabled" : "disabled"}
                 </Badge>
-                <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => toggle(c)}>
+                <Button type="button" variant="secondary" size="sm" disabled={busyId === c.id} onClick={() => toggle(c)}>
                   {c.enabled ? "Disable" : "Enable"}
                 </Button>
-                <Button type="button" variant="danger" size="sm" disabled={busy} onClick={() => remove(c)}>
+                <Button type="button" variant="danger" size="sm" disabled={busyId === c.id} onClick={() => remove(c)}>
                   Remove
                 </Button>
               </div>
@@ -160,8 +157,8 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
               }
             />
           </div>
-          <Button type="submit" disabled={busy}>
-            Add channel
+          <Button type="submit" disabled={adding}>
+            {adding ? "Adding…" : "Add channel"}
           </Button>
         </form>
       </Card>

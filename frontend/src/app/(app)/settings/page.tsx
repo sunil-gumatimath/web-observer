@@ -16,8 +16,11 @@ import {
 import { api, type MeResponse } from "@/lib/api";
 import { config } from "@/lib/config";
 import { ensureWorkspace, getStoredWorkspaceId, setStoredWorkspaceId } from "@/lib/workspace";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export default function SettingsPage() {
+  usePageTitle("Settings");
+
   const [workspaceId, setWorkspaceId] = useState("");
   const [me, setMe] = useState<MeResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -245,21 +248,9 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [webhookUrl, setWebhookUrl] = useState("https://example.com/hooks/mtw");
-
-  async function authed(path: string, init?: RequestInit) {
-    const res = await fetch(`${config.apiBaseUrl}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Internal-Token": config.internalToken,
-        ...(init?.headers || {}),
-      },
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(JSON.stringify(body.detail ?? body));
-    return body;
-  }
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [creatingWebhook, setCreatingWebhook] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -272,21 +263,22 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
       <Card className="space-y-3">
         <Button
           type="button"
+          disabled={creatingKey}
           onClick={async () => {
             setErr(null);
+            setCreatingKey(true);
             try {
-              const r = await authed(`/api/v1/workspaces/${workspaceId}/api-keys`, {
-                method: "POST",
-                body: JSON.stringify({ name: "default" }),
-              });
+              const r = await api.createApiKey(workspaceId, "default");
               setApiKey(r.raw_key);
               setMsg("API key created — copy it now; it will not be shown again.");
             } catch (e) {
               setErr(e instanceof Error ? e.message : "API key failed");
+            } finally {
+              setCreatingKey(false);
             }
           }}
         >
-          Create API key
+          {creatingKey ? "Creating…" : "Create API key"}
         </Button>
         {apiKey ? (
           <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
@@ -296,24 +288,25 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
       </Card>
       <Card className="space-y-3">
         <Label htmlFor="wh">Webhook URL (https) — optional</Label>
-        <Input id="wh" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} />
+        <Input id="wh" placeholder="https://hooks.slack.com/services/..." value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} />
         <Button
           type="button"
+          disabled={creatingWebhook || !webhookUrl.trim()}
           onClick={async () => {
             setErr(null);
+            setCreatingWebhook(true);
             try {
-              const r = await authed(`/api/v1/workspaces/${workspaceId}/webhooks`, {
-                method: "POST",
-                body: JSON.stringify({ url: webhookUrl }),
-              });
+              const r = await api.createWebhook(workspaceId, webhookUrl.trim());
               setWebhookSecret(r.secret);
               setMsg("Webhook created — store the signing secret securely.");
             } catch (e) {
               setErr(e instanceof Error ? e.message : "Webhook failed");
+            } finally {
+              setCreatingWebhook(false);
             }
           }}
         >
-          Add webhook
+          {creatingWebhook ? "Adding…" : "Add webhook"}
         </Button>
         {webhookSecret ? (
           <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">

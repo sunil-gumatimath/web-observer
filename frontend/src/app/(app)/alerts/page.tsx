@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   Badge,
@@ -13,11 +14,14 @@ import {
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { AlertInboxItem, AlertsSummary } from "@/lib/types";
+import { usePageTitle } from "@/lib/use-page-title";
 import { ensureWorkspace } from "@/lib/workspace";
 
 type Filter = "all" | "unread" | "noise";
 
 export default function AlertsPage() {
+  usePageTitle("Alerts");
+  const router = useRouter();
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<AlertInboxItem[]>([]);
   const [summary, setSummary] = useState<AlertsSummary | null>(null);
@@ -120,9 +124,8 @@ export default function AlertsPage() {
       {error ? <ErrorBox message={error} /> : null}
 
       <div className="mb-6 flex flex-wrap gap-2">
-        {(
-          [
-            ["all", "Active", summary ? summary.total - summary.noise : null],
+        {([
+            ["all", "Signal", summary ? summary.total - summary.noise : null],
             ["unread", "Unread", summary?.unread ?? null],
             ["noise", "Noise", summary?.noise ?? null],
           ] as const
@@ -182,16 +185,17 @@ export default function AlertsPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/changes/${a.id}`}
-                    onClick={() => {
-                      if (!a.is_read) void markRead(a, true);
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy}
+                    onClick={async () => {
+                      if (!a.is_read) await markRead(a, true);
+                      router.push(`/changes/${a.id}`);
                     }}
                   >
-                    <Button type="button" size="sm">
-                      Open
-                    </Button>
-                  </Link>
+                    Open
+                  </Button>
                   <Button
                     type="button"
                     size="sm"
