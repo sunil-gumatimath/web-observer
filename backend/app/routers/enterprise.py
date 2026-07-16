@@ -408,6 +408,7 @@ def list_webhook_deliveries(
     return [
         {
             "id": str(r.id),
+            "endpoint_id": str(r.endpoint_id),
             "event_type": r.event_type,
             "status": r.status,
             "response_code": r.response_code,
@@ -417,6 +418,51 @@ def list_webhook_deliveries(
         }
         for r in rows
     ]
+
+
+@router.post("/workspaces/{workspace_id}/webhook-deliveries/{delivery_id}/retry")
+def retry_webhook_delivery(
+    workspace_id: UUID,
+    delivery_id: UUID,
+    db: Db,
+    principal: Principal,
+    workspace: Workspace = Depends(require_role("admin")),
+) -> dict:
+    """Re-enqueue a failed or stuck webhook delivery.
+
+    Resets the delivery to ``pending`` (and clears its attempt counter so the
+    full retry budget is available again), then dispatches the delivery actor.
+    Succeeded deliveries are not re-sent.
+    """
+    delivery = db.scalar(
+        select(WebhookDelivery).where(
+            WebhookDelivery.id == delivery_id,
+            WebhookDelivery.workspace_id == workspace_id,
+        )
+    )
+    if delivery is None:
+        raise HTTPException(status_code=404, detail="Webhook delivery not found")
+    if delivery.status == "sent":
+        return {"id": str(delivery.id), "status": delivery.status, "retried": False, "message": "Already sent"}
+
+    delivery.status = "pending"
+    delivery.attempts = 0
+    delivery.last_error = None
+    db.commit()
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="webhook.delivery_retried",
+        resource_type="webhook_delivery",
+        resource_id=str(delivery.id),
+    )
+    db.commit()
+
+    from app.workers.webhooks import deliver_webhook_message
+
+    deliver_webhook_message.send(str(delivery.id))
+    return {"id": str(delivery.id), "status": "pending", "retried": True, "message": "Re-enqueued for delivery"}
 
 
 @router.get("/workspaces/{workspace_id}/audit-logs")

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { NotificationChannelsPanel } from "@/components/notification-channels";
 import {
+  Badge,
   Button,
   Card,
   ErrorBox,
@@ -14,6 +15,7 @@ import {
   SuccessBox,
 } from "@/components/ui";
 import { api, type MeResponse } from "@/lib/api";
+import type { WebhookDelivery } from "@/lib/types";
 import { config } from "@/lib/config";
 import { ensureWorkspace, getStoredWorkspaceId, setStoredWorkspaceId } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -252,6 +254,36 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
   const [creatingKey, setCreatingKey] = useState(false);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
 
+  const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  async function loadDeliveries() {
+    setDeliveriesLoading(true);
+    try {
+      const list = await api.listWebhookDeliveries(workspaceId, { limit: 50 });
+      setDeliveries(list);
+    } catch {
+      /* non-fatal: keep any prior list */
+    } finally {
+      setDeliveriesLoading(false);
+    }
+  }
+
+  async function retry(deliveryId: string) {
+    setRetryingId(deliveryId);
+    setErr(null);
+    try {
+      await api.retryWebhookDelivery(workspaceId, deliveryId);
+      setMsg("Webhook delivery re-enqueued.");
+      await loadDeliveries();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Retry failed");
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <SectionTitle>Optional: API keys & webhooks</SectionTitle>
@@ -313,6 +345,61 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
             secret: {webhookSecret}
           </p>
         ) : null}
+      </Card>
+
+      <Card className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="section-label">Webhook deliveries</p>
+          <Button type="button" variant="secondary" size="sm" disabled={deliveriesLoading} onClick={loadDeliveries}>
+            {deliveriesLoading ? "Loading…" : "Refresh"}
+          </Button>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-500">
+          Outbound change webhooks and their delivery status. Retry re-sends a failed or stuck delivery.
+        </p>
+        <div className="space-y-2">
+          {deliveries.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
+              No deliveries yet. Click Refresh after change events fire.
+            </p>
+          ) : (
+            deliveries.map((d) => (
+              <div
+                key={d.id}
+                className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-slate-50/60 px-3.5 py-3 dark:bg-slate-950/40"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={d.status === "sent" ? "success" : d.status === "failed" ? "danger" : "warn"}>
+                      {d.status}
+                    </Badge>
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{d.event_type}</span>
+                  </div>
+                  <p className="mt-1 truncate font-mono text-xs text-slate-500 dark:text-slate-500">{d.id}</p>
+                  {d.last_error ? (
+                    <p className="mt-1 line-clamp-2 text-xs text-rose-600 dark:text-rose-400">{d.last_error}</p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                    attempts: {d.attempts}
+                    {d.response_code != null ? ` · HTTP ${d.response_code}` : ""} ·{" "}
+                    {new Date(d.created_at).toLocaleString()}
+                  </p>
+                </div>
+                {d.status !== "sent" ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={retryingId === d.id}
+                    onClick={() => retry(d.id)}
+                  >
+                    {retryingId === d.id ? "Retrying…" : "Retry"}
+                  </Button>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
       </Card>
     </div>
   );

@@ -407,4 +407,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ url }),
     }),
+
+  testNotificationChannel: (workspaceId: string, channelId: string) =>
+    request<{ ok: boolean; detail: string }>(
+      `/api/v1/workspaces/${workspaceId}/notification-channels/${channelId}/test`,
+      { method: "POST" },
+    ),
+
+  listWebhookDeliveries: (
+    workspaceId: string,
+    opts?: { limit?: number },
+  ) => {
+    const q = new URLSearchParams();
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return request<WebhookDelivery[]>(
+      `/api/v1/workspaces/${workspaceId}/webhook-deliveries${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  retryWebhookDelivery: (workspaceId: string, deliveryId: string) =>
+    request<{ id: string; status: string; retried: boolean; message: string }>(
+      `/api/v1/workspaces/${workspaceId}/webhook-deliveries/${deliveryId}/retry`,
+      { method: "POST" },
+    ),
 };

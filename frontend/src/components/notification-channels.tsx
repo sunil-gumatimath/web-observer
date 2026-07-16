@@ -9,7 +9,6 @@ import {
   Input,
   Label,
   Select,
-  Spinner,
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { NotificationChannel } from "@/lib/types";
@@ -22,6 +21,7 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const list = await api.listNotificationChannels(workspaceId);
@@ -72,6 +72,20 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
     }
   }
 
+  async function test(channel: NotificationChannel) {
+    setBusyId(channel.id);
+    setError(null);
+    setTestMsg(null);
+    try {
+      const res = await api.testNotificationChannel(workspaceId, channel.id);
+      setTestMsg(res.detail);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send test");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function remove(channel: NotificationChannel) {
     if (!confirm(`Remove ${channel.type} channel?`)) return;
     setBusyId(channel.id);
@@ -89,6 +103,11 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
   return (
     <div className="space-y-4">
       {error ? <ErrorBox message={error} /> : null}
+      {testMsg ? (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+          {testMsg}
+        </div>
+      ) : null}
 
       <Card>
         <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
@@ -111,6 +130,9 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
                 </Badge>
                 <Button type="button" variant="secondary" size="sm" disabled={busyId === c.id} onClick={() => toggle(c)}>
                   {c.enabled ? "Disable" : "Enable"}
+                </Button>
+                <Button type="button" variant="ghost" size="sm" disabled={busyId === c.id} onClick={() => test(c)}>
+                  Send test
                 </Button>
                 <Button type="button" variant="danger" size="sm" disabled={busyId === c.id} onClick={() => remove(c)}>
                   Remove

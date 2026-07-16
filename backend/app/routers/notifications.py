@@ -148,3 +148,47 @@ def delete_notification_channel(
         raise HTTPException(status_code=404, detail="Notification channel not found")
     db.delete(channel)
     db.commit()
+
+
+@router.post("/workspaces/{workspace_id}/notification-channels/{channel_id}/test")
+def test_notification_channel(
+    workspace_id: UUID,
+    channel_id: UUID,
+    db: Db,
+    _workspace: Workspace = Depends(require_role("member")),
+) -> dict:
+    """Send a one-off test message to verify a channel works.
+
+    Reuses the same delivery helpers as the notification worker so the test
+    path matches real delivery. Returns ok/detail rather than raising on a
+    delivery failure, so the UI can show the exact error.
+    """
+    from app.services.email import send_email
+    from app.workers.notifications import _send_discord, _send_slack
+
+    channel = db.scalar(
+        select(NotificationChannel).where(
+            NotificationChannel.id == channel_id,
+            NotificationChannel.workspace_id == workspace_id,
+        )
+    )
+    if channel is None:
+        raise HTTPException(status_code=404, detail="Notification channel not found")
+
+    title = "[Web Observer] Test notification"
+    body = (
+        "This is a test message from Web Observer. "
+        "If you can read this, your channel is configured correctly."
+    )
+
+    try:
+        ctype = (channel.type or "email").lower()
+        if ctype == "slack":
+            _send_slack(channel.address, title, body)
+        elif ctype == "discord":
+            _send_discord(channel.address, title, body)
+        else:
+            send_email(to=channel.address, subject=title, text=body)
+        return {"ok": True, "detail": f"Test {ctype} message sent to {channel.address}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "detail": str(exc)[:500]}
