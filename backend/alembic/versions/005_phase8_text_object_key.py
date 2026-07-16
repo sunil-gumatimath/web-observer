@@ -1,7 +1,7 @@
 """Add text_object_key to Snapshot
 
 Revision ID: 005_phase8
-Revises: 004_phase6_7
+Revises: 004
 Create Date: 2026-07-12 20:53:00.000000
 
 """
