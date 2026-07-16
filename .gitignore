@@ -36,6 +36,7 @@ frontend/out/
 data/
 backend/data/
 *.log
+logs-*.err
 .docker-data/
 
 # Alembic
