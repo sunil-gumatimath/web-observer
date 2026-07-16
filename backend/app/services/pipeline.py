@@ -20,7 +20,7 @@ from app.models import (
     Workspace,
 )
 from app.models.entities import OutboxStatus, RunStatus
-from app.services.ai_summary import enrich_change
+from app.services.ai_summary import AIEnrichment, enrich_change
 from app.services.diffing import short_summary, unified_diff
 from app.services.extract import ExtractionError, content_hash, extract_text
 from app.services.fetcher import FetchResult
@@ -389,6 +389,7 @@ def _create_change_event(
     """Run AI enrichment and persist the :class:`ChangeEvent` row."""
     workspace = db.get(Workspace, monitor.workspace_id)
     ai_enabled = bool(workspace.ai_summaries_enabled) if workspace is not None else True
+    watch_note = getattr(monitor, "watch_note", None)
     enrichment = enrich_change(
         monitor_name=monitor.name,
         url=monitor.url,
@@ -396,9 +397,33 @@ def _create_change_event(
         deterministic_summary=ctx.summary,
         diff_text=ctx.diff_text,
         enabled=ai_enabled,
-        watch_note=getattr(monitor, "watch_note", None),
+        watch_note=watch_note,
     )
     ctx.enrichment = enrichment
+
+    # AI triage: if the monitor has a watch note, ask the LLM whether this
+    # change is relevant to that intent or routine noise. Fails open (False)
+    # when there is no note, no LLM key, or an LLM error — never suppresses a
+    # real change by accident.
+    is_noise = False
+    if watch_note:
+        from app.services.ai_summary import triage_change
+
+        is_noise, triage_reason = triage_change(
+            monitor_name=monitor.name,
+            url=monitor.url,
+            mode=monitor.mode,
+            diff_text=ctx.diff_text,
+            watch_note=watch_note,
+            suggested_category=enrichment.category,
+        )
+        if is_noise and triage_reason:
+            enrichment = AIEnrichment(
+                summary=f"[AI triage] {triage_reason} (watched: {watch_note[:200]})",
+                category=enrichment.category,
+                provider=enrichment.provider,
+                model=enrichment.model,
+            )
 
     change = ChangeEvent(
         workspace_id=monitor.workspace_id,
@@ -411,7 +436,7 @@ def _create_change_event(
         diff_summary=ctx.summary,
         ai_summary=enrichment.summary,
         change_category=enrichment.category,
-        is_noise=False,
+        is_noise=is_noise,
         is_read=False,
     )
     db.add(change)
@@ -435,6 +460,12 @@ def _queue_notifications(
     Returns ``(outbox_ids, webhook_ids)``.
     """
     enrichment = ctx.enrichment
+
+    # AI-triaged noise is recorded as a ChangeEvent (visible under the Noise
+    # filter) but must not generate notifications or outbound webhooks — this
+    # is what makes triage actually quiet the noise.
+    if change.is_noise:
+        return [], []
 
     channels = db.scalars(
         select(NotificationChannel).where(
