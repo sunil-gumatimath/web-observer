@@ -232,6 +232,24 @@ class SnapshotAccessOut(BaseModel):
     created_at: datetime
 
 
+class ScreenshotItemOut(BaseModel):
+    """A single visual screenshot capture in a monitor's history."""
+
+    snapshot_id: uuid.UUID
+    run_id: uuid.UUID | None = None
+    captured_at: datetime
+    run_status: str | None = None
+    http_status: int | None = None
+    latency_ms: int | None = None
+    content_type: str | None = None
+    byte_size: int | None = None
+    ahash: str | None = None
+    distance_from_previous: int | None = None
+    is_first: bool = False
+
+    model_config = {"from_attributes": True}
+
+
 class ManualRunOut(BaseModel):
     run_id: uuid.UUID
     status: str

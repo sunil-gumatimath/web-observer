@@ -10,6 +10,7 @@ from app.auth import (
     AuthPrincipal,
     get_current_principal,
     list_user_workspaces,
+    require_role,
     require_workspace_member,
 )
 from app.db import get_db
@@ -89,11 +90,12 @@ def update_workspace(
     workspace_id: UUID,
     body: WorkspaceUpdate,
     db: Db,
-    workspace: Workspace = Depends(require_workspace_member),
+    workspace: Workspace = Depends(require_role("admin")),
 ) -> Workspace:
-    data = body.model_dump(exclude_unset=True)
-    for key, value in data.items():
-        setattr(workspace, key, value)
+    allowed = {"name", "digest_cadence", "digest_hour_utc", "ai_summaries_enabled"}
+    for key, value in body.model_dump(exclude_unset=True).items():
+        if key in allowed:
+            setattr(workspace, key, value)
     db.commit()
     db.refresh(workspace)
     return workspace

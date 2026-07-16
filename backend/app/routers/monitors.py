@@ -5,15 +5,16 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import Response
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
-
-from app.rate_limit import limiter
 
 from app.auth import (
     AuthPrincipal,
     get_current_principal,
+    require_role,
     require_workspace_member,
 )
 from app.db import get_db
@@ -27,6 +28,7 @@ from app.models import (
     Workspace,
 )
 from app.models.entities import RunStatus
+from app.rate_limit import limiter
 from app.schemas import (
     AlertInboxItem,
     AlertsSummary,
@@ -39,12 +41,14 @@ from app.schemas import (
     MonitorUpdate,
     NoiseFeedbackIn,
     ReadStateIn,
+    ScreenshotItemOut,
     SnapshotAccessOut,
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.diffing import unified_diff
-from app.services.storage import StorageError, delete_object, presigned_get_url, get_bytes
+from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
+from app.services.visual import hamming_distance_hex
 from app.workers.enqueue import enqueue_check
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
@@ -60,6 +64,22 @@ def _get_monitor(db: Session, workspace_id: UUID, monitor_id: UUID) -> Monitor:
     if monitor is None:
         raise HTTPException(status_code=404, detail="Monitor not found")
     return monitor
+
+
+def _parse_ahash(text: str | None) -> str | None:
+    """Extract the perceptual aHash from a visual snapshot's normalized text.
+
+    Visual snapshots store ``ahash:<hex>\nsha256:<hex>\nsize:WxH`` in
+    ``normalized_text`` (it is short, so it survives the 500-char DB preview
+    truncation).
+    """
+    if not text:
+        return None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("ahash:"):
+            return line.split(":", 1)[1].strip()
+    return None
 
 
 @router.get(
@@ -102,7 +122,7 @@ def create_monitor(
     workspace_id: UUID,
     body: MonitorCreate,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> Monitor:
     workspace = db.get(Workspace, workspace_id)
     assert workspace is not None
@@ -128,7 +148,9 @@ def create_monitor(
     try:
         validate_url_for_fetch(body.url, resolve_dns=True)
     except SSRFError as exc:
-        raise HTTPException(status_code=400, detail={"error_code": exc.code, "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+        ) from exc
 
     now = datetime.now(UTC)
     # Visual mode always needs a browser; JSON can stay on HTTP unless marked js_required
@@ -195,7 +217,7 @@ def update_monitor(
     monitor_id: UUID,
     body: MonitorUpdate,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
     data = body.model_dump(exclude_unset=True)
@@ -247,7 +269,7 @@ def delete_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> None:
     """Delete a monitor and dependent rows.
 
@@ -313,7 +335,7 @@ def pause_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
     monitor.enabled = False
@@ -330,7 +352,7 @@ def resume_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
     monitor.enabled = True
@@ -351,7 +373,7 @@ def manual_run(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> ManualRunOut:
     monitor = _get_monitor(db, workspace_id, monitor_id)
 
@@ -744,6 +766,111 @@ def get_snapshot(
         normalized_text=full_text,
         raw_download_url=raw_url,
         created_at=snap.created_at,
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/monitors/{monitor_id}/screenshots",
+    response_model=list[ScreenshotItemOut],
+)
+def list_screenshots(
+    workspace_id: UUID,
+    monitor_id: UUID,
+    db: Db,
+    limit: int = Query(default=60, ge=1, le=200),
+    _workspace: Workspace = Depends(require_workspace_member),
+) -> list[ScreenshotItemOut]:
+    """Visual screenshot history for a monitor (most recent first).
+
+    Only image snapshots are returned (visual monitors capture PNGs); text/
+    HTML snapshots from other modes are excluded. Each item includes the
+    perceptual-hash distance from the previous capture so the UI can
+    highlight visual changes.
+    """
+    _get_monitor(db, workspace_id, monitor_id)
+
+    rows = db.execute(
+        select(Snapshot, MonitorRun)
+        .outerjoin(MonitorRun, MonitorRun.id == Snapshot.run_id)
+        .where(
+            Snapshot.monitor_id == monitor_id,
+            Snapshot.workspace_id == workspace_id,
+            Snapshot.content_type.ilike("image/%"),
+        )
+        .order_by(Snapshot.created_at.desc())
+        .limit(limit)
+    ).all()
+
+    # Compute perceptual distance vs the previous capture (chronological order).
+    ascending = list(reversed(rows))  # oldest -> newest
+    prev_ahash: str | None = None
+    items: list[ScreenshotItemOut] = []
+    for idx, (snap, run) in enumerate(ascending):
+        ahash = _parse_ahash(snap.normalized_text)
+        distance: int | None = None
+        if ahash and prev_ahash:
+            distance = hamming_distance_hex(ahash, prev_ahash)
+        prev_ahash = ahash or prev_ahash
+        items.append(
+            ScreenshotItemOut(
+                snapshot_id=snap.id,
+                run_id=snap.run_id,
+                captured_at=snap.created_at,
+                run_status=run.status if run else None,
+                http_status=run.http_status if run else None,
+                latency_ms=run.latency_ms if run else None,
+                content_type=snap.content_type,
+                byte_size=snap.byte_size,
+                ahash=ahash,
+                distance_from_previous=distance,
+                is_first=idx == 0,
+            )
+        )
+    items.reverse()
+    return items
+
+
+@router.get(
+    "/workspaces/{workspace_id}/snapshots/{snapshot_id}/image",
+    responses={200: {"content": {"image/png": {}}}},
+)
+def get_snapshot_image(
+    workspace_id: UUID,
+    snapshot_id: UUID,
+    db: Db,
+    _workspace: Workspace = Depends(require_workspace_member),
+) -> Response:
+    """Serve raw screenshot bytes for a snapshot (visual PNGs).
+
+    Reads the stored object via the existing storage layer (local disk or
+    S3). Missing or expired objects return 410 so the UI can show a graceful
+    fallback instead of a broken image.
+    """
+    snap = db.scalar(
+        select(Snapshot).where(
+            Snapshot.id == snapshot_id, Snapshot.workspace_id == workspace_id
+        )
+    )
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+
+    key = snap.raw_object_key
+    if not key:
+        raise HTTPException(status_code=410, detail="Screenshot not available for this snapshot")
+
+    try:
+        data = get_bytes(key)
+    except StorageError:
+        data = None
+
+    if data is None:
+        raise HTTPException(status_code=410, detail="Screenshot is missing or expired")
+
+    media_type = snap.content_type or "image/png"
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=300"},
     )
 
 
