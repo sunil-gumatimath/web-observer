@@ -29,10 +29,40 @@ def _storage_uri() -> str | None:
     return uri or None
 
 
-# Default: 60 requests/minute per IP for decorated endpoints that rely on defaults.
+def _key_func(request: Request) -> str:
+    """Rate-limit key: authenticated principal when available, else IP.
+
+    Reads the Authorization/Bearer header directly to avoid an import cycle
+    with app.auth (which imports this module transitively via routers). The
+    JWT `sub` claim is decoded without signature verification — acceptable
+    here since the limit is best-effort and not a security boundary.
+    """
+    auth = request.headers.get("authorization")
+    if auth and auth.lower().startswith("bearer "):
+        tok = auth.split(" ", 1)[1].strip()
+        if tok.startswith("mtw_"):
+            return f"apikey:{tok[:24]}"
+        # Clerk JWT: take sub claim without verifying (cheap, best-effort)
+        try:
+            import base64
+            import json
+
+            part = tok.split(".")[1]
+            part += "=" * (-len(part) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(part))
+            sub = payload.get("sub")
+            if sub:
+                return f"user:{sub}"
+        except Exception:
+            pass
+    return f"ip:{get_remote_address(request)}"
+
+
+# Default: 60 requests/minute per authenticated principal (or per IP when
+# unauthenticated) for decorated endpoints that rely on defaults.
 # Individual endpoints can override with @limiter.limit("10/minute").
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=_key_func,
     default_limits=["60/minute"],
     storage_uri=_storage_uri(),
 )

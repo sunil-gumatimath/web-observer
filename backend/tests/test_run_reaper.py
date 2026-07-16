@@ -22,6 +22,13 @@ class _FakeScalars:
         return self._rows
 
 
+class _FakeMonitor:
+    def __init__(self, id):
+        self.id = id
+        self.consecutive_failures = 0
+        self.consecutive_unchanged = 0
+
+
 class _FakeDB:
     def __init__(self, rows):
         self._rows = rows
@@ -31,6 +38,11 @@ class _FakeDB:
     def scalars(self, stmt):
         # Filter in-process the same way the reaper SQL would for our fixtures
         return _FakeScalars(self._rows)
+
+    def get(self, model, pk):
+        # The reaper loads the owning Monitor to route a reaped run through
+        # failure accounting. Return a stub monitor keyed by the run's monitor_id.
+        return _FakeMonitor(pk)
 
     def commit(self):
         self.committed = True

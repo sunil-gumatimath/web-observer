@@ -15,8 +15,9 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models import MonitorRun
+from app.models import Monitor, MonitorRun
 from app.models.entities import RunStatus
+from app.services.failure_notify import record_run_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,23 @@ def reap_stuck_runs(db: Session) -> int:
             f"This usually means the worker crashed or was restarted mid-run."
         )
         run.finished_at = now
+
+        # Route through failure accounting so consecutive_failures, the circuit
+        # breaker, and (at threshold) user failure notifications are not skipped
+        # for reaped runs.  We avoid reaping runs whose monitor is missing.
+        monitor = db.get(Monitor, run.monitor_id)
+        if monitor is not None:
+            outbox_ids = record_run_outcome(
+                db,
+                monitor=monitor,
+                succeeded=False,
+                error_code="timeout_reaped",
+                error_message=run.error_message,
+            )
+            for oid in outbox_ids:
+                from app.workers.notifications import deliver_outbox_message
+
+                deliver_outbox_message.send(str(oid))
 
     if stuck:
         db.commit()

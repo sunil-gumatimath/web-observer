@@ -79,7 +79,10 @@ def release_domain_slot(domain: str) -> None:
     key = f"conc:{domain}"
     try:
         val = r.decr(key)
-        if val is not None and int(val) <= 0:
+        # Clamp at 0: never let the concurrency counter persist as a negative
+        # value (an extra/erroneous release would otherwise poison the slot
+        # accounting for this domain).  Deleting the key resets it to 0.
+        if val is None or int(val) <= 0:
             r.delete(key)
     except redis.RedisError:
         pass

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import dramatiq
@@ -107,6 +107,53 @@ def deliver_outbox_message(outbox_id: str) -> None:
             db.commit()
             logger.exception("notification_failed outbox_id=%s", outbox_id)
             raise
+
+
+def reap_stuck_outbox_messages(db, *, older_than_seconds: int = 600) -> int:
+    """Re-enqueue outbox rows stuck in PROCESSING/PENDING after a worker death.
+
+    ``deliver_outbox_message`` sets status to PROCESSING and commits before
+    delivering; if the worker dies mid-delivery the row is stuck in PROCESSING
+    forever (it never re-enters the queue, and the error path only runs on an
+    actual exception).  This reaper finds such rows — or PENDING rows that were
+    never picked up — older than ``older_than_seconds`` and flips them back to
+    PENDING so they are re-delivered.  ``updated_at`` is used when present,
+    otherwise ``created_at``.
+
+    Returns the number of rows re-enqueued.
+    """
+    from sqlalchemy import select
+
+    cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
+    stuck = db.scalars(
+        select(NotificationOutbox).where(
+            NotificationOutbox.status.in_(
+                [OutboxStatus.PROCESSING.value, OutboxStatus.PENDING.value]
+            ),
+            NotificationOutbox.available_at <= cutoff,
+        )
+    ).all()
+
+    reaped = 0
+    for outbox in stuck:
+        stamp = outbox.updated_at or outbox.created_at or cutoff
+        if stamp > cutoff:
+            continue
+        outbox.status = OutboxStatus.PENDING.value
+        outbox.updated_at = datetime.now(UTC)
+        db.add(outbox)
+        db.flush()
+        deliver_outbox_message.send(str(outbox.id))
+        reaped += 1
+        logger.warning(
+            "reaped_stuck_outbox outbox_id=%s old_status=%s",
+            outbox.id,
+            outbox.status,
+        )
+
+    if reaped:
+        db.commit()
+    return reaped
 
 
 def _send_slack(webhook_url: str, title: str, body: str) -> str:

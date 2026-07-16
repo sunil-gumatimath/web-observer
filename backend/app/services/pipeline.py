@@ -17,9 +17,9 @@ from app.models import (
     NotificationChannel,
     NotificationOutbox,
     Snapshot,
+    Workspace,
 )
 from app.models.entities import OutboxStatus, RunStatus
-from app.models import Workspace
 from app.services.ai_summary import enrich_change
 from app.services.diffing import short_summary, unified_diff
 from app.services.extract import ExtractionError, content_hash, extract_text
@@ -465,7 +465,11 @@ def _queue_notifications(
                 "to": channel.address,
             },
             status=OutboxStatus.PENDING.value,
-            idempotency_key=f"change:{change.id}:channel:{channel.id}",
+            # Key on the run id (stable across Dramatiq retries of the same run)
+            # rather than only change.id (freshly generated each attempt), so a
+            # run that is ever processed twice cannot enqueue duplicate
+            # notifications for the same change on the same channel.
+            idempotency_key=f"run:{change.run_id}:change:channel:{channel.id}",
         )
         db.add(outbox)
         db.flush()

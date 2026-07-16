@@ -92,7 +92,18 @@ def execute_monitored_run(
         if run is None:
             logger.warning("run_not_found run_id=%s", run_id)
             return
-        if run.status in (RunStatus.SUCCEEDED.value, RunStatus.CANCELLED.value):
+        # Idempotency guard: a run that has already reached a terminal status
+        # must NOT be re-processed.  Dramatiq re-delivers the same run_id when an
+        # actor re-raises (read/connection timeout re-raise, or unexpected
+        # exception after the run was set to FAILED inside fail_run).  Re-running
+        # would duplicate snapshots/change events, re-send notifications, and
+        # double-count usage.  A genuine user-triggered re-run always creates a
+        # NEW run_id (via manual_run), so this guard is safe.
+        if run.status in (
+            RunStatus.SUCCEEDED.value,
+            RunStatus.CANCELLED.value,
+            RunStatus.FAILED.value,
+        ):
             logger.info("run_already_terminal run_id=%s status=%s", run_id, run.status)
             return
 
@@ -113,9 +124,11 @@ def execute_monitored_run(
         run.started_at = datetime.now(UTC)
         db.commit()
 
+        slot_acquired = False
         try:
             domain = assert_domain_allowed(monitor.url)
             acquire_domain_slot(domain)
+            slot_acquired = True
 
             result = fetch_fn(monitor, db)
 
@@ -194,5 +207,9 @@ def execute_monitored_run(
             fail_run(db, run, "internal_error", str(exc)[:2000])
             raise
         finally:
-            if domain:
+            # Only release a slot we actually acquired.  If assert_domain_allowed
+            # or acquire_domain_slot raised (e.g. DomainBlocked), slot_acquired
+            # stays False and we must NOT decrement the counter — otherwise the
+            # per-domain concurrency counter leaks negative.
+            if slot_acquired and domain:
                 release_domain_slot(domain)

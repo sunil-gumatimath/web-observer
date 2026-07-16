@@ -36,8 +36,13 @@ def record_run_outcome(
 
     monitor.consecutive_failures = int(monitor.consecutive_failures or 0) + 1
     threshold = settings.consecutive_failure_notify_threshold
-    if monitor.consecutive_failures != threshold:
-        # Only notify once when crossing the threshold
+    if monitor.consecutive_failures < threshold:
+        # Not yet at the threshold.  Use >= (not exact ==) so a count that jumps
+        # past the threshold — e.g. when the reaper marks several stuck runs
+        # failed — still fires instead of being silently skipped.  Since
+        # record_run_outcome is called exactly once per failed run, the count
+        # increments by one per call and the per-count idempotency_key below
+        # prevents duplicate notifications for any given count.
         return outbox_ids
 
     channels = db.scalars(
