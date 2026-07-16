@@ -144,6 +144,20 @@ export type SnapshotAccess = {
   created_at: string;
 };
 
+export type ScreenshotItem = {
+  snapshot_id: string;
+  run_id: string | null;
+  captured_at: string;
+  run_status: string | null;
+  http_status: number | null;
+  latency_ms: number | null;
+  content_type: string | null;
+  byte_size: number | null;
+  ahash: string | null;
+  distance_from_previous: number | null;
+  is_first: boolean;
+};
+
 export type BulkImportResponse = {
   created: Array<{ id: string; name: string; url: string }>;
   skipped: Array<{ url: string; reason: string }>;

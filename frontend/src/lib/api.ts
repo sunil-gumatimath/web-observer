@@ -14,6 +14,7 @@ import type {
   NotificationChannel,
   SeedResponse,
   SnapshotAccess,
+  ScreenshotItem,
   Usage,
   WebhookOut,
 } from "@/lib/types";
@@ -191,11 +192,55 @@ export const api = {
       { method: "POST" },
     ),
 
+  getRun: (workspaceId: string, runId: string) =>
+    request<MonitorRun>(`/api/v1/workspaces/${workspaceId}/runs/${runId}`),
+
   listRuns: (workspaceId: string, monitorId: string) =>
     request<MonitorRun[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/runs`),
 
   getSnapshot: (workspaceId: string, snapshotId: string) =>
     request<SnapshotAccess>(`/api/v1/workspaces/${workspaceId}/snapshots/${snapshotId}`),
+
+  listScreenshots: (workspaceId: string, monitorId: string, opts?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return request<ScreenshotItem[]>(
+      `/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/screenshots${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  fetchScreenshotImage: async (workspaceId: string, snapshotId: string): Promise<Blob> => {
+    const headers = await authHeaders();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(
+        `${config.apiBaseUrl}/api/v1/workspaces/${workspaceId}/snapshots/${snapshotId}/image`,
+        { signal: controller.signal, headers, cache: "no-store" },
+      );
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new ApiError(0, "Screenshot request timed out", { detail: "timeout" });
+      }
+      throw new ApiError(
+        0,
+        err instanceof Error ? err.message : "Network error loading screenshot",
+        { detail: "network_error" },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      const message =
+        res.status === 410
+          ? "Screenshot missing or expired"
+          : `Failed to load screenshot (${res.status})`;
+      throw new ApiError(res.status, message, null);
+    }
+    return res.blob();
+  },
 
   listChanges: (workspaceId: string, monitorId: string) =>
     request<ChangeEvent[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/changes`),
