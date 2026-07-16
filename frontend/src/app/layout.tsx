@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { ThemeProvider } from "@/components/theme-provider";
+import { config } from "@/lib/config";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,18 +32,24 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
-        <ClerkProvider
-          signInUrl="/sign-in"
-          signUpUrl="/sign-up"
-          signInFallbackRedirectUrl="/dashboard"
-          signUpFallbackRedirectUrl="/dashboard"
-          afterSignOutUrl="/"
-          appearance={{ variables: { colorPrimary: "#0ea5e9" } }}
-        >
+        {config.clerkEnabled ? (
+          <ClerkProvider
+            signInUrl="/sign-in"
+            signUpUrl="/sign-up"
+            signInFallbackRedirectUrl="/dashboard"
+            signUpFallbackRedirectUrl="/dashboard"
+            afterSignOutUrl="/"
+            appearance={{ variables: { colorPrimary: "#0ea5e9" } }}
+          >
+            <ThemeProvider>
+              <Providers>{children}</Providers>
+            </ThemeProvider>
+          </ClerkProvider>
+        ) : (
           <ThemeProvider>
             <Providers>{children}</Providers>
           </ThemeProvider>
-        </ClerkProvider>
+        )}
       </body>
     </html>
   );

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { config } from "@/lib/config";
 
 const nav = [
   { href: "/dashboard", label: "Overview", match: (p: string) => p === "/dashboard" },
@@ -36,6 +37,22 @@ function Logo({ compact = false }: { compact?: boolean }) {
 }
 
 function ClerkAuthControls() {
+  if (!config.clerkEnabled) {
+    // Dev mode: no Clerk session. The app authenticates via the backend
+    // X-Internal-Token; show a static dev indicator instead of auth buttons.
+    return (
+      <span
+        title="Dev mode — internal token auth"
+        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 dark:border-white/10 dark:text-slate-300"
+      >
+        Dev
+      </span>
+    );
+  }
+  return <ClerkUserControls />;
+}
+
+function ClerkUserControls() {
   const { isSignedIn, isLoaded } = useAuth();
   if (!isLoaded) {
     return <span className="h-8 w-8 animate-pulse-soft rounded-full bg-slate-200 dark:bg-slate-800" />;

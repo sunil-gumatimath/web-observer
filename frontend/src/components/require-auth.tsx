@@ -11,19 +11,22 @@ import { config } from "@/lib/config";
  * user is signed out. Data loaders only mount after a session is ready.
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
+  // Dev mode without Clerk: pages use X-Internal-Token, no session gate.
+  if (!config.clerkEnabled) {
+    return <>{children}</>;
+  }
+  return <ClerkRequireAuth>{children}</ClerkRequireAuth>;
+}
+
+function ClerkRequireAuth({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const [waitedTooLong, setWaitedTooLong] = useState(false);
 
   useEffect(() => {
-    if (!config.clerkEnabled || isLoaded) return;
+    if (isLoaded) return;
     const t = setTimeout(() => setWaitedTooLong(true), 12_000);
     return () => clearTimeout(t);
   }, [isLoaded]);
-
-  // Dev mode without Clerk: pages use X-Internal-Token
-  if (!config.clerkEnabled) {
-    return <>{children}</>;
-  }
 
   if (!isLoaded) {
     if (waitedTooLong) {
