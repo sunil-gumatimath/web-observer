@@ -125,11 +125,14 @@ def delete_object(key: str) -> None:
 
 def presigned_get_url(key: str, *, expires_in: int = 3600) -> str:
     if _use_local():
-        # Local files are served via API snapshot endpoint (normalized text);
-        # return a file:// style path is not useful in browser — return empty marker
-        # or a relative local path note.
-        path = (_local_root() / key).resolve()
-        return f"file://{path}"
+        # Local-storage mode serves raw objects via the API snapshot endpoint
+        # (normalized text), not via browser-usable URLs. Raising here lets
+        # callers fall back to that endpoint instead of emitting a broken
+        # file:// URI.
+        raise StorageError(
+            "local_not_supported",
+            "Local storage serves objects via the API snapshot endpoint, not presigned URLs",
+        )
 
     from botocore.exceptions import BotoCoreError, ClientError
 

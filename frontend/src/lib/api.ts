@@ -354,11 +354,17 @@ export const api = {
 
   // Enterprise (Phase 6–7) — all go through the same authHeaders() so
   // Clerk JWT (or dev internal token) is attached consistently.
-  bulkImportMonitors: (workspaceId: string, csvText: string) =>
-    request<BulkImportResponse>(
-      `/api/v1/workspaces/${workspaceId}/monitors/import`,
-      { method: "POST", body: JSON.stringify({ csv_text: csvText }) },
-    ),
+  bulkImportMonitors: (
+    workspaceId: string,
+    opts: { csvText?: string; jsonItems?: MonitorCreateInput[] },
+  ) =>
+    request<BulkImportResponse>(`/api/v1/workspaces/${workspaceId}/monitors/import`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...(opts.csvText !== undefined ? { csv_text: opts.csvText } : {}),
+        ...(opts.jsonItems !== undefined ? { items: opts.jsonItems } : {}),
+      }),
+    }),
 
   createApiKey: (workspaceId: string, name: string) =>
     request<ApiKeyCreated>(`/api/v1/workspaces/${workspaceId}/api-keys`, {

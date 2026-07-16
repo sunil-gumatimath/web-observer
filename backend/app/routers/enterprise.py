@@ -119,8 +119,8 @@ def create_checkout(
         resource_id=str(workspace_id),
         meta={"plan": body.plan},
     )
-    # Stub: no Stripe key → simulated upgrade for local/dev only
     if not getattr(settings, "stripe_secret_key", None):
+        # Simulated upgrade for local/dev only (solo users skip real billing).
         if not settings.is_development:
             raise HTTPException(status_code=501, detail="Stripe is not configured")
         workspace.plan = body.plan
@@ -131,12 +131,12 @@ def create_checkout(
             "message": f"Plan set to {body.plan} (no STRIPE_SECRET_KEY configured)",
             "checkout_url": body.success_url,
         }
-    # Placeholder for real Stripe Session creation
-    return {
-        "mode": "stripe",
-        "checkout_url": body.success_url,
-        "message": "Configure Stripe session creation with STRIPE_SECRET_KEY",
-    }
+    # Stripe key is present but checkout is not implemented — be honest instead
+    # of returning a misleading success-shaped placeholder.
+    raise HTTPException(
+        status_code=501,
+        detail="Stripe checkout not implemented — billing is not wired up yet",
+    )
 
 
 @router.post("/workspaces/{workspace_id}/monitors/import")
@@ -240,10 +240,6 @@ def list_api_keys(
     db: Db,
     workspace: Workspace = Depends(require_role("admin")),
 ) -> list[ApiKey]:
-    plan = get_plan(workspace)
-    if not plan.api_keys and workspace.plan != "enterprise":
-        # still allow list empty for free; create blocked
-        pass
     return list(
         db.scalars(
             select(ApiKey)

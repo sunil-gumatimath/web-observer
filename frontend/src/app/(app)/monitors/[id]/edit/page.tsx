@@ -39,6 +39,7 @@ export default function EditMonitorPage() {
   const [jsRequired, setJsRequired] = useState(false);
   const [watchNote, setWatchNote] = useState("");
   const [ignoreSelectors, setIgnoreSelectors] = useState("");
+  const [ignoreRegexes, setIgnoreRegexes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,6 +63,7 @@ export default function EditMonitorPage() {
         setJsRequired(Boolean(m.js_required));
         setWatchNote(m.watch_note ?? "");
         setIgnoreSelectors((m.ignore_selectors ?? []).join("\n"));
+        setIgnoreRegexes((m.ignore_regexes ?? []).join("\n"));
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load monitor");
       } finally {
@@ -83,6 +85,10 @@ export default function EditMonitorPage() {
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean);
+      const ignoreRegex = ignoreRegexes
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       await api.updateMonitor(workspaceId, monitorId, {
         name,
         url,
@@ -94,6 +100,7 @@ export default function EditMonitorPage() {
         js_required: jsRequired || mode === "visual",
         watch_note: watchNote.trim() || null,
         ignore_selectors: ignore,
+        ignore_regexes: ignoreRegex,
       });
       router.push(`/monitors/${monitorId}`);
     } catch (err) {
@@ -190,7 +197,8 @@ export default function EditMonitorPage() {
             />
           </div>
           {mode === "whole_page" || mode === "css_selector" ? (
-            <div>
+            <>
+              <div>
               <Label htmlFor="ignore">Ignore CSS selectors (one per line)</Label>
               <Textarea
                 id="ignore"
@@ -199,6 +207,16 @@ export default function EditMonitorPage() {
                 onChange={(e) => setIgnoreSelectors(e.target.value)}
               />
             </div>
+            <div className="mt-3">
+              <Label htmlFor="ignoreRegex">Ignore text by regex (one per line)</Label>
+              <Textarea
+                id="ignoreRegex"
+                rows={3}
+                value={ignoreRegexes}
+                onChange={(e) => setIgnoreRegexes(e.target.value)}
+              />
+            </div>
+            </>
           ) : null}
           <div className="flex gap-2 border-t border-[var(--border)] pt-5">
             <Button type="submit" disabled={saving}>

@@ -48,6 +48,7 @@ export default function NewMonitorPage() {
   const [jsRequired, setJsRequired] = useState(false);
   const [watchNote, setWatchNote] = useState("");
   const [ignoreSelectors, setIgnoreSelectors] = useState("");
+  const [ignoreRegexes, setIgnoreRegexes] = useState("");
   const [runNow, setRunNow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -68,6 +69,10 @@ export default function NewMonitorPage() {
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean);
+      const ignoreRegex = ignoreRegexes
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const monitor = await api.createMonitor(ws, {
         name,
         url,
@@ -81,6 +86,7 @@ export default function NewMonitorPage() {
         js_required: jsRequired || mode === "visual",
         watch_note: watchNote.trim() || null,
         ignore_selectors: ignore.length ? ignore : null,
+        ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
       });
 
       // Kick off first check so the detail page can show a live result.
@@ -213,7 +219,8 @@ export default function NewMonitorPage() {
             </p>
           </div>
           {mode === "whole_page" || mode === "css_selector" ? (
-            <div>
+            <>
+              <div>
               <Label htmlFor="ignore">Ignore CSS selectors (one per line, optional)</Label>
               <div className="mb-2 flex flex-wrap gap-2">
                 {Object.entries(IGNORE_PRESETS).map(([key, sels]) => (
@@ -244,6 +251,20 @@ export default function NewMonitorPage() {
                 placeholder={".cookie-banner\n#ads"}
               />
             </div>
+            <div className="mt-3">
+              <Label htmlFor="ignoreRegex">Ignore text by regex (one per line, optional)</Label>
+              <Textarea
+                id="ignoreRegex"
+                rows={3}
+                value={ignoreRegexes}
+                onChange={(e) => setIgnoreRegexes(e.target.value)}
+                placeholder={"Price updated .* ago\nLast (login|visited): .*"}
+              />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                Matched text is stripped before diffing — useful for timestamps or volatile counters.
+              </p>
+            </div>
+            </>
           ) : null}
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
             <input

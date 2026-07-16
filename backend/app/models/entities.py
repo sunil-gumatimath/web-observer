@@ -126,7 +126,6 @@ class Monitor(Base):
     config_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     max_response_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=2_000_000)
-    confirmation_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     js_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     watch_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     ignore_selectors: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)

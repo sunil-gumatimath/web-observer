@@ -13,15 +13,36 @@ import {
 import { api } from "@/lib/api";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
+import type { MonitorCreateInput } from "@/lib/types";
+
+const CSV_DEFAULT =
+  "name,url,mode,schedule_interval_minutes\nExample,https://example.com/,whole_page,60\n";
+
+const JSON_DEFAULT: MonitorCreateInput[] = [
+  {
+    name: "Example",
+    url: "https://example.com/",
+    mode: "whole_page",
+    schedule_interval_minutes: 60,
+  },
+];
+
+const JSON_EXAMPLE = JSON.stringify(JSON_DEFAULT, null, 2);
 
 export default function ImportPage() {
   usePageTitle("Bulk import");
-  const [csvText, setCsvText] = useState(
-    "name,url,mode,schedule_interval_minutes\nExample,https://example.com/,whole_page,60\n",
-  );
+  const [mode, setMode] = useState<"csv" | "json">("csv");
+  const [csvText, setCsvText] = useState(CSV_DEFAULT);
+  const [jsonText, setJsonText] = useState(JSON_EXAMPLE);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  function switchMode(next: "csv" | "json") {
+    setMode(next);
+    setError(null);
+    setResult(null);
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -30,10 +51,27 @@ export default function ImportPage() {
     setResult(null);
     try {
       const ws = await ensureWorkspace();
-      const body = await api.bulkImportMonitors(ws, csvText);
+      let res;
+      if (mode === "csv") {
+        res = await api.bulkImportMonitors(ws, { csvText });
+      } else {
+        let items: MonitorCreateInput[];
+        try {
+          const parsed = JSON.parse(jsonText);
+          items = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          throw new Error("Invalid JSON: expected an array of monitor objects.");
+        }
+        if (items.length === 0) throw new Error("No items provided.");
+        res = await api.bulkImportMonitors(ws, { jsonItems: items });
+      }
+      const errors = res.errors ?? [];
       setResult(
-        `Created ${body.created_count}. Skipped ${body.skipped?.length ?? 0}. Errors ${body.errors?.length ?? 0}.`,
+        `Created ${res.created_count}. Skipped ${res.skipped?.length ?? 0}. Errors ${errors.length}.`,
       );
+      if (errors.length > 0) {
+        setError(errors.map((e) => `Row ${e.row}: ${e.error}`).join("\n"));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
     } finally {
@@ -45,21 +83,53 @@ export default function ImportPage() {
     <div>
       <PageHeader
         title="Bulk import"
-        description="Import monitors from CSV (name, url, mode, schedule_interval_minutes)."
+        description="Import monitors from CSV or JSON (name, url, mode, schedule_interval_minutes)."
       />
       {error ? <ErrorBox message={error} /> : null}
       {result ? <SuccessBox message={result} /> : null}
       <Card className="max-w-3xl">
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="csv">CSV</Label>
-            <Textarea
-              id="csv"
-              className="h-64 font-mono text-xs"
-              value={csvText}
-              onChange={(e) => setCsvText(e.target.value)}
-            />
+          <div className="inline-flex rounded-md border border-border p-0.5 text-sm">
+            <button
+              type="button"
+              onClick={() => switchMode("csv")}
+              className={`rounded px-3 py-1 ${
+                mode === "csv" ? "bg-secondary font-medium" : "text-muted-foreground"
+              }`}
+            >
+              CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("json")}
+              className={`rounded px-3 py-1 ${
+                mode === "json" ? "bg-secondary font-medium" : "text-muted-foreground"
+              }`}
+            >
+              JSON
+            </button>
           </div>
+          {mode === "csv" ? (
+            <div>
+              <Label htmlFor="csv">CSV</Label>
+              <Textarea
+                id="csv"
+                className="h-64 font-mono text-xs"
+                value={csvText}
+                onChange={(e) => setCsvText(e.target.value)}
+              />
+            </div>
+          ) : (
+            <div>
+              <Label htmlFor="json">JSON (array of monitor objects)</Label>
+              <Textarea
+                id="json"
+                className="h-64 font-mono text-xs"
+                value={jsonText}
+                onChange={(e) => setJsonText(e.target.value)}
+              />
+            </div>
+          )}
           <Button type="submit" disabled={busy}>
             {busy ? "Importing…" : "Import monitors"}
           </Button>
