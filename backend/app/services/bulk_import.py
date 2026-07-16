@@ -39,6 +39,8 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
             out.get("schedule_interval_minutes") or out.get("interval") or 60
         ),
         "js_required": str(out.get("js_required") or "false").lower() in ("1", "true", "yes"),
+        "ignore_selectors": out.get("ignore_selectors"),
+        "ignore_regexes": out.get("ignore_regexes"),
     }
 
 
@@ -119,6 +121,8 @@ def import_monitors(
             timeout_seconds=settings.default_timeout_seconds,
             max_response_bytes=settings.default_max_response_bytes,
             js_required=js_required,
+            ignore_selectors=row.get("ignore_selectors"),
+            ignore_regexes=row.get("ignore_regexes"),
             base_interval_minutes=row["schedule_interval_minutes"],
         )
         db.add(mon)

@@ -13,7 +13,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { api } from "@/lib/api";
-import type { MonitorMode } from "@/lib/types";
+import type { MonitorMode, SitemapDiscovery as SitemapDiscoveryResult, SitemapImportResult } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
@@ -39,6 +39,7 @@ function needsPath(mode: MonitorMode): boolean {
 export default function NewMonitorPage() {
   usePageTitle("New monitor");
   const router = useRouter();
+  const [createMode, setCreateMode] = useState<"single" | "sitemap">("single");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("https://example.com/");
   const [mode, setMode] = useState<MonitorMode>("whole_page");
@@ -113,8 +114,39 @@ export default function NewMonitorPage() {
       />
       {error ? <ErrorBox message={error} /> : null}
 
-      <Card className="max-w-xl">
-        <form onSubmit={onSubmit} className="space-y-5">
+      <div className="mb-5 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setCreateMode("single")}
+          className={
+            createMode === "single"
+              ? "rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white"
+              : "rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+          }
+        >
+          Single URL
+        </button>
+        <button
+          type="button"
+          onClick={() => setCreateMode("sitemap")}
+          className={
+            createMode === "sitemap"
+              ? "rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white"
+              : "rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+          }
+        >
+          From sitemap
+        </button>
+      </div>
+
+      {createMode === "sitemap" ? (
+        <SitemapDiscovery
+          onDone={() => router.push("/monitors")}
+          onCancel={() => setCreateMode("single")}
+        />
+      ) : (
+        <Card className="max-w-xl">
+          <form onSubmit={onSubmit} className="space-y-5">
           <div>
             <Label htmlFor="name">Name</Label>
             <Input
@@ -285,6 +317,231 @@ export default function NewMonitorPage() {
           </div>
         </form>
       </Card>
+      )}
     </div>
+  );
+}
+
+/**
+ * Sitemap-driven bulk monitor creation.
+ * 1. Enter a site URL → discover its sitemap URLs.
+ * 2. Select which pages to monitor (checklist).
+ * 3. Configure shared options, then create all selected monitors at once.
+ */
+function SitemapDiscovery({
+  onDone,
+  onCancel,
+}: {
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [siteUrl, setSiteUrl] = useState("https://example.com/");
+  const [discovery, setDiscovery] = useState<SitemapDiscoveryResult | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [mode, setMode] = useState<MonitorMode>("whole_page");
+  const [interval, setInterval] = useState(60);
+  const [jsRequired, setJsRequired] = useState(false);
+  const [ignoreSelectors, setIgnoreSelectors] = useState("");
+  const [ignoreRegexes, setIgnoreRegexes] = useState("");
+  const [discovering, setDiscovering] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SitemapImportResult | null>(null);
+
+  function toggleAll(next: boolean) {
+    if (!discovery) return;
+    setSelected(next ? new Set(discovery.urls) : new Set());
+  }
+
+  function toggleOne(url: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  }
+
+  async function onDiscover() {
+    setDiscovering(true);
+    setError(null);
+    setDiscovery(null);
+    setSelected(new Set());
+    try {
+      const ws = await ensureWorkspace();
+      const res = await api.discoverSitemap(ws, siteUrl);
+      setDiscovery(res);
+      setSelected(new Set(res.urls));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Sitemap discovery failed";
+      setError(msg);
+    } finally {
+      setDiscovering(false);
+    }
+  }
+
+  async function onCreate() {
+    if (!discovery || selected.size === 0) return;
+    setCreating(true);
+    setError(null);
+    setResult(null);
+    try {
+      const ws = await ensureWorkspace();
+      const ignore = ignoreSelectors.split("\n").map((s) => s.trim()).filter(Boolean);
+      const ignoreRegex = ignoreRegexes.split("\n").map((s) => s.trim()).filter(Boolean);
+      const res = await api.createMonitorsFromSitemap(ws, {
+        url: discovery.url,
+        urls: [...selected],
+        mode,
+        schedule_interval_minutes: interval,
+        js_required: jsRequired,
+        ignore_selectors: ignore.length ? ignore : null,
+        ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
+      });
+      setResult(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create monitors");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <Card className="max-w-2xl space-y-5">
+      {result ? (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            Created {result.created_count} monitor{result.created_count === 1 ? "" : "s"}.
+          </p>
+          {result.skipped.length ? (
+            <p className="text-xs text-slate-500 dark:text-slate-500">
+              {result.skipped.length} skipped (duplicate URLs already monitored).
+            </p>
+          ) : null}
+          {result.errors.length ? (
+            <p className="text-xs text-rose-600 dark:text-rose-400">
+              {result.errors.length} failed — see server logs.
+            </p>
+          ) : null}
+          <div className="flex gap-2 pt-2">
+            <Button type="button" onClick={onDone}>
+              View monitors
+            </Button>
+            <Button type="button" variant="ghost" onClick={onCancel}>
+              Back
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="site">Website URL</Label>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                id="site"
+                type="url"
+                required
+                value={siteUrl}
+                onChange={(e) => setSiteUrl(e.target.value)}
+                placeholder="https://example.com/"
+                className="flex-1"
+              />
+              <Button type="button" onClick={onDiscover} disabled={discovering}>
+                {discovering ? "Discovering…" : "Discover"}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-500">
+              Reads the site&apos;s sitemap.xml (or robots.txt) and lists the pages it contains.
+            </p>
+          </div>
+
+          {error ? <ErrorBox message={error} /> : null}
+
+          {discovery ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {discovery.count} page{discovery.count === 1 ? "" : "s"} found
+                </p>
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleAll(true)}>
+                    Select all
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleAll(false)}>
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <div className="max-h-72 space-y-1 overflow-y-auto rounded-xl border border-[var(--border)] p-2">
+                {discovery.urls.map((u) => (
+                  <label
+                    key={u}
+                    className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-100/60 dark:hover:bg-white/5"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(u)}
+                      onChange={() => toggleOne(u)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+                    />
+                    <span className="min-w-0 break-all text-slate-700 dark:text-slate-300">{u}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="sm-mode">Mode</Label>
+                  <Select
+                    id="sm-mode"
+                    value={mode}
+                    onChange={(e) => setMode(e.target.value as MonitorMode)}
+                  >
+                    <option value="whole_page">Whole page text</option>
+                    <option value="css_selector">CSS selector (HTML section)</option>
+                    <option value="json_field">JSON field</option>
+                    <option value="list_items">List items</option>
+                    <option value="visual">Visual (screenshot)</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="sm-interval">Check interval (minutes, min 15)</Label>
+                  <Input
+                    id="sm-interval"
+                    type="number"
+                    min={15}
+                    required
+                    value={interval}
+                    onChange={(e) => setInterval(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              {mode !== "visual" ? (
+                <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={jsRequired}
+                    onChange={(e) => setJsRequired(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+                  />
+                  JavaScript rendering required (Playwright)
+                </label>
+              ) : null}
+
+              <div className="flex gap-2 border-t border-[var(--border)] pt-5">
+                <Button type="button" onClick={onCreate} disabled={creating || selected.size === 0}>
+                  {creating
+                    ? "Creating…"
+                    : `Create ${selected.size || ""} monitor${selected.size === 1 ? "" : "s"}`}
+                </Button>
+                <Button type="button" variant="ghost" onClick={onCancel}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+    </Card>
   );
 }

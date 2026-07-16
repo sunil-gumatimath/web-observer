@@ -182,3 +182,27 @@ export type WebhookOut = {
   created_at: string;
   secret: string | null;
 };
+
+export type WebhookDelivery = {
+  id: string;
+  endpoint_id: string;
+  event_type: string;
+  status: "pending" | "processing" | "sent" | "failed";
+  response_code: number | null;
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+};
+
+export type SitemapDiscovery = {
+  url: string;
+  urls: string[];
+  count: number;
+};
+
+export type SitemapImportResult = {
+  created: string[];
+  skipped: Array<{ row: string; reason?: string; url?: string }>;
+  errors: Array<{ row: string; error: string }>;
+  created_count: number;
+};

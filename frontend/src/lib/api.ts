@@ -12,10 +12,13 @@ import type {
   MonitorRun,
   MonitorUpdateInput,
   NotificationChannel,
+  SitemapDiscovery,
+  SitemapImportResult,
   SeedResponse,
   SnapshotAccess,
   ScreenshotItem,
   Usage,
+  WebhookDelivery,
   WebhookOut,
 } from "@/lib/types";
 
@@ -164,6 +167,33 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  discoverSitemap: (workspaceId: string, url: string, maxUrls?: number) => {
+    const q = new URLSearchParams();
+    q.set("url", url);
+    if (maxUrls) q.set("max_urls", String(maxUrls));
+    return request<SitemapDiscovery>(
+      `/api/v1/workspaces/${workspaceId}/monitors/discover-sitemap?${q.toString()}`,
+      { method: "POST" },
+    );
+  },
+
+  createMonitorsFromSitemap: (
+    workspaceId: string,
+    body: {
+      url: string;
+      urls: string[];
+      mode?: string;
+      schedule_interval_minutes?: number;
+      js_required?: boolean;
+      ignore_selectors?: string[] | null;
+      ignore_regexes?: string[] | null;
+    },
+  ) =>
+    request<SitemapImportResult>(
+      `/api/v1/workspaces/${workspaceId}/monitors/from-sitemap`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 
   updateMonitor: (workspaceId: string, monitorId: string, body: MonitorUpdateInput) =>
     request<Monitor>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}`, {

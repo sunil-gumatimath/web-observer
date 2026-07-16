@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
@@ -46,9 +47,11 @@ from app.schemas import (
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.diffing import unified_diff
+from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_url
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
 from app.services.visual import hamming_distance_hex
+from app.services.bulk_import import import_monitors
 from app.workers.enqueue import enqueue_check
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
@@ -206,6 +209,89 @@ def create_monitor(
     db.commit()
     db.refresh(monitor)
     return monitor
+
+
+class SitemapDiscoverIn(BaseModel):
+    url: str
+    max_urls: int = Field(default=500, ge=1, le=2000)
+
+
+class SitemapCreateIn(BaseModel):
+    url: str
+    urls: list[str] = Field(min_length=1)
+    mode: str = "whole_page"
+    schedule_interval_minutes: int = Field(default=60, ge=1)
+    js_required: bool = False
+    ignore_selectors: list[str] | None = None
+    ignore_regexes: list[str] | None = None
+
+
+@router.post("/workspaces/{workspace_id}/monitors/discover-sitemap")
+def discover_sitemap(
+    workspace_id: UUID,
+    body: SitemapDiscoverIn,
+    db: Db,
+    _workspace: Workspace = Depends(require_role("member")),
+) -> dict:
+    """Locate and parse a site's sitemap, returning the discovered page URLs.
+
+    Read-only: does not create monitors. The client presents these for the
+    user to select before calling ``from-sitemap``.
+    """
+    try:
+        validate_url_for_fetch(body.url, resolve_dns=True)
+    except SSRFError as exc:
+        raise HTTPException(
+            status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+        ) from exc
+    try:
+        urls = discover_sitemap_urls(body.url, max_urls=body.max_urls)
+    except SitemapError as exc:
+        raise HTTPException(status_code=422, detail={"error_code": exc.code, "message": exc.message}) from exc
+    return {"url": body.url, "urls": urls, "count": len(urls)}
+
+
+@router.post("/workspaces/{workspace_id}/monitors/from-sitemap")
+def create_from_sitemap(
+    workspace_id: UUID,
+    body: SitemapCreateIn,
+    db: Db,
+    _workspace: Workspace = Depends(require_role("member")),
+) -> dict:
+    """Create monitors for a selected subset of sitemap-discovered URLs.
+
+    Reuses the bulk-import pipeline so dedupe, plan/quota limits, SSRF
+    validation, and scheduler enrollment all behave identically to CSV/JSON
+    import.
+    """
+    try:
+        validate_url_for_fetch(body.url, resolve_dns=True)
+    except SSRFError as exc:
+        raise HTTPException(
+            status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+        ) from exc
+
+    rows = [
+        {
+            "name": name_from_url(u),
+            "url": u,
+            "mode": body.mode,
+            "schedule_interval_minutes": body.schedule_interval_minutes,
+            "js_required": body.js_required,
+            "ignore_selectors": body.ignore_selectors,
+            "ignore_regexes": body.ignore_regexes,
+        }
+        for u in body.urls
+    ]
+
+    result = import_monitors(db, _workspace, rows)
+    db.commit()
+    return {
+        "created": result.created,
+        "skipped": result.skipped,
+        "errors": result.errors,
+        "created_count": len(result.created),
+    }
 
 
 @router.patch(
