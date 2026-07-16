@@ -93,14 +93,20 @@ export default function HomePage() {
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400" />
             Web change detection & high-signal alerts
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl md:text-6xl md:leading-[1.08] dark:text-white">
+          <h1
+            className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl md:text-6xl md:leading-[1.08] dark:text-white"
+            suppressHydrationWarning
+          >
             Know the moment{" "}
             <span className="bg-gradient-to-r from-sky-500 via-cyan-500 to-indigo-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-cyan-200 dark:to-indigo-300">
               pages you care about
             </span>{" "}
             change.
           </h1>
-          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg dark:text-slate-400">
+          <p
+            className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg dark:text-slate-400"
+            suppressHydrationWarning
+          >
             Track public URLs or precise sections, get email and webhook alerts, and review clear
             before-and-after diffs. Built for product teams, founders, and researchers.
           </p>
