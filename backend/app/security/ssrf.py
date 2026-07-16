@@ -11,6 +11,8 @@ import socket
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+import httpx
+
 
 class SSRFError(Exception):
     def __init__(self, code: str, message: str) -> None:
@@ -123,3 +125,50 @@ def validate_ip_address(ip_str: str) -> None:
         raise SSRFError("blocked_address", f"Invalid IP: {ip_str}") from exc
     if _is_blocked_ip(ip):
         raise SSRFError("blocked_address", f"IP address not allowed: {ip_str}")
+
+
+def resolve_and_validate(url: str, *, resolve_dns: bool = True) -> list[str]:
+    """Validate ``url`` and return the list of validated (non-blocked) IPs.
+
+    This reuses :func:`validate_url_for_fetch` so scheme/credential/hostname
+    checks and per-IP blocklist checks stay in one place. The returned IPs are
+    intended to be pinned at connect time to defeat DNS-rebinding / TOCTOU.
+    Raises :class:`SSRFError` on any block or resolution failure.
+    """
+    validated = validate_url_for_fetch(url, resolve_dns=resolve_dns)
+    if not validated.resolved_ips:
+        raise SSRFError("dns_error", f"No addresses resolved for {validated.hostname}")
+    return list(validated.resolved_ips)
+
+
+class PinnedIPTransport(httpx.HTTPTransport):
+    """httpx transport that connects to a pre-validated, pinned IP.
+
+    The TCP connection is made to ``pinned_ip`` (the URL host is rewritten to
+    the IP) while the original ``Host`` header and TLS SNI/cert-verification
+    hostname are preserved. This closes the DNS-rebinding window between SSRF
+    validation and the actual connect, because httpx never re-resolves the
+    hostname independently.
+    """
+
+    def __init__(self, *, pinned_ip: str, server_hostname: str, **kwargs) -> None:
+        self._pinned_ip = pinned_ip
+        self._server_hostname = server_hostname
+        super().__init__(**kwargs)
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        original = request.url
+        # Preserve the original Host header (with port when non-default).
+        if not any(k.lower() == b"host" for k, _ in request.headers.raw):
+            port = original.port
+            if port is not None and port not in (80, 443):
+                host_value = f"{original.host}:{port}"
+            else:
+                host_value = original.host
+            request.headers["Host"] = host_value
+        # Preserve correct TLS SNI / certificate verification hostname.
+        request.extensions = dict(request.extensions)
+        request.extensions.setdefault("sni_hostname", self._server_hostname)
+        # Pin the actual TCP target to the validated IP.
+        request.url = original.copy_with(host=self._pinned_ip)
+        return super().handle_request(request)

@@ -5,13 +5,13 @@ from __future__ import annotations
 import csv
 import io
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import AuthPrincipal, get_current_principal, require_role, require_workspace_member
@@ -28,6 +28,7 @@ from app.models import (
     Workspace,
     WorkspaceMember,
 )
+from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.api_keys import create_api_key, revoke_api_key
 from app.services.audit import write_audit
 from app.services.bulk_import import import_monitors, parse_csv
@@ -118,8 +119,10 @@ def create_checkout(
         resource_id=str(workspace_id),
         meta={"plan": body.plan},
     )
-    # Stub: no Stripe key → simulated upgrade for local/dev
+    # Stub: no Stripe key → simulated upgrade for local/dev only
     if not getattr(settings, "stripe_secret_key", None):
+        if not settings.is_development:
+            raise HTTPException(status_code=501, detail="Stripe is not configured")
         workspace.plan = body.plan
         workspace.plan_status = "active"
         db.commit()
@@ -341,6 +344,12 @@ def create_webhook(
         raise HTTPException(status_code=403, detail=f"Plan {plan.name} does not include webhooks")
     if not body.url.startswith("https://"):
         raise HTTPException(status_code=400, detail="Webhook URL must be https")
+    try:
+        validate_url_for_fetch(body.url, resolve_dns=True)
+    except SSRFError as exc:
+        raise HTTPException(
+            status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+        ) from exc
     secret = new_webhook_secret()
     row = WebhookEndpoint(workspace_id=workspace_id, url=body.url, secret=secret, enabled=True)
     db.add(row)
@@ -476,6 +485,17 @@ def update_member_role(
     )
     if membership is None:
         raise HTTPException(status_code=404, detail="Member not found")
+    if membership.role == "owner" and body.role != "owner":
+        owner_count = db.scalar(
+            select(func.count())
+            .select_from(WorkspaceMember)
+            .where(
+                WorkspaceMember.workspace_id == workspace_id,
+                WorkspaceMember.role == "owner",
+            )
+        ) or 0
+        if owner_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the last owner")
     membership.role = body.role
     write_audit(
         db,

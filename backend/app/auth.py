@@ -7,6 +7,7 @@ Modes:
 
 from __future__ import annotations
 
+import hmac
 import logging
 import time
 import uuid
@@ -167,7 +168,7 @@ def get_current_principal(
         return AuthPrincipal(user=user, is_internal=False, clerk_user_id=clerk_user_id, email=user.email)
 
     # Dev / smoke internal token
-    if x_internal_token and x_internal_token == settings.internal_api_token:
+    if hmac.compare_digest(x_internal_token or "", settings.internal_api_token):
         return AuthPrincipal(user=None, is_internal=True, email="internal@local", role_hint="owner")
 
     raise HTTPException(

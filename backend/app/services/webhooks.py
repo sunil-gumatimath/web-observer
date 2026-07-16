@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import WebhookDelivery, WebhookEndpoint
+from app.security.ssrf import SSRFError, validate_url_for_fetch
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ def new_webhook_secret() -> str:
 
 
 def sign_payload(secret: str, body: bytes, timestamp: str) -> str:
-    msg = f"{timestamp}.".encode("utf-8") + body
+    msg = f"{timestamp}.".encode() + body
     return hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
 
 
@@ -88,6 +89,17 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
     body = json.dumps(body_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
     ts = str(int(datetime.now(UTC).timestamp()))
     sig = sign_payload(endpoint.secret, body, ts)
+
+    # SSRF validation at delivery time: block private/internal targets before
+    # making the outbound request.
+    try:
+        validate_url_for_fetch(endpoint.url, resolve_dns=True)
+    except SSRFError as exc:
+        delivery.status = "failed"
+        delivery.last_error = f"blocked_address: {exc}"[:2000]
+        db.commit()
+        logger.warning("webhook_delivery_blocked id=%s url=%s error=%s", delivery_id, endpoint.url, exc)
+        return
 
     try:
         resp = httpx.post(

@@ -7,11 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.rate_limit import limiter
-
 from app.auth import (
     AuthPrincipal,
     get_current_principal,
+    require_role,
     require_workspace_member,
 )
 from app.db import get_db
@@ -19,11 +18,13 @@ from app.models import (
     NotificationChannel,
     Workspace,
 )
+from app.rate_limit import limiter
 from app.schemas import (
     NotificationChannelCreate,
     NotificationChannelOut,
     NotificationChannelUpdate,
 )
+from app.security.ssrf import SSRFError, validate_url_for_fetch
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
@@ -60,8 +61,18 @@ def create_notification_channel(
     workspace_id: UUID,
     body: NotificationChannelCreate,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> NotificationChannel:
+    if body.type in ("slack", "discord"):
+        address = str(body.address)
+        if address.startswith(("http://", "https://")):
+            try:
+                validate_url_for_fetch(address, resolve_dns=True)
+            except SSRFError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error_code": exc.code, "message": str(exc)},
+                ) from exc
     existing = db.scalar(
         select(NotificationChannel).where(
             NotificationChannel.workspace_id == workspace_id,
@@ -96,7 +107,7 @@ def update_notification_channel(
     channel_id: UUID,
     body: NotificationChannelUpdate,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> NotificationChannel:
     channel = db.scalar(
         select(NotificationChannel).where(
@@ -125,7 +136,7 @@ def delete_notification_channel(
     workspace_id: UUID,
     channel_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: Workspace = Depends(require_role("member")),
 ) -> None:
     channel = db.scalar(
         select(NotificationChannel).where(

@@ -10,7 +10,12 @@ from urllib.robotparser import RobotFileParser
 import httpx
 
 from app.config import get_settings
-from app.security.ssrf import SSRFError, validate_url_for_fetch
+from app.security.ssrf import (
+    PinnedIPTransport,
+    SSRFError,
+    resolve_and_validate,
+    validate_url_for_fetch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +62,24 @@ def _check_robots(url: str, user_agent: str, client: httpx.Client) -> None:
         logger.debug("robots_check_skipped url=%s error=%s", url, exc)
 
 
+def _pinned_client(url: str, *, timeout: httpx.Timeout, headers: dict[str, str]) -> httpx.Client:
+    """Build an httpx.Client that connects to a validated, pinned IP for ``url``.
+
+    Resolution + SSRF validation happen exactly once here, and the resulting IP
+    is pinned into the transport so httpx cannot re-resolve the hostname
+    (defeating DNS-rebinding / TOCTOU). Raises SSRFError on any block/failure.
+    """
+    ips = resolve_and_validate(url, resolve_dns=True)
+    hostname = urlparse(url).hostname or ""
+    transport = PinnedIPTransport(pinned_ip=ips[0], server_hostname=hostname)
+    return httpx.Client(
+        transport=transport,
+        timeout=timeout,
+        follow_redirects=False,
+        headers=headers,
+    )
+
+
 def fetch_url(
     url: str,
     *,
@@ -71,19 +94,31 @@ def fetch_url(
     timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, float(timeout_seconds)))
     headers = {"User-Agent": user_agent}
 
-    with httpx.Client(timeout=timeout, follow_redirects=False, headers=headers) as client:
-        if respect_robots:
-            _check_robots(current, user_agent, client)
+    if respect_robots:
+        # robots.txt is fetched from the (validated) target host via its own
+        # pinned client to avoid re-resolution.
+        try:
+            with _pinned_client(current, timeout=timeout, headers=headers) as robots_client:
+                _check_robots(current, user_agent, robots_client)
+        except SSRFError:
+            # If robots host is blocked somehow, skip robots (do not open SSRF).
+            pass
 
-        import time
+    import time
 
-        started = time.perf_counter()
-        redirects = 0
+    started = time.perf_counter()
+    redirects = 0
 
-        while True:
-            validate_url_for_fetch(current, resolve_dns=True)
+    while True:
+        # Resolve + validate + pin every hop (defeats DNS-rebinding / TOCTOU).
+        try:
+            client = _pinned_client(current, timeout=timeout, headers=headers)
+        except SSRFError as exc:
+            raise FetchError(exc.code, str(exc)) from exc
+
+        with client:
             try:
-                response = client.get(current)
+                response = client.get(current, follow_redirects=False)
             except httpx.TimeoutException as exc:
                 raise FetchError("read_timeout", str(exc)) from exc
             except httpx.ConnectError as exc:
@@ -92,27 +127,20 @@ def fetch_url(
                 raise FetchError("internal_error", str(exc)) from exc
 
             if response.is_redirect:
+                response.close()
                 redirects += 1
                 if redirects > MAX_REDIRECTS:
                     raise FetchError("redirect_limit", f"Exceeded {MAX_REDIRECTS} redirects")
                 location = response.headers.get("location")
                 if not location:
                     raise FetchError("invalid_url", "Redirect without Location header")
-                next_url = urljoin(str(response.url), location)
-                # Re-validate every hop (SSRF + DNS)
+                next_url = urljoin(current, location)
+                # Re-validate every hop (SSRF + DNS); pin happens next iteration.
                 try:
                     current = validate_url_for_fetch(next_url, resolve_dns=True).url
                 except SSRFError as exc:
                     raise FetchError(exc.code, str(exc)) from exc
                 continue
-
-            content = response.content
-            if len(content) > max_response_bytes:
-                raise FetchError(
-                    "response_too_large",
-                    f"Response size {len(content)} exceeds limit {max_response_bytes}",
-                    http_status=response.status_code,
-                )
 
             content_type = response.headers.get("content-type", "")
             # Allow common text/html and text/* for MVP
@@ -125,18 +153,45 @@ def fetch_url(
                     t in content_type.lower()
                     for t in ("image/", "video/", "audio/", "application/octet-stream", "pdf")
                 ):
+                    response.close()
                     raise FetchError(
                         "unsupported_content_type",
                         f"Unsupported content type: {content_type}",
                         http_status=response.status_code,
                     )
 
+            # Stream the body, enforcing the size limit BEFORE buffering it all.
+            chunks: list[bytes] = []
+            total = 0
+            try:
+                for chunk in response.iter_bytes():
+                    total += len(chunk)
+                    if total > max_response_bytes:
+                        response.close()
+                        raise FetchError(
+                            "response_too_large",
+                            f"Response size exceeds limit {max_response_bytes}",
+                            http_status=response.status_code,
+                        )
+                    chunks.append(chunk)
+            except httpx.TimeoutException as exc:
+                raise FetchError("read_timeout", str(exc)) from exc
+            except httpx.RequestError as exc:
+                raise FetchError("internal_error", str(exc)) from exc
+
+            content = b"".join(chunks)
+            encoding = response.encoding or "utf-8"
+            try:
+                text = content.decode(encoding, errors="replace")
+            except (LookupError, TypeError):
+                text = content.decode("utf-8", errors="replace")
+
             latency_ms = int((time.perf_counter() - started) * 1000)
             return FetchResult(
                 final_url=str(response.url),
                 status_code=response.status_code,
                 content=content,
-                text=response.text,
+                text=text,
                 content_type=content_type,
                 latency_ms=latency_ms,
             )

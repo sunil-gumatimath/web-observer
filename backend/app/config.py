@@ -82,4 +82,14 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if not settings.is_development:
+        if settings.internal_api_token == "dev-internal-token":
+            raise RuntimeError(
+                "INTERNAL_API_TOKEN must be set to a non-default value outside development"
+            )
+        if settings.secret_key == "change-me-in-production":
+            raise RuntimeError(
+                "SECRET_KEY must be set to a non-default value outside development"
+            )
+    return settings

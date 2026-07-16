@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -22,8 +23,10 @@ router = APIRouter(prefix="/api/v1", tags=["internal"])
 
 
 def require_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
-    if x_internal_token != settings.internal_api_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal token")
+    if not hmac.compare_digest(x_internal_token or "", settings.internal_api_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal token"
+        )
 
 
 @router.post("/internal/seed", response_model=SeedResponse, dependencies=[Depends(require_internal_token)])
