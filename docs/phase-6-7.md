@@ -44,4 +44,4 @@ See `docs/integrations/n8n-zapier.md`.
 
 ## Migration
 
-`alembic upgrade head` → **004**
+`alembic upgrade head` → **006**

@@ -27,6 +27,21 @@
 - Alert only if hamming distance **>** `VISUAL_AHASH_THRESHOLD` (default 5)  
 - PNG stored in object storage; metadata in `normalized_text`  
 
+### Screenshot gallery (UI)
+
+Visual monitors expose a **screenshot history** on the monitor detail page and a
+**side-by-side visual comparison** on each visual change event.
+
+- `GET /api/v1/workspaces/{id}/monitors/{id}/screenshots` — most-recent-first list of
+  image snapshots, each with its capture timestamp, run status, aHash, and the
+  perceptual-hash **distance from the previous capture** (`distance_from_previous`).
+  Non-image (text/HTML) snapshots are excluded.
+- `GET /api/v1/workspaces/{id}/snapshots/{id}/image` — streams the raw PNG bytes for a
+  snapshot (reuses the existing local/S3 storage layer). Missing or expired objects
+  return `410` so the UI can show a graceful fallback.
+- Thumbnails open in a lightbox with full metadata; previous/current screenshots on a
+  change event show timestamps, run status, and the visual distance.
+
 ## Config
 
 ```env
