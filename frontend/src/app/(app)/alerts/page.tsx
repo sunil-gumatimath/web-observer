@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
   Card,
   EmptyState,
   ErrorBox,
+  Input,
   PageHeader,
   Spinner,
 } from "@/components/ui";
@@ -26,6 +27,10 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertInboxItem[]>([]);
   const [summary, setSummary] = useState<AlertsSummary | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const [monitorFilter, setMonitorFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -63,6 +68,40 @@ export default function AlertsPage() {
       cancelled = true;
     };
   }, [filter, load]);
+
+  // Distinct monitors present in the inbox, for the monitor filter dropdown.
+  const monitorOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const a of alerts) seen.set(a.monitor_id, a.monitor_name);
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  }, [alerts]);
+
+  // Client-side search + filters applied on top of the fetched inbox.
+  const visibleAlerts = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const fromMs = dateFrom ? new Date(dateFrom).getTime() : null;
+    const toMs = dateTo ? new Date(dateTo).getTime() + 24 * 60 * 60 * 1000 - 1 : null;
+    return alerts.filter((a) => {
+      if (monitorFilter !== "all" && a.monitor_id !== monitorFilter) return false;
+      const ts = new Date(a.created_at).getTime();
+      if (fromMs != null && ts < fromMs) return false;
+      if (toMs != null && ts > toMs) return false;
+      if (q) {
+        const haystack = [
+          a.monitor_name,
+          a.monitor_url,
+          a.ai_summary,
+          a.diff_summary,
+          a.change_category,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [alerts, query, monitorFilter, dateFrom, dateTo]);
 
   async function markRead(alert: AlertInboxItem, isRead = true) {
     if (!workspaceId) return;
@@ -146,6 +185,59 @@ export default function AlertsPage() {
         ))}
       </div>
 
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <Input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search alerts…"
+          aria-label="Search alerts"
+          className="h-9 w-full max-w-xs"
+        />
+        <select
+          value={monitorFilter}
+          onChange={(e) => setMonitorFilter(e.target.value)}
+          aria-label="Filter by monitor"
+          className="field h-9 max-w-[14rem] flex-1"
+        >
+          <option value="all">All monitors</option>
+          {monitorOptions.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+        <Input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          aria-label="From date"
+          className="h-9 w-auto"
+        />
+        <Input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          aria-label="To date"
+          className="h-9 w-auto"
+        />
+        {(query || monitorFilter !== "all" || dateFrom || dateTo) && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setQuery("");
+              setMonitorFilter("all");
+              setDateFrom("");
+              setDateTo("");
+            }}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+
       {alerts.length === 0 ? (
         <EmptyState
           title="No alerts yet"
@@ -156,9 +248,14 @@ export default function AlertsPage() {
             </Link>
           }
         />
+      ) : visibleAlerts.length === 0 ? (
+        <EmptyState
+          title="No matching alerts"
+          body="No alerts match your current search or filters. Try clearing them."
+        />
       ) : (
         <div className="space-y-2">
-          {alerts.map((a) => (
+          {visibleAlerts.map((a) => (
             <Card
               key={a.id}
               className={
