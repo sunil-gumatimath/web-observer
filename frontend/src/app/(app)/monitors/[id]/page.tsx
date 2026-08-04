@@ -627,13 +627,17 @@ function MonitorDetailInner() {
             meta={lightboxIndex != null ? screenshotMeta(screenshots[lightboxIndex]) : []}
             onClose={() => setLightboxIndex(null)}
             onPrev={
+              lightboxIndex != null && lightboxIndex > 0
+                ? () => setLightboxIndex(lightboxIndex - 1)
+                : undefined
+            }
+            onNext={
               lightboxIndex != null && lightboxIndex < screenshots.length - 1
                 ? () => setLightboxIndex(lightboxIndex + 1)
                 : undefined
             }
-            onNext={lightboxIndex != null && lightboxIndex > 0 ? () => setLightboxIndex(lightboxIndex - 1) : undefined}
-            hasPrev={lightboxIndex != null && lightboxIndex < screenshots.length - 1}
-            hasNext={lightboxIndex != null && lightboxIndex > 0}
+            hasPrev={lightboxIndex != null && lightboxIndex > 0}
+            hasNext={lightboxIndex != null && lightboxIndex < screenshots.length - 1}
           />
         </section>
       ) : null}

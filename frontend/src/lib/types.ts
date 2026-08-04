@@ -77,6 +77,7 @@ export type ChangeEventDetail = ChangeEvent & {
   diff: string | null;
   previous_text: string | null;
   new_text: string | null;
+  mode: string | null;
 };
 
 export type Usage = {
@@ -140,7 +141,6 @@ export type SnapshotAccess = {
   content_type: string | null;
   byte_size: number | null;
   normalized_text: string;
-  raw_download_url: string | null;
   created_at: string;
 };
 

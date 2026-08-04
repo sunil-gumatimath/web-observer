@@ -199,6 +199,32 @@ pre.diff .del {
   color: #fda4af;
 }
 
+/* Word-level inline diff highlight marks (Before/After panels) */
+mark.hl-add {
+  background: rgba(16, 185, 129, 0.16);
+  color: #047857;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.dark mark.hl-add {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6ee7b7;
+}
+
+mark.hl-del {
+  background: rgba(244, 63, 94, 0.12);
+  color: #be123c;
+  text-decoration: line-through;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.dark mark.hl-del {
+  background: rgba(244, 63, 94, 0.18);
+  color: #fda4af;
+}
+
 @keyframes fade-in-up {
   from {
     opacity: 0;

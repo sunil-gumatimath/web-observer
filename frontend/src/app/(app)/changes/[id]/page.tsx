@@ -12,7 +12,7 @@ import {
   SectionTitle,
   Spinner,
 } from "@/components/ui";
-import { ReadableContent } from "@/components/readable-content";
+import { BeforeAfterDiff } from "@/components/before-after-diff";
 import { ScreenshotImage, ScreenshotLightbox, type ScreenshotMeta } from "@/components/screenshot";
 import { api } from "@/lib/api";
 import type { ChangeEventDetail, MonitorRun, SnapshotAccess } from "@/lib/types";
@@ -103,8 +103,8 @@ export default function ChangeDetailPage() {
   if (error && !change) return <ErrorBox message={error} />;
   if (!change) return <ErrorBox message="Change not found" />;
 
-  const visualMatch = /ahash distance=(\d+)/i.exec(change.diff_summary ?? "");
-  const isVisual = visualMatch !== null;
+  const isVisual = change.mode === "visual";
+  const visualMatch = isVisual ? /ahash distance=(\d+)/i.exec(change.diff_summary ?? "") : null;
   const visualDistance = visualMatch ? Number(visualMatch[1]) : null;
 
   return (
@@ -201,39 +201,54 @@ export default function ChangeDetailPage() {
       ) : null}
 
       {!isVisual && (change.previous_text || change.new_text) && (
-        <div className="mb-6 grid gap-4 lg:grid-cols-2">
-          <div>
-            <SectionTitle>Before</SectionTitle>
-            <ReadableContent
-              text={change.previous_text || ""}
-              maxChars={4000}
-              emptyLabel="No previous text."
-            />
-          </div>
-          <div>
-            <SectionTitle>After</SectionTitle>
-            <ReadableContent
-              text={change.new_text || ""}
-              maxChars={4000}
-              emptyLabel="No new text."
-            />
-          </div>
+        <div className="mb-6">
+          <SectionTitle>Before / After</SectionTitle>
+          <BeforeAfterDiff before={change.previous_text} after={change.new_text} />
         </div>
       )}
 
-      <SectionTitle>Line diff</SectionTitle>
-      <Card className="!p-0 overflow-hidden">
-        <div className="max-h-[min(70vh,32rem)] overflow-auto">
-          {change.diff ? (
-            <pre className="diff m-0 whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-6">
-              {change.diff}
-            </pre>
-          ) : (
-            <p className="p-4 text-sm text-slate-500">No diff available.</p>
-          )}
-        </div>
-      </Card>
+      {!isVisual && change.diff ? (
+        <>
+          <SectionTitle>Line diff</SectionTitle>
+          <Card className="!p-0 overflow-hidden">
+            <div className="max-h-[min(70vh,32rem)] overflow-auto">
+              <pre className="diff m-0 whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-6">
+                <DiffLines diff={change.diff} />
+              </pre>
+            </div>
+          </Card>
+        </>
+      ) : null}
     </div>
+  );
+}
+
+function DiffLines({ diff }: { diff: string }) {
+  return (
+    <>
+      {diff.split("\n").map((line, i) => {
+        const trimmed = line.trimStart();
+        if (trimmed.startsWith("+") && !trimmed.startsWith("+++")) {
+          return (
+            <span key={i} className="add block">
+              {line}
+            </span>
+          );
+        }
+        if (trimmed.startsWith("-") && !trimmed.startsWith("---")) {
+          return (
+            <span key={i} className="del block">
+              {line}
+            </span>
+          );
+        }
+        return (
+          <span key={i} className="block">
+            {line}
+          </span>
+        );
+      })}
+    </>
   );
 }
 
