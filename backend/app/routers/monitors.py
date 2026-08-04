@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -461,67 +463,87 @@ def manual_run(
     db: Db,
     _workspace: Workspace = Depends(require_role("member")),
 ) -> ManualRunOut:
-    monitor = _get_monitor(db, workspace_id, monitor_id)
+    def _do() -> ManualRunOut:
+        monitor = _get_monitor(db, workspace_id, monitor_id)
 
-    try:
-        assert_can_run_check(db, workspace_id)
-    except QuotaExceeded as exc:
-        raise HTTPException(status_code=429, detail=str(exc)) from exc
+        try:
+            assert_can_run_check(db, workspace_id)
+        except QuotaExceeded as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
 
-    now = datetime.now(UTC)
-    needs_browser = bool(monitor.js_required) or monitor.mode == "visual"
+        now = datetime.now(UTC)
+        needs_browser = bool(monitor.js_required) or monitor.mode == "visual"
 
-    active = db.scalar(
-        select(MonitorRun)
-        .where(
-            MonitorRun.monitor_id == monitor.id,
-            MonitorRun.status.in_(
-                [RunStatus.SCHEDULED.value, RunStatus.QUEUED.value, RunStatus.RUNNING.value]
-            ),
+        active = db.scalar(
+            select(MonitorRun)
+            .where(
+                MonitorRun.monitor_id == monitor.id,
+                MonitorRun.status.in_(
+                    [RunStatus.SCHEDULED.value, RunStatus.QUEUED.value, RunStatus.RUNNING.value]
+                ),
+            )
+            .order_by(MonitorRun.created_at.desc())
+            .limit(1)
         )
-        .order_by(MonitorRun.created_at.desc())
-        .limit(1)
-    )
-    if active is not None:
-        age_ref = active.started_at or active.queued_at or active.created_at or now
-        age = now - age_ref
-        # Lost queue message after worker restart: re-enqueue the same run.
-        if active.status == RunStatus.QUEUED.value and age >= timedelta(seconds=90):
-            enqueue_check(str(active.id), needs_browser=needs_browser)
-            return ManualRunOut(
-                run_id=active.id,
-                status=active.status,
-                message="Re-queued stuck run (worker may have been offline)",
-            )
-        # Stale running job: fail it so a new check can start.
-        if active.status == RunStatus.RUNNING.value and age >= timedelta(minutes=5):
-            active.status = RunStatus.FAILED.value
-            active.error_code = "timeout_reaped"
-            active.error_message = "Previous run stuck in RUNNING; reaped before manual retry."
-            active.finished_at = now
-            db.commit()
-        else:
-            raise HTTPException(
-                status_code=409,
-                detail="Monitor already has an active run. Wait a moment or retry shortly.",
-            )
+        if active is not None:
+            age_ref = active.started_at or active.queued_at or active.created_at or now
+            age = now - age_ref
+            # Lost queue message after worker restart: re-enqueue the same run.
+            if active.status == RunStatus.QUEUED.value and age >= timedelta(seconds=90):
+                enqueue_check(str(active.id), needs_browser=needs_browser)
+                return ManualRunOut(
+                    run_id=active.id,
+                    status=active.status,
+                    message="Re-queued stuck run (worker may have been offline)",
+                )
+            # Stale running job: fail it so a new check can start.
+            if active.status == RunStatus.RUNNING.value and age >= timedelta(minutes=5):
+                active.status = RunStatus.FAILED.value
+                active.error_code = "timeout_reaped"
+                active.error_message = "Previous run stuck in RUNNING; reaped before manual retry."
+                active.finished_at = now
+                db.commit()
+            else:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Monitor already has an active run. Wait a moment or retry shortly.",
+                )
 
-    run = MonitorRun(
-        monitor_id=monitor.id,
-        workspace_id=workspace_id,
-        config_version=monitor.config_version,
-        idempotency_key=f"manual:{monitor.id}:{uuid4().hex}",
-        scheduled_at=now,
-        queued_at=now,
-        status=RunStatus.QUEUED.value,
-        attempt=1,
-    )
-    db.add(run)
-    db.commit()
-    db.refresh(run)
+        run = MonitorRun(
+            monitor_id=monitor.id,
+            workspace_id=workspace_id,
+            config_version=monitor.config_version,
+            idempotency_key=f"manual:{monitor.id}:{uuid4().hex}",
+            scheduled_at=now,
+            queued_at=now,
+            status=RunStatus.QUEUED.value,
+            attempt=1,
+        )
+        db.add(run)
+        db.commit()
+        db.refresh(run)
 
-    enqueue_check(str(run.id), needs_browser=needs_browser)
-    return ManualRunOut(run_id=run.id, status=run.status, message="Check enqueued")
+        enqueue_check(str(run.id), needs_browser=needs_browser)
+        return ManualRunOut(run_id=run.id, status=run.status, message="Check enqueued")
+
+    # The scheduler and the manual-run endpoint both insert into monitor_runs
+    # while holding overlapping locks (scheduler: FOR UPDATE on claimed monitors;
+    # manual run: usage-counter + FK key-share on the same monitor row). When
+    # both fire for the same monitor simultaneously Postgres raises
+    # DeadlockDetected. It is transient, so roll back and retry a few times
+    # instead of surfacing a 500 to the user.
+    last_error: OperationalError | None = None
+    for attempt in range(4):
+        try:
+            return _do()
+        except OperationalError as exc:
+            db.rollback()
+            if "deadlock" not in str(exc).lower() or attempt >= 3:
+                raise
+            last_error = exc
+            time.sleep(0.05 * (attempt + 1))
+    assert last_error is not None
+    raise last_error
 
 
 @router.get(
@@ -636,6 +658,8 @@ def get_change(
     elif new_text is not None:
         diff = unified_diff("", new_text)
 
+    monitor = db.get(Monitor, change.monitor_id)
+
     return ChangeEventDetail(
         id=change.id,
         workspace_id=change.workspace_id,
@@ -654,6 +678,7 @@ def get_change(
         diff=diff,
         previous_text=prev_text,
         new_text=new_text,
+        mode=monitor.mode if monitor is not None else None,
     )
 
 

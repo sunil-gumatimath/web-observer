@@ -4,8 +4,9 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -69,6 +70,22 @@ app.include_router(internal_router)
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(status="ok", version=__version__)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Return a JSON 500 instead of Starlette's bare plain-text page.
+
+    The bare page is emitted by ServerErrorMiddleware *outside* the CORS
+    middleware, so any unhandled error (e.g. a DB deadlock) surfaces to the
+    browser as a confusing "blocked by CORS policy" instead of a real 500.
+    Handling exceptions here keeps the response inside the CORS middleware and
+    gives the frontend a parseable body to render.
+    """
+    logger.exception(
+        "unhandled_error path=%s method=%s", request.url.path, request.method
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.get("/ready", response_model=HealthResponse)

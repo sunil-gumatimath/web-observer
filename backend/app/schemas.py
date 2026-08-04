@@ -199,6 +199,7 @@ class ChangeEventDetail(ChangeEventOut):
     diff: str | None = None
     previous_text: str | None = None
     new_text: str | None = None
+    mode: str | None = None
 
 
 class AlertInboxItem(ChangeEventOut):
