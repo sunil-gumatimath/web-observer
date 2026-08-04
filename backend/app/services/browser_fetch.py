@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from app.config import get_settings
 from app.security.ssrf import SSRFError, validate_url_for_fetch
-from app.services.fetcher import FetchError, FetchResult
+from app.services.fetcher import FetchError, FetchResult, detect_bot_challenge
 
 if TYPE_CHECKING:
     pass
@@ -97,12 +97,26 @@ def _fetch_url_browser_inline(
                 except PlaywrightTimeout:
                     logger.debug("networkidle_timeout url=%s", validated.url)
 
+                status = response.status if response is not None else 200
+                challenge = detect_bot_challenge(
+                    status_code=status,
+                    headers=dict(response.headers) if response is not None else {},
+                    text=page.content(),
+                )
+                if challenge:
+                    raise FetchError(
+                        "bot_challenge",
+                        f"Blocked while fetching {validated.url}: {challenge}. "
+                        "The site requires a real browser session; try a "
+                        "non-headless browser with an existing login session.",
+                        http_status=status,
+                    )
+
                 if wait_selector:
                     page.wait_for_selector(wait_selector, timeout=min(30_000, timeout_ms))
 
                 html = page.content()
                 final_url = page.url
-                status = response.status if response is not None else 200
                 content = html.encode("utf-8", errors="replace")
             finally:
                 if context is not None:

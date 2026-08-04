@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.security.ssrf import validate_url_for_fetch
-from app.services.fetcher import FetchError, FetchResult
+from app.services.fetcher import FetchError, FetchResult, detect_bot_challenge
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +120,14 @@ def _capture_screenshot_inline(
 
                 # Sites with long-lived connections never reach networkidle.
                 page.wait_for_timeout(1500)
+
+                challenge = detect_bot_challenge(status_code=None, text=page.content())
+                if challenge:
+                    raise FetchError(
+                        "bot_challenge",
+                        f"Blocked while capturing {validated.url}: {challenge}. "
+                        "The site requires a real browser session.",
+                    )
 
                 if clip_selector:
                     loc = page.locator(clip_selector).first

@@ -21,6 +21,55 @@ logger = logging.getLogger(__name__)
 
 MAX_REDIRECTS = 5
 
+# Markers that are effectively unique to Cloudflare's bot-protection pages.
+_STRONG_CF_MARKERS = (
+    "cf_chl_opt",
+    "challenge-platform",
+    "cf-chl-widget",
+    "cf-turnstile",
+    "cf-please-wait",
+    "cf-challenge-running",
+)
+
+# Phrases that appear on Cloudflare challenge pages but could also occur on
+# legitimate pages on their own; we require at least two before flagging.
+_WEAK_CF_MARKERS = (
+    "just a moment",
+    "enable javascript and cookies",
+    "verify you are human",
+    "checking your browser",
+)
+
+
+def detect_bot_challenge(
+    *,
+    status_code: int | None,
+    headers: dict[str, str] | None = None,
+    text: str = "",
+) -> str | None:
+    """Return a human-readable reason if a response looks like a bot challenge.
+
+    Cloudflare "Verify you are human" / Turnstile interstitials are HTML pages
+    that can be served with status 200 or 403.  Detecting them lets callers
+    fail the run with a clear error instead of recording the challenge page as
+    real content (which would produce garbage snapshots and false changes).
+    """
+    hdrs = headers or {}
+    mitigated = (hdrs.get("cf-mitigated") or "").lower()
+    if any(k in mitigated for k in ("challenge", "block")):
+        return "Cloudflare challenge (cf-mitigated header)"
+
+    low = (text or "").lower()
+    for marker in _STRONG_CF_MARKERS:
+        if marker in low:
+            return f"bot challenge page (matched '{marker}')"
+
+    weak_hits = [m for m in _WEAK_CF_MARKERS if m in low]
+    if len(weak_hits) >= 2:
+        return f"bot challenge page (matched {', '.join(weak_hits)})"
+
+    return None
+
 
 class FetchError(Exception):
     def __init__(self, code: str, message: str, *, http_status: int | None = None) -> None:
@@ -187,6 +236,20 @@ def fetch_url(
                 text = content.decode("utf-8", errors="replace")
 
             latency_ms = int((time.perf_counter() - started) * 1000)
+            challenge = detect_bot_challenge(
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                text=text,
+            )
+            if challenge:
+                raise FetchError(
+                    "bot_challenge",
+                    f"Blocked while fetching {url}: {challenge}. "
+                    "The site requires a real browser session; try enabling "
+                    "'JavaScript rendering required' on this monitor, or monitor "
+                    "a different endpoint.",
+                    http_status=response.status_code,
+                )
             return FetchResult(
                 final_url=str(response.url),
                 status_code=response.status_code,
