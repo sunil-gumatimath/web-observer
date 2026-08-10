@@ -11,7 +11,7 @@ def enqueue_check(run_id: str, *, needs_browser: bool = False) -> None:
 
     Args:
         run_id: The MonitorRun UUID as a string.
-        needs_browser: True for visual mode or js_required monitors.
+        needs_browser: True for js_required monitors.
     """
     if needs_browser:
         run_browser_check.send(str(run_id))

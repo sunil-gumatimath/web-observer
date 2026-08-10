@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.config import get_settings
 
-MONITOR_MODES = ("whole_page", "css_selector", "json_field", "list_items", "visual")
+MONITOR_MODES = ("page_content", "site_links", "product_price")
 
 
 class HealthResponse(BaseModel):
@@ -46,10 +46,22 @@ class WorkspaceUpdate(BaseModel):
         return v
 
 
+class LatestChangeOut(BaseModel):
+    id: uuid.UUID
+    change_category: str | None = None
+    ai_summary: str | None = None
+    diff_summary: str | None = None
+    is_read: bool = False
+    is_noise: bool = False
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class MonitorCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     url: str
-    mode: str = "whole_page"
+    mode: str = "page_content"
     css_selector: str | None = None
     schedule_interval_minutes: int = Field(default=60, ge=1)
     timezone: str = "UTC"
@@ -82,15 +94,6 @@ class MonitorCreate(BaseModel):
         if v < minimum:
             raise ValueError(f"schedule_interval_minutes must be >= {minimum}")
         return v
-
-    @field_validator("css_selector")
-    @classmethod
-    def validate_selector(cls, v: str | None, info) -> str | None:
-        mode = info.data.get("mode")
-        if mode in ("css_selector", "json_field", "list_items") and not v:
-            raise ValueError(f"css_selector (path/selector) is required when mode is {mode}")
-        return v
-
 
 class MonitorUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
@@ -150,6 +153,7 @@ class MonitorOut(BaseModel):
     ignore_regexes: list[str] | None = None
     consecutive_failures: int = 0
     created_at: datetime
+    latest_change: LatestChangeOut | None = None
 
     model_config = {"from_attributes": True}
 
@@ -231,24 +235,6 @@ class SnapshotAccessOut(BaseModel):
     normalized_text: str
     raw_download_url: str | None
     created_at: datetime
-
-
-class ScreenshotItemOut(BaseModel):
-    """A single visual screenshot capture in a monitor's history."""
-
-    snapshot_id: uuid.UUID
-    run_id: uuid.UUID | None = None
-    captured_at: datetime
-    run_status: str | None = None
-    http_status: int | None = None
-    latency_ms: int | None = None
-    content_type: str | None = None
-    byte_size: int | None = None
-    ahash: str | None = None
-    distance_from_previous: int | None = None
-    is_first: bool = False
-
-    model_config = {"from_attributes": True}
 
 
 class ManualRunOut(BaseModel):

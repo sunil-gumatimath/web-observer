@@ -233,6 +233,38 @@ def _root_tag(text: str) -> str | None:
     return _strip_ns(root.tag)
 
 
+def sitemap_monitor_urls(
+    base_url: str,
+    *,
+    timeout_seconds: int | None = None,
+    max_urls: int = 5000,
+) -> list[str]:
+    """Return the de-duplicated list of page URLs for a ``site_links`` monitor.
+
+    Reuses :func:`discover_sitemap_urls` (standard locations + robots.txt +
+    sitemap-index recursion). Raises :class:`SitemapError` if no sitemap is
+    found.
+    """
+    return discover_sitemap_urls(
+        base_url,
+        timeout_seconds=timeout_seconds,
+        max_urls=max_urls,
+    )
+
+
+def sitemap_monitor_text(
+    base_url: str,
+    *,
+    timeout_seconds: int | None = None,
+    max_urls: int = 5000,
+) -> str:
+    """Convenience wrapper: sitemap page URLs joined by newlines (stable order)."""
+    urls = sitemap_monitor_urls(
+        base_url, timeout_seconds=timeout_seconds, max_urls=max_urls
+    )
+    return "\n".join(urls)
+
+
 def name_from_url(url: str) -> str:
     """Derive a human-friendly monitor name from a page URL."""
     p = urlparse(url)

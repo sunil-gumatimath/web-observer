@@ -6,14 +6,14 @@ def test_classify_pricing() -> None:
 
 
 def test_classify_visual_mode() -> None:
-    assert classify_heuristic("ahash changed", mode="visual") == "design"
+    assert classify_heuristic("ahash changed", mode="product_price") == "pricing"
 
 
 def test_enrich_without_llm_is_heuristic() -> None:
     result = enrich_change(
         monitor_name="Docs",
         url="https://example.com",
-        mode="whole_page",
+        mode="page_content",
         deterministic_summary="Content changed",
         diff_text="+ privacy policy updated",
         enabled=True,

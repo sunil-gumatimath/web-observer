@@ -65,7 +65,7 @@ def main() -> int:
         body = {
             "name": name,
             "url": "https://example.com/",
-            "mode": "whole_page",
+            "mode": "page_content",
             "schedule_interval_minutes": 60,
             "timezone": "UTC",
             "enabled": True,

@@ -31,7 +31,7 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": str(out.get("name") or out.get("title") or "").strip(),
         "url": str(out.get("url") or out.get("link") or "").strip(),
-        "mode": str(out.get("mode") or "whole_page").strip(),
+        "mode": str(out.get("mode") or "page_content").strip(),
         "css_selector": (str(out["css_selector"]).strip() if out.get("css_selector") else None)
         or (str(out["selector"]).strip() if out.get("selector") else None)
         or (str(out["path"]).strip() if out.get("path") else None),
@@ -96,16 +96,11 @@ def import_monitors(
             break
 
         mode = row["mode"] if row["mode"] in (
-            "whole_page",
-            "css_selector",
-            "json_field",
-            "list_items",
-            "visual",
-        ) else "whole_page"
-        js_required = row["js_required"] or mode == "visual"
-        if mode in ("css_selector", "json_field", "list_items") and not row["css_selector"]:
-            result.errors.append({"row": str(idx), "error": "selector/path required for mode"})
-            continue
+            "page_content",
+            "site_links",
+            "product_price",
+        ) else "page_content"
+        js_required = row["js_required"]
 
         mon = Monitor(
             workspace_id=workspace.id,

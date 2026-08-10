@@ -23,7 +23,7 @@ def test_triage_no_watch_note_is_passthrough() -> None:
     out = triage_change(
         monitor_name="Docs",
         url="https://example.com",
-        mode="whole_page",
+        mode="page_content",
         diff_text="+ changed something",
         watch_note=None,
         suggested_category="content",
@@ -37,7 +37,7 @@ def test_triage_no_llm_key_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
     out = triage_change(
         monitor_name="Docs",
         url="https://example.com",
-        mode="whole_page",
+        mode="page_content",
         diff_text="+ changed something",
         watch_note="only pricing changes",
         suggested_category="content",
@@ -56,7 +56,7 @@ def test_triage_noise_yes(monkeypatch: pytest.MonkeyPatch) -> None:
     is_noise, reason = triage_change(
         monitor_name="Docs",
         url="https://example.com",
-        mode="whole_page",
+        mode="page_content",
         diff_text="+ 2024-01-01T00:00:00Z",
         watch_note="only pricing changes",
         suggested_category="content",
@@ -76,7 +76,7 @@ def test_triage_noise_no(monkeypatch: pytest.MonkeyPatch) -> None:
     is_noise, reason = triage_change(
         monitor_name="Docs",
         url="https://example.com",
-        mode="whole_page",
+        mode="page_content",
         diff_text="+ price changed to $19",
         watch_note="only pricing changes",
         suggested_category="pricing",
@@ -96,7 +96,7 @@ def test_triage_llm_error_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
     out = triage_change(
         monitor_name="Docs",
         url="https://example.com",
-        mode="whole_page",
+        mode="page_content",
         diff_text="+ price changed to $19",
         watch_note="only pricing changes",
         suggested_category="pricing",

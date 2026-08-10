@@ -10,7 +10,7 @@ def test_ignore_selector_removes_noise() -> None:
     """
     text = extract_text(
         html,
-        mode="whole_page",
+        mode="page_content",
         ignore_selectors=[".cookie"],
     )
     assert "Price $10" in text
@@ -21,7 +21,7 @@ def test_ignore_regex_strips_timestamps() -> None:
     html = "<html><body><p>Hello</p><p>Updated 2026-07-10 12:00</p></body></html>"
     text = extract_text(
         html,
-        mode="whole_page",
+        mode="page_content",
         ignore_regexes=[r"Updated .*"],
     )
     assert "Hello" in text

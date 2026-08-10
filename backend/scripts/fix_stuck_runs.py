@@ -19,7 +19,7 @@ def main() -> None:
 
     with SessionLocal() as db:
         for mon in db.scalars(select(Monitor).where(Monitor.name == "Hacker News")).all():
-            if mon.mode == "whole_page" and mon.js_required:
+            if mon.mode == "page_content" and mon.js_required:
                 print("clear js_required", mon.id)
                 mon.js_required = False
 
@@ -40,7 +40,7 @@ def main() -> None:
             select(MonitorRun).where(MonitorRun.status == RunStatus.QUEUED.value)
         ).all():
             mon = db.get(Monitor, run.monitor_id)
-            needs = bool(mon and (mon.js_required or mon.mode == "visual"))
+            needs = bool(mon and mon.js_required)
             enqueue_check(str(run.id), needs_browser=needs)
             print("enqueued", run.id, "browser", needs, mon.name if mon else None)
 

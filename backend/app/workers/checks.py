@@ -9,7 +9,8 @@ import dramatiq
 from app.config import get_settings
 from app.models import Monitor
 from app.models.entities import RunStatus
-from app.services.fetcher import fetch_url
+from app.services.fetcher import FetchError, FetchResult, fetch_url
+from app.services.sitemap import SitemapError, sitemap_monitor_text
 from app.workers.broker import redis_broker  # noqa: F401
 from app.workers.run_guard import execute_monitored_run
 
@@ -32,7 +33,23 @@ def run_http_check(run_id: str) -> None:
             return True
         return False
 
-    def _fetch(monitor: Monitor, db):
+    def _fetch(monitor: Monitor, db) -> FetchResult:
+        if monitor.mode == "site_links":
+            try:
+                text = sitemap_monitor_text(
+                    monitor.url, timeout_seconds=monitor.timeout_seconds
+                )
+            except SitemapError as exc:
+                raise FetchError("sitemap_error", str(exc)) from exc
+            content = text.encode("utf-8")
+            return FetchResult(
+                final_url=monitor.url,
+                status_code=200,
+                content=content,
+                text=text,
+                content_type="text/plain; charset=utf-8",
+                latency_ms=0,
+            )
         return fetch_url(
             monitor.url,
             timeout_seconds=monitor.timeout_seconds,

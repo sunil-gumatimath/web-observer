@@ -107,7 +107,7 @@ def claim_due_monitors(limit: int) -> list[tuple[uuid.UUID, bool]]:
             )
             db.add(run)
             db.flush()
-            needs_browser = bool(monitor.js_required) or monitor.mode == "visual"
+            needs_browser = bool(monitor.js_required)
             claimed.append((run.id, needs_browser))
             logger.info(
                 "enqueued monitor_id=%s run_id=%s browser=%s next_run_at=%s",

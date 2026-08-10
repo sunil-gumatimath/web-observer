@@ -124,7 +124,7 @@ def test_import_from_sitemap_creates_monitors(db_session) -> None:  # noqa: ANN0
         "https://example.com/pricing",
     ]
     rows = [
-        {"name": name_from_url(u), "url": u, "mode": "whole_page",
+        {"name": name_from_url(u), "url": u, "mode": "page_content",
          "schedule_interval_minutes": 60, "js_required": False}
         for u in urls
     ]
@@ -148,9 +148,9 @@ def test_import_from_sitemap_dedupes(db_session) -> None:  # noqa: ANN001
     db_session.commit()
 
     rows = [
-        {"name": "A", "url": "https://example.com/x", "mode": "whole_page",
+        {"name": "A", "url": "https://example.com/x", "mode": "page_content",
          "schedule_interval_minutes": 60, "js_required": False},
-        {"name": "A2", "url": "https://example.com/x", "mode": "whole_page",
+        {"name": "A2", "url": "https://example.com/x", "mode": "page_content",
          "schedule_interval_minutes": 60, "js_required": False},
     ]
     result = import_monitors(db_session, ws, rows)

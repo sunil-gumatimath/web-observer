@@ -22,8 +22,6 @@ _BLANK_RE = re.compile(r"\n{3,}")
 def extract_text(
     html: str,
     *,
-    mode: str,
-    css_selector: str | None = None,
     ignore_selectors: list[str] | None = None,
     ignore_regexes: list[str] | None = None,
 ) -> str:
@@ -41,21 +39,8 @@ def extract_text(
         except Exception as exc:  # noqa: BLE001
             raise ExtractionError("extraction_failed", f"Invalid ignore selector: {selector}") from exc
 
-    if mode == "css_selector":
-        if not css_selector:
-            raise ExtractionError("extraction_failed", "css_selector is required")
-        nodes = tree.css(css_selector)
-        if not nodes:
-            raise ExtractionError("selector_not_found", f"Selector matched no nodes: {css_selector}")
-        parts = []
-        for node in nodes:
-            text = node.text(separator="\n", strip=True)
-            if text:
-                parts.append(text)
-        raw = "\n".join(parts)
-    else:
-        body = tree.body
-        raw = body.text(separator="\n", strip=True) if body else tree.text(separator="\n", strip=True)
+    body = tree.body
+    raw = body.text(separator="\n", strip=True) if body else tree.text(separator="\n", strip=True)
 
     text = normalize_text(raw)
     return apply_ignore_regexes(text, ignore_regexes or [])
@@ -83,3 +68,56 @@ def normalize_text(text: str) -> str:
 
 def content_hash(normalized_text: str) -> str:
     return hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+
+
+# Currency symbols and ISO codes we recognise when auto-detecting a price.
+_PRICE_SYMBOLS = "$€£¥₹"
+_PRICE_CODES = ("USD", "EUR", "GBP", "JPY", "INR", "CAD", "AUD", "CHF", "CNY", "BRL")
+
+
+def extract_price(html: str) -> str:
+    """Best-effort price detection for ``product_price`` monitors.
+
+    Searches the raw HTML (and falls back to normalised text) for a currency
+    symbol or ISO code followed by an amount, returning a stable string such
+    as ``"USD 19.99"``. Raises :class:`ExtractionError` if no price is found.
+    """
+    candidates: list[str] = []
+
+    # Symbol-led: $19.99, € 20, £15.00, ¥1,200
+    sym_re = re.compile(
+        r"([" + re.escape(_PRICE_SYMBOLS) + r"])\s*(\d[\d,]*\.?\d{0,2})"
+    )
+    for sym, num in sym_re.findall(html):
+        candidates.append(f"{sym}{num}")
+
+    # Code-led: 19.99 USD, 1,200 EUR
+    code_re = re.compile(
+        r"(\d[\d,]*\.?\d{0,2})\s*(?:" + "|".join(_PRICE_CODES) + r")\b"
+    )
+    for num, _ in code_re.findall(html + " "):
+        candidates.append(f"{num}")
+
+    if not candidates:
+        # Fall back to a bare decimal number labelled as price-like text.
+        bare = re.search(r"(?:price|cost|amount)\D*?(\d[\d,]*\.?\d{0,2})", html, re.I)
+        if bare:
+            candidates.append(bare.group(1))
+
+    if not candidates:
+        raise ExtractionError("extraction_failed", "No price found on the page")
+
+    # Normalise the first match: strip grouping commas, attach a code when a
+    # symbol was used (best-effort mapping) so comparisons are stable.
+    first = candidates[0]
+    sym_to_code = {
+        "$": "USD",
+        "€": "EUR",
+        "£": "GBP",
+        "¥": "JPY",
+        "₹": "INR",
+    }
+    if first[0] in sym_to_code:
+        amount = first[1:].replace(",", "")
+        return f"{sym_to_code[first[0]]} {amount}"
+    return first.replace(",", "")

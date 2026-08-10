@@ -28,11 +28,9 @@ def _uuid() -> uuid.UUID:
 
 
 class MonitorMode(str, enum.Enum):
-    WHOLE_PAGE = "whole_page"
-    CSS_SELECTOR = "css_selector"
-    JSON_FIELD = "json_field"
-    LIST_ITEMS = "list_items"
-    VISUAL = "visual"
+    PAGE_CONTENT = "page_content"
+    SITE_LINKS = "site_links"
+    PRODUCT_PRICE = "product_price"
 
 
 class RunStatus(str, enum.Enum):
@@ -117,7 +115,7 @@ class Monitor(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
-    mode: Mapped[str] = mapped_column(String(32), nullable=False, default=MonitorMode.WHOLE_PAGE.value)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default=MonitorMode.PAGE_CONTENT.value)
     css_selector: Mapped[str | None] = mapped_column(Text, nullable=True)
     schedule_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")

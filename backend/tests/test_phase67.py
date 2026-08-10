@@ -11,7 +11,7 @@ def test_plans_exist() -> None:
 
 
 def test_parse_csv_and_normalize() -> None:
-    text = "name,url,mode\nA,https://example.com/,whole_page\n"
+    text = "name,url,mode\nA,https://example.com/,page_content\n"
     rows = parse_csv(text)
     assert len(rows) == 1
     n = _normalize_row(rows[0])

@@ -12,7 +12,6 @@ from app.models import Monitor
 from app.models.entities import RunStatus
 from app.services.browser_fetch import fetch_url_browser
 from app.services.domain_guard import _redis
-from app.services.visual import capture_screenshot, visual_to_fetch_result
 from app.workers.broker import redis_broker  # noqa: F401
 from app.workers.run_guard import execute_monitored_run
 
@@ -40,21 +39,11 @@ def run_browser_check(run_id: str) -> None:
         return False
 
     def _fetch(monitor: Monitor, db):
-        if monitor.mode == "visual":
-            capture = capture_screenshot(
-                monitor.url,
-                timeout_seconds=max(monitor.timeout_seconds, 45),
-                full_page=True,
-                clip_selector=monitor.css_selector or None,
-            )
-            result = visual_to_fetch_result(capture, url=monitor.url)
-        else:
-            result = fetch_url_browser(
-                monitor.url,
-                timeout_seconds=max(monitor.timeout_seconds, 45),
-                max_response_bytes=monitor.max_response_bytes,
-                wait_selector=monitor.css_selector if monitor.mode == "css_selector" else None,
-            )
+        result = fetch_url_browser(
+            monitor.url,
+            timeout_seconds=max(monitor.timeout_seconds, 45),
+            max_response_bytes=monitor.max_response_bytes,
+        )
 
         # Increment browser-quota counter after successful fetch
         day = datetime.now(UTC).strftime("%Y%m%d")

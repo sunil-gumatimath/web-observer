@@ -29,7 +29,7 @@ def main() -> None:
             if m:
                 m.js_required = False
                 if m.mode == "visual":
-                    m.mode = "whole_page"
+                    m.mode = "page_content"
                 db.commit()
                 db.refresh(m)
                 enqueue_check(str(run.id), needs_browser=False)

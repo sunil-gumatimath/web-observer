@@ -22,19 +22,15 @@ from app.models import (
 from app.models.entities import OutboxStatus, RunStatus
 from app.services.ai_summary import AIEnrichment, enrich_change
 from app.services.diffing import short_summary, unified_diff
-from app.services.extract import ExtractionError, content_hash, extract_text
+from app.services.extract import ExtractionError, content_hash, extract_price, extract_text
 from app.services.fetcher import FetchResult
 from app.services.storage import StorageError, put_bytes, snapshot_object_key
 from app.services.structured import (
     ListDiff,
     diff_lists,
-    extract_html_list,
-    extract_json_field,
-    extract_json_list,
     list_to_normalized,
 )
 from app.services.usage import add_storage_bytes, increment_checks
-from app.services.visual import visual_diff_summary
 
 logger = logging.getLogger(__name__)
 
@@ -51,44 +47,22 @@ class PipelineResult:
     unchanged: bool = False
 
 
-def _is_json_content(content_type: str | None, text: str) -> bool:
-    ct = (content_type or "").lower()
-    if "json" in ct:
-        return True
-    stripped = text.lstrip()
-    return stripped.startswith("{") or stripped.startswith("[")
-
-
 def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, str | None, ListDiff | None]:
     """Return (normalized_text, structured_diff_text_or_none, list_diff_or_none)."""
     mode = monitor.mode
-    path = monitor.css_selector  # reused as JSON path / list selector / visual region
     ignore_selectors = [str(s) for s in (monitor.ignore_selectors or [])]
     ignore_regexes = [str(s) for s in (monitor.ignore_regexes or [])]
 
-    if mode == "json_field":
-        if not path:
-            raise ExtractionError("extraction_failed", "json path required (css_selector field)")
-        return extract_json_field(result.text, path), None, None
+    if mode == "product_price":
+        return extract_price(result.text), None, None
 
-    if mode == "list_items":
-        if not path:
-            raise ExtractionError("extraction_failed", "list path/selector required")
-        if _is_json_content(result.content_type, result.text):
-            items = extract_json_list(result.text, path)
-        else:
-            items = extract_html_list(result.text, path)
-        return list_to_normalized(items), None, None
+    if mode == "site_links":
+        urls = [u.strip() for u in result.text.splitlines() if u.strip()]
+        return list_to_normalized(urls), None, None
 
-    if mode == "visual":
-        # FetchResult.text already holds ahash metadata from visual capture
-        return result.text.strip(), None, None
-
-    # whole_page / css_selector
+    # page_content (default): whole page text diff
     text = extract_text(
         result.text,
-        mode=mode if mode in ("whole_page", "css_selector") else "whole_page",
-        css_selector=path if mode == "css_selector" else None,
         ignore_selectors=ignore_selectors,
         ignore_regexes=ignore_regexes,
     )
@@ -310,34 +284,7 @@ def _detect_change(
                 )
     ctx.prev_text = prev_text
 
-    if monitor.mode == "visual":
-        from app.config import get_settings
-
-        threshold = get_settings().visual_ahash_threshold
-        summary, diff_text = visual_diff_summary(prev_text, normalized, threshold=threshold)
-        # Exact same digest → unchanged; similar ahash → treat as unchanged
-        from app.services.adaptive import note_check_outcome
-        from app.services.visual import hashes_similar
-
-        if prev.content_hash == digest:
-            note_check_outcome(monitor, changed=False, succeeded=True)
-            db.commit()
-            return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
-
-        def _ah(t: str) -> str:
-            for line in t.splitlines():
-                if line.startswith("ahash:"):
-                    return line.split(":", 1)[1].strip()
-            return ""
-
-        if hashes_similar(_ah(prev_text), _ah(normalized), max_distance=threshold):
-            note_check_outcome(monitor, changed=False, succeeded=True)
-            db.commit()
-            return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
-
-        ctx.summary = summary
-        ctx.diff_text = diff_text
-    elif monitor.mode == "list_items":
+    if monitor.mode == "site_links":
         if prev.content_hash == digest:
             from app.services.adaptive import note_check_outcome
 

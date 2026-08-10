@@ -36,12 +36,10 @@ class AIEnrichment:
 
 def classify_heuristic(diff_text: str, mode: str | None = None) -> str:
     text = (diff_text or "").lower()
-    if mode == "visual":
-        return "design"
-    if mode == "json_field" or mode == "list_items":
-        if any(k in text for k in ("price", "cost", "$", "€", "£")):
-            return "pricing"
-        return "api"
+    if mode == "product_price":
+        return "pricing"
+    if mode == "site_links":
+        return "content"
     rules = [
         ("pricing", r"\b(price|pricing|cost|\$|€|£|usd|subscription)\b"),
         ("availability", r"\b(in stock|out of stock|sold out|available|unavailable)\b"),
