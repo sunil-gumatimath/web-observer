@@ -13,7 +13,7 @@ const nav = [
   {
     href: "/monitors",
     label: "Monitors",
-    match: (p: string) => p.startsWith("/monitors") && p !== "/monitors/new",
+    match: (p: string) => p.startsWith("/monitors"),
   },
   { href: "/alerts", label: "Alerts", match: (p: string) => p.startsWith("/alerts") },
   { href: "/import", label: "Import", match: (p: string) => p.startsWith("/import") },

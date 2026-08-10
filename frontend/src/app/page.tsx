@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const features = [
   {
     title: "Precise change detection",
-    body: "Watch whole pages, CSS sections, JSON fields, list items, or visual screenshots.",
+    body: "Watch a page's content, a site's sitemap links, or a product's price.",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path
@@ -60,24 +61,28 @@ export default function HomePage() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white shadow-glow-sm">
             W
           </span>
-          <span>Web Observer</span>
+          <span className="hidden sm:inline">Web Observer</span>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Link
             href="/docs"
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            suppressHydrationWarning
           >
             Docs
           </Link>
           <Link
             href="/sign-in"
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            suppressHydrationWarning
           >
             Sign in
           </Link>
           <Link
             href="/sign-up"
             className="rounded-lg bg-gradient-to-b from-sky-500 to-sky-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-glow-sm transition hover:from-sky-400 hover:to-sky-500"
+            suppressHydrationWarning
           >
             Get started
           </Link>
@@ -110,22 +115,28 @@ export default function HomePage() {
             Track public URLs or precise sections, get email and webhook alerts, and review clear
             before-and-after diffs. Built for product teams, founders, and researchers.
           </p>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+          <div
+            className="mt-9 flex flex-wrap items-center justify-center gap-3"
+            suppressHydrationWarning
+          >
             <Link
               href="/sign-up"
               className="rounded-xl bg-gradient-to-b from-sky-500 to-sky-600 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:from-sky-400 hover:to-sky-500"
+              suppressHydrationWarning
             >
               Create free account
             </Link>
             <Link
               href="/sign-in"
               className="rounded-xl border border-slate-300 bg-white/60 px-6 py-3 text-sm font-semibold text-slate-800 backdrop-blur transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10"
+              suppressHydrationWarning
             >
               Sign in
             </Link>
             <Link
               href="/dashboard"
               className="rounded-xl px-4 py-3 text-sm font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              suppressHydrationWarning
             >
               Go to dashboard →
             </Link>
@@ -149,7 +160,7 @@ export default function HomePage() {
 
         <div className="mx-auto mt-16 max-w-3xl rounded-2xl border border-[var(--border)] bg-gradient-to-br from-white/80 to-slate-100/80 p-8 text-center shadow-card backdrop-blur dark:from-slate-900/80 dark:to-slate-950/80">
           <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Whole page · CSS selector · JSON field · List items · Visual screenshots
+            Page content · Site links · Product price
           </p>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
             Auth powered by Clerk. After sign-in you land on the dashboard.

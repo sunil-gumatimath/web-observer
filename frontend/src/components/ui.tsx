@@ -18,6 +18,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "danger" | "ghost";
   size?: "sm" | "md" | "lg";
+  ref?: React.Ref<HTMLButtonElement>;
 }) {
   const styles = {
     primary:
@@ -119,9 +120,11 @@ export function Card({
 export function Badge({
   children,
   tone = "neutral",
+  title,
 }: {
   children: ReactNode;
   tone?: "neutral" | "success" | "danger" | "warn" | "info";
+  title?: string;
 }) {
   const styles = {
     neutral:
@@ -137,6 +140,7 @@ export function Badge({
   }[tone];
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
         styles,
@@ -326,11 +330,9 @@ export function DataTable({
 
 export function ModeBadge({ mode }: { mode: string }) {
   const labels: Record<string, string> = {
-    whole_page: "Whole page",
-    css_selector: "CSS selector",
-    json_field: "JSON field",
-    list_items: "List items",
-    visual: "Visual",
+    page_content: "Page content",
+    site_links: "Site links",
+    product_price: "Product price",
   };
   return <Badge tone="info">{labels[mode] ?? mode}</Badge>;
 }

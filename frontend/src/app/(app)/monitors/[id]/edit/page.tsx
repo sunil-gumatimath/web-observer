@@ -18,8 +18,12 @@ import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
-function needsPath(mode: MonitorMode): boolean {
-  return mode === "css_selector" || mode === "json_field" || mode === "list_items";
+function needsJs(mode: MonitorMode): boolean {
+  return mode !== "site_links";
+}
+
+function showsIgnore(mode: MonitorMode): boolean {
+  return mode === "page_content";
 }
 
 export default function EditMonitorPage() {
@@ -32,8 +36,7 @@ export default function EditMonitorPage() {
   const [monitor, setMonitor] = useState<Monitor | null>(null);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [mode, setMode] = useState<MonitorMode>("whole_page");
-  const [cssSelector, setCssSelector] = useState("");
+  const [mode, setMode] = useState<MonitorMode>("page_content");
   const [interval, setInterval] = useState(60);
   const [timezone, setTimezone] = useState("UTC");
   const [jsRequired, setJsRequired] = useState(false);
@@ -56,8 +59,7 @@ export default function EditMonitorPage() {
         setMonitor(m);
         setName(m.name);
         setUrl(m.url);
-        setMode((m.mode as MonitorMode) || "whole_page");
-        setCssSelector(m.css_selector ?? "");
+        setMode((m.mode as MonitorMode) || "page_content");
         setInterval(m.schedule_interval_minutes);
         setTimezone(m.timezone);
         setJsRequired(Boolean(m.js_required));
@@ -93,11 +95,10 @@ export default function EditMonitorPage() {
         name,
         url,
         mode,
-        css_selector:
-          needsPath(mode) || (mode === "visual" && cssSelector) ? cssSelector || null : null,
+        css_selector: null,
         schedule_interval_minutes: interval,
         timezone,
-        js_required: jsRequired || mode === "visual",
+        js_required: needsJs(mode) ? jsRequired : false,
         watch_note: watchNote.trim() || null,
         ignore_selectors: ignore,
         ignore_regexes: ignoreRegex,
@@ -143,24 +144,11 @@ export default function EditMonitorPage() {
               value={mode}
               onChange={(e) => setMode(e.target.value as MonitorMode)}
             >
-              <option value="whole_page">Whole page text</option>
-              <option value="css_selector">CSS selector</option>
-              <option value="json_field">JSON field</option>
-              <option value="list_items">List items</option>
-              <option value="visual">Visual</option>
+              <option value="page_content">Page content (whole page text)</option>
+              <option value="site_links">Site links (sitemap URL changes)</option>
+              <option value="product_price">Product price (price / currency)</option>
             </Select>
           </div>
-          {needsPath(mode) || mode === "visual" ? (
-            <div>
-              <Label htmlFor="selector">Path / selector</Label>
-              <Input
-                id="selector"
-                required={needsPath(mode)}
-                value={cssSelector}
-                onChange={(e) => setCssSelector(e.target.value)}
-              />
-            </div>
-          ) : null}
           <div>
             <Label htmlFor="interval">Check interval (minutes, min 15)</Label>
             <Input
@@ -176,7 +164,7 @@ export default function EditMonitorPage() {
             <Label htmlFor="tz">Timezone</Label>
             <Input id="tz" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
           </div>
-          {mode !== "visual" ? (
+          {needsJs(mode) ? (
             <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-400 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-white/10">
               <input
                 type="checkbox"
@@ -186,7 +174,11 @@ export default function EditMonitorPage() {
               />
               JavaScript rendering required
             </label>
-          ) : null}
+          ) : (
+            <p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+              Site links mode reads the sitemap over HTTP and watches for added or removed URLs.
+            </p>
+          )}
           <div>
             <Label htmlFor="watch">Watch note (optional)</Label>
             <Input
@@ -196,7 +188,7 @@ export default function EditMonitorPage() {
               placeholder="e.g. Only care about pricing plan changes"
             />
           </div>
-          {mode === "whole_page" || mode === "css_selector" ? (
+          {showsIgnore(mode) ? (
             <>
               <div>
               <Label htmlFor="ignore">Ignore CSS selectors (one per line)</Label>

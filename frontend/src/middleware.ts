@@ -24,7 +24,7 @@ export default clerkKey
         await auth.protect();
       }
     })
-  : function middleware(_req: NextRequest) {
+  : function middleware() {
       return NextResponse.next();
     };
 

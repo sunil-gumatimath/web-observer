@@ -16,13 +16,13 @@ import { usePageTitle } from "@/lib/use-page-title";
 import type { MonitorCreateInput } from "@/lib/types";
 
 const CSV_DEFAULT =
-  "name,url,mode,schedule_interval_minutes\nExample,https://example.com/,whole_page,60\n";
+  "name,url,mode,schedule_interval_minutes\nExample,https://example.com/,page_content,60\n";
 
 const JSON_DEFAULT: MonitorCreateInput[] = [
   {
     name: "Example",
     url: "https://example.com/",
-    mode: "whole_page",
+    mode: "page_content",
     schedule_interval_minutes: 60,
   },
 ];
@@ -89,12 +89,14 @@ export default function ImportPage() {
       {result ? <SuccessBox message={result} /> : null}
       <Card className="max-w-3xl">
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="inline-flex rounded-md border border-border p-0.5 text-sm">
+          <div className="inline-flex rounded-lg border border-[var(--border)] bg-slate-50/60 p-0.5 dark:bg-slate-950/40">
             <button
               type="button"
               onClick={() => switchMode("csv")}
-              className={`rounded px-3 py-1 ${
-                mode === "csv" ? "bg-secondary font-medium" : "text-muted-foreground"
+              className={`rounded-md px-3 py-1 text-sm transition ${
+                mode === "csv"
+                  ? "bg-sky-600 font-medium text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
               }`}
             >
               CSV
@@ -102,8 +104,10 @@ export default function ImportPage() {
             <button
               type="button"
               onClick={() => switchMode("json")}
-              className={`rounded px-3 py-1 ${
-                mode === "json" ? "bg-secondary font-medium" : "text-muted-foreground"
+              className={`rounded-md px-3 py-1 text-sm transition ${
+                mode === "json"
+                  ? "bg-sky-600 font-medium text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
               }`}
             >
               JSON

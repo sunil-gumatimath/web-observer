@@ -13,10 +13,10 @@ import {
   SectionTitle,
   Spinner,
 } from "@/components/ui";
+import { ConfirmButton } from "@/components/confirm-dialog";
 import { ReadableContent } from "@/components/readable-content";
-import { ScreenshotImage, ScreenshotLightbox, type ScreenshotMeta } from "@/components/screenshot";
 import { api, ApiError } from "@/lib/api";
-import type { ChangeEvent, Monitor, MonitorRun, ScreenshotItem } from "@/lib/types";
+import type { ChangeEvent, Monitor, MonitorRun } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
@@ -27,29 +27,6 @@ const POLL_MAX_MS = 45_000;
 
 function isActiveRun(r: MonitorRun) {
   return r.status === "queued" || r.status === "running";
-}
-
-function screenshotMeta(s: ScreenshotItem | undefined): ScreenshotMeta {
-  const meta: ScreenshotMeta = [];
-  if (!s) return meta;
-  meta.push({ label: "Captured", value: new Date(s.captured_at).toLocaleString() });
-  if (s.run_status) meta.push({ label: "Run status", value: s.run_status });
-  if (s.distance_from_previous != null) {
-    meta.push({ label: "Visual distance", value: `${s.distance_from_previous} (ahash)` });
-  } else if (s.is_first) {
-    meta.push({ label: "Visual distance", value: "baseline" });
-  }
-  if (s.ahash) {
-    meta.push({
-      label: "aHash",
-      value: <span className="break-all font-mono text-xs">{s.ahash}</span>,
-    });
-  }
-  if (s.byte_size != null) {
-    meta.push({ label: "Size", value: `${(s.byte_size / 1024).toFixed(1)} KB` });
-  }
-  if (s.content_type) meta.push({ label: "Type", value: s.content_type });
-  return meta;
 }
 
 export default function MonitorDetailPage() {
@@ -81,10 +58,6 @@ function MonitorDetailInner() {
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [showFreshBanner, setShowFreshBanner] = useState(isFresh);
-
-  const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([]);
-  const [screenshotsLoading, setScreenshotsLoading] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const pollStartedAt = useRef<number | null>(null);
   const latestSnapshotId = useRef<string | null>(null);
@@ -214,27 +187,6 @@ function MonitorDetailInner() {
     };
   }, [runs, workspaceId]);
 
-  // Load visual screenshot history for visual monitors.
-  useEffect(() => {
-    if (loading || !workspaceId || !monitor || monitor.mode !== "visual") return;
-    let cancelled = false;
-    setScreenshotsLoading(true);
-    api
-      .listScreenshots(workspaceId, monitor.id)
-      .then((s) => {
-        if (!cancelled) setScreenshots(s);
-      })
-      .catch(() => {
-        if (!cancelled) setScreenshots([]);
-      })
-      .finally(() => {
-        if (!cancelled) setScreenshotsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, workspaceId, monitor]);
-
   async function withAction(fn: () => Promise<void>) {
     if (!workspaceId) return;
     setBusy(true);
@@ -251,7 +203,6 @@ function MonitorDetailInner() {
 
   async function handleDelete() {
     if (!workspaceId || !monitor) return;
-    if (!confirm("Delete this monitor and all its check history?")) return;
     setBusy(true);
     setError(null);
     try {
@@ -352,9 +303,16 @@ function MonitorDetailInner() {
                 Resume
               </Button>
             )}
-            <Button variant="danger" disabled={busy} onClick={handleDelete}>
+            <ConfirmButton
+              variant="danger"
+              busy={busy}
+              error={error}
+              onConfirm={handleDelete}
+              title="Delete this monitor?"
+              body="This permanently deletes the monitor and all of its check history and change events."
+            >
               Delete
-            </Button>
+            </ConfirmButton>
           </>
         }
       />
@@ -383,9 +341,16 @@ function MonitorDetailInner() {
                     <Button type="button" disabled={busy} onClick={retryCheck}>
                       Retry check
                     </Button>
-                    <Button type="button" variant="danger" disabled={busy} onClick={handleDelete}>
+                    <ConfirmButton
+                      variant="danger"
+                      busy={busy}
+                      error={error}
+                      onConfirm={handleDelete}
+                      title="Delete this monitor?"
+                      body="This permanently deletes the monitor and all of its check history and change events."
+                    >
                       Delete this monitor
-                    </Button>
+                    </ConfirmButton>
                   </div>
                 </div>
               ) : polling || (latestRun && isActiveRun(latestRun)) || (showFreshBanner && !latestTerminal) ? (
@@ -469,9 +434,16 @@ function MonitorDetailInner() {
                 >
                   Keep monitoring
                 </Button>
-                <Button type="button" variant="danger" disabled={busy} onClick={handleDelete}>
+                <ConfirmButton
+                  variant="danger"
+                  busy={busy}
+                  error={error}
+                  onConfirm={handleDelete}
+                  title="Delete this monitor?"
+                  body="This permanently deletes the monitor and all of its check history and change events."
+                >
                   Delete this monitor
-                </Button>
+                </ConfirmButton>
                 {latestTerminal.status === "failed" ? (
                   <Link href={`/monitors/${monitor.id}/edit`}>
                     <Button type="button" variant="secondary">
@@ -497,7 +469,7 @@ function MonitorDetailInner() {
               ) : (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   No text preview available for this snapshot
-                  {monitor.mode === "visual" ? " (visual mode stores image hashes)." : "."}
+                  {"."}
                 </p>
               )}
             </div>
@@ -517,7 +489,7 @@ function MonitorDetailInner() {
             <Card>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 No text preview for the latest successful run
-                {monitor.mode === "visual" ? " (visual mode stores image hashes)." : "."}
+                {"."}
               </p>
             </Card>
           )}
@@ -563,84 +535,6 @@ function MonitorDetailInner() {
           </p>
         </Card>
       </div>
-
-      {monitor.mode === "visual" ? (
-        <section className="mb-10">
-          <SectionTitle>Screenshot history</SectionTitle>
-          {screenshotsLoading ? (
-            <Spinner />
-          ) : screenshots.length === 0 ? (
-            <Card>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No screenshots yet. Run the monitor to capture the first visual snapshot.
-              </p>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {screenshots.map((s, i) => (
-                <button
-                  key={s.snapshot_id}
-                  type="button"
-                  onClick={() => setLightboxIndex(i)}
-                  className="group overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-bg)] text-left transition hover:border-sky-500/40 hover:shadow-glow-sm dark:hover:border-sky-500/25"
-                >
-                  <div className="relative aspect-video bg-slate-900/30">
-                    <ScreenshotImage
-                      workspaceId={workspaceId!}
-                      snapshotId={s.snapshot_id}
-                      alt={`Screenshot captured ${new Date(s.captured_at).toLocaleString()}`}
-                      className="h-full w-full"
-                      imgClassName="h-full w-full object-cover transition group-hover:scale-[1.03]"
-                    />
-                    {s.is_first ? (
-                      <span className="absolute left-2 top-2 rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                        baseline
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 px-3 py-2">
-                    <span className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                      {new Date(s.captured_at).toLocaleString()}
-                    </span>
-                    {s.distance_from_previous != null ? (
-                      <Badge tone={s.distance_from_previous > 0 ? "info" : "neutral"}>
-                        {s.distance_from_previous} px
-                      </Badge>
-                    ) : (
-                      <span className="text-[11px] text-slate-400">—</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-          <ScreenshotLightbox
-            workspaceId={workspaceId!}
-            snapshotId={
-              lightboxIndex != null ? screenshots[lightboxIndex]?.snapshot_id ?? null : null
-            }
-            title={
-              lightboxIndex != null && screenshots[lightboxIndex]
-                ? `Screenshot · ${new Date(screenshots[lightboxIndex].captured_at).toLocaleString()}`
-                : "Screenshot"
-            }
-            meta={lightboxIndex != null ? screenshotMeta(screenshots[lightboxIndex]) : []}
-            onClose={() => setLightboxIndex(null)}
-            onPrev={
-              lightboxIndex != null && lightboxIndex > 0
-                ? () => setLightboxIndex(lightboxIndex - 1)
-                : undefined
-            }
-            onNext={
-              lightboxIndex != null && lightboxIndex < screenshots.length - 1
-                ? () => setLightboxIndex(lightboxIndex + 1)
-                : undefined
-            }
-            hasPrev={lightboxIndex != null && lightboxIndex > 0}
-            hasNext={lightboxIndex != null && lightboxIndex < screenshots.length - 1}
-          />
-        </section>
-      ) : null}
 
       <section className="mb-10">
         <SectionTitle>Recent runs</SectionTitle>

@@ -1,20 +1,24 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
+/**
+ * ESLint 9 flat config using Next.js 16's native flat-config entry points.
+ * (The previous FlatCompat-based config crashed ESLint with a circular-JSON
+ * validation error on this dependency set.)
+ */
 /** @type {import("eslint").Linter.Config[]} */
 const eslintConfig = [
+  ...nextVitals,
+  ...nextTs,
   {
-    ignores: [".next/**", "node_modules/**", "out/**"],
+    rules: {
+      // Codebase convention: loading/reset state and the next-themes
+      // `mounted` hydration gate are set synchronously at effect start.
+      // This rule is advisory here — keep it as a warning so it stays
+      // visible without failing the build.
+      "react-hooks/set-state-in-effect": "warn",
+    },
   },
-  ...compat.extends("next/core-web-vitals"),
 ];
 
 export default eslintConfig;

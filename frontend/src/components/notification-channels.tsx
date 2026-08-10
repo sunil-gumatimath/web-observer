@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { ConfirmButton } from "@/components/confirm-dialog";
 import {
   Badge,
   Button,
@@ -87,7 +88,6 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
   }
 
   async function remove(channel: NotificationChannel) {
-    if (!confirm(`Remove ${channel.type} channel?`)) return;
     setBusyId(channel.id);
     setError(null);
     try {
@@ -134,15 +134,23 @@ export function NotificationChannelsPanel({ workspaceId }: { workspaceId: string
                 <Button type="button" variant="ghost" size="sm" disabled={busyId === c.id} onClick={() => test(c)}>
                   Send test
                 </Button>
-                <Button type="button" variant="danger" size="sm" disabled={busyId === c.id} onClick={() => remove(c)}>
+                <ConfirmButton
+                  variant="danger"
+                  size="sm"
+                  busy={busyId === c.id}
+                  error={error}
+                  onConfirm={() => remove(c)}
+                  title={`Remove ${c.type} channel?`}
+                  body="This channel will immediately stop receiving change alerts."
+                >
                   Remove
-                </Button>
+                </ConfirmButton>
               </div>
             </div>
           ))}
           {channels.length === 0 ? (
             <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
-              No channels yet.
+              {loading ? "Loading channels…" : "No channels yet."}
             </p>
           ) : null}
         </div>

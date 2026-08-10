@@ -1,16 +1,14 @@
 export type MonitorMode =
-  | "whole_page"
-  | "css_selector"
-  | "json_field"
-  | "list_items"
-  | "visual";
+  | "page_content"
+  | "site_links"
+  | "product_price";
 
 export type Monitor = {
   id: string;
   workspace_id: string;
   name: string;
   url: string;
-  mode: string;
+  mode: MonitorMode;
   css_selector: string | null;
   schedule_interval_minutes: number;
   timezone: string;
@@ -22,6 +20,17 @@ export type Monitor = {
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
   consecutive_failures?: number;
+  created_at: string;
+  latest_change: LatestChange | null;
+};
+
+export type LatestChange = {
+  id: string;
+  change_category: string | null;
+  ai_summary: string | null;
+  diff_summary: string | null;
+  is_read: boolean;
+  is_noise: boolean;
   created_at: string;
 };
 
@@ -142,20 +151,6 @@ export type SnapshotAccess = {
   byte_size: number | null;
   normalized_text: string;
   created_at: string;
-};
-
-export type ScreenshotItem = {
-  snapshot_id: string;
-  run_id: string | null;
-  captured_at: string;
-  run_status: string | null;
-  http_status: number | null;
-  latency_ms: number | null;
-  content_type: string | null;
-  byte_size: number | null;
-  ahash: string | null;
-  distance_from_previous: number | null;
-  is_first: boolean;
 };
 
 export type BulkImportResponse = {

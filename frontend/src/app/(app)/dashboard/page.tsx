@@ -19,6 +19,33 @@ import type { AlertsSummary, Monitor, Usage } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
+const CHANGE_COLORS: Record<string, string> = {
+  pricing: "bg-emerald-500",
+  availability: "bg-sky-500",
+  legal: "bg-amber-500",
+  content: "bg-violet-500",
+  design: "bg-pink-500",
+  api: "bg-indigo-500",
+  other: "bg-slate-400",
+};
+
+function changeDotClass(cat: string | null): string {
+  if (!cat) return "bg-slate-300 dark:bg-slate-600";
+  return CHANGE_COLORS[cat] ?? "bg-slate-400";
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 export default function DashboardPage() {
   usePageTitle("Overview");
   const [monitors, setMonitors] = useState<Monitor[]>([]);
@@ -127,7 +154,7 @@ export default function DashboardPage() {
       {monitors.length === 0 ? (
         <EmptyState
           title="No monitors yet"
-          body="Create a monitor for a public URL, CSS section, JSON field, or visual screenshot."
+          body="Create a monitor for a public URL — page content, site links, or product price."
           action={
             <Link href="/monitors/new">
               <Button type="button">Create your first monitor</Button>
@@ -139,19 +166,30 @@ export default function DashboardPage() {
           {monitors.slice(0, 8).map((m) => (
             <Link key={m.id} href={`/monitors/${m.id}`} className="block">
               <Card hover className="flex items-center justify-between gap-4 !py-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-200/80 text-sky-600 ring-1 ring-slate-300 dark:bg-slate-800/80 dark:text-sky-400 dark:ring-white/10">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"
-                      />
-                    </svg>
-                  </div>
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${changeDotClass(m.latest_change?.change_category ?? null)}`}
+                    aria-hidden
+                  />
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-900 dark:text-slate-100">{m.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-medium text-slate-900 dark:text-slate-100">{m.name}</p>
+                      {m.latest_change && !m.latest_change.is_read ? <Badge tone="info">new</Badge> : null}
+                    </div>
                     <p className="truncate text-xs text-slate-500 dark:text-slate-500">{m.url}</p>
+                    <p className="mt-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                      {m.latest_change
+                        ? m.latest_change.ai_summary ||
+                          m.latest_change.diff_summary ||
+                          "Content changed"
+                        : "Watching — no changes yet"}
+                    </p>
+                    {m.latest_change ? (
+                      <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">
+                        {relativeTime(m.latest_change.created_at)}
+                        {m.latest_change.is_noise ? " · noise" : ""}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">

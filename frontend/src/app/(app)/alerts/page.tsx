@@ -11,6 +11,7 @@ import {
   ErrorBox,
   Input,
   PageHeader,
+  Select,
   Spinner,
 } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -194,19 +195,21 @@ export default function AlertsPage() {
           aria-label="Search alerts"
           className="h-9 w-full max-w-xs"
         />
-        <select
-          value={monitorFilter}
-          onChange={(e) => setMonitorFilter(e.target.value)}
-          aria-label="Filter by monitor"
-          className="field h-9 max-w-[14rem] flex-1"
-        >
-          <option value="all">All monitors</option>
-          {monitorOptions.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
+        <div className="max-w-[14rem] flex-1">
+          <Select
+            value={monitorFilter}
+            onChange={(e) => setMonitorFilter(e.target.value)}
+            aria-label="Filter by monitor"
+            className="h-9"
+          >
+            <option value="all">All monitors</option>
+            {monitorOptions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </Select>
+        </div>
         <Input
           type="date"
           value={dateFrom}

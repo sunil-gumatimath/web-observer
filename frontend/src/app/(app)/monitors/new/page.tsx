@@ -17,23 +17,19 @@ import type { MonitorMode, SitemapDiscovery as SitemapDiscoveryResult, SitemapIm
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
-function pathLabel(mode: MonitorMode): string {
-  switch (mode) {
-    case "css_selector":
-      return "CSS selector";
-    case "json_field":
-      return "JSON path (e.g. $.price or $.data.items[0].name)";
-    case "list_items":
-      return "List path/selector (JSON path to array, or CSS for HTML list items)";
-    case "visual":
-      return "Optional region CSS selector (empty = full page screenshot)";
-    default:
-      return "Selector";
-  }
+const IGNORE_PRESETS: Record<string, string[]> = {
+  cookies: [".cookie-banner", "#cookie-consent", "[class*='cookie']", "#onetrust-banner-sdk"],
+  ads: [".ads", ".ad-slot", "[id*='google_ads']", "iframe[src*='doubleclick']"],
+  chat: [".intercom-lightweight-app", "#hubspot-messages-iframe-container", "[class*='chat-widget']"],
+};
+
+function needsJs(mode: MonitorMode): boolean {
+  // site_links watches the sitemap over plain HTTP; the others may need a browser.
+  return mode !== "site_links";
 }
 
-function needsPath(mode: MonitorMode): boolean {
-  return mode === "css_selector" || mode === "json_field" || mode === "list_items";
+function showsIgnore(mode: MonitorMode): boolean {
+  return mode === "page_content";
 }
 
 export default function NewMonitorPage() {
@@ -42,8 +38,7 @@ export default function NewMonitorPage() {
   const [createMode, setCreateMode] = useState<"single" | "sitemap">("single");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("https://example.com/");
-  const [mode, setMode] = useState<MonitorMode>("whole_page");
-  const [cssSelector, setCssSelector] = useState("");
+  const [mode, setMode] = useState<MonitorMode>("page_content");
   const [interval, setInterval] = useState(60);
   const [email, setEmail] = useState("");
   const [jsRequired, setJsRequired] = useState(false);
@@ -53,12 +48,6 @@ export default function NewMonitorPage() {
   const [runNow, setRunNow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const IGNORE_PRESETS: Record<string, string[]> = {
-    cookies: [".cookie-banner", "#cookie-consent", "[class*='cookie']", "#onetrust-banner-sdk"],
-    ads: [".ads", ".ad-slot", "[id*='google_ads']", "iframe[src*='doubleclick']"],
-    chat: [".intercom-lightweight-app", "#hubspot-messages-iframe-container", "[class*='chat-widget']"],
-  };
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -78,13 +67,10 @@ export default function NewMonitorPage() {
         name,
         url,
         mode,
-        css_selector:
-          needsPath(mode) || (mode === "visual" && cssSelector)
-            ? cssSelector || null
-            : null,
+        css_selector: null,
         schedule_interval_minutes: interval,
         notification_email: email || undefined,
-        js_required: jsRequired || mode === "visual",
+        js_required: needsJs(mode) ? jsRequired : false,
         watch_note: watchNote.trim() || null,
         ignore_selectors: ignore.length ? ignore : null,
         ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
@@ -110,7 +96,7 @@ export default function NewMonitorPage() {
     <div>
       <PageHeader
         title="Create monitor"
-        description="Text, JSON field, list items, or visual (screenshot) monitoring."
+        description="Watch page content, a site's sitemap links, or a product's price."
       />
       {error ? <ErrorBox message={error} /> : null}
 
@@ -154,7 +140,7 @@ export default function NewMonitorPage() {
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Pricing page"
+              placeholder="e.g. My monitor name"
             />
           </div>
           <div>
@@ -175,33 +161,11 @@ export default function NewMonitorPage() {
               value={mode}
               onChange={(e) => setMode(e.target.value as MonitorMode)}
             >
-              <option value="whole_page">Whole page text</option>
-              <option value="css_selector">CSS selector (HTML section)</option>
-              <option value="json_field">JSON field</option>
-              <option value="list_items">List items (JSON array or HTML list)</option>
-              <option value="visual">Visual (screenshot / perceptual hash)</option>
+              <option value="page_content">Page content (whole page text)</option>
+              <option value="site_links">Site links (sitemap URL changes)</option>
+              <option value="product_price">Product price (price / currency)</option>
             </Select>
           </div>
-          {needsPath(mode) || mode === "visual" ? (
-            <div>
-              <Label htmlFor="selector">{pathLabel(mode)}</Label>
-              <Input
-                id="selector"
-                required={needsPath(mode)}
-                value={cssSelector}
-                onChange={(e) => setCssSelector(e.target.value)}
-                placeholder={
-                  mode === "json_field"
-                    ? "$.price"
-                    : mode === "list_items"
-                      ? "$.items or li.product"
-                      : mode === "visual"
-                        ? "#main (optional)"
-                        : "main .price"
-                }
-              />
-            </div>
-          ) : null}
           <div>
             <Label htmlFor="interval">Check interval (minutes, min 15)</Label>
             <Input
@@ -223,7 +187,7 @@ export default function NewMonitorPage() {
               placeholder="you@company.com"
             />
           </div>
-          {mode !== "visual" ? (
+          {needsJs(mode) ? (
             <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-400 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-white/10">
               <input
                 type="checkbox"
@@ -235,7 +199,7 @@ export default function NewMonitorPage() {
             </label>
           ) : (
             <p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
-              Visual mode always uses the Playwright browser worker.
+              Site links mode reads the sitemap over HTTP and watches for added or removed URLs.
             </p>
           )}
           <div>
@@ -250,7 +214,7 @@ export default function NewMonitorPage() {
               Focuses AI summaries and helps you remember intent.
             </p>
           </div>
-          {mode === "whole_page" || mode === "css_selector" ? (
+          {showsIgnore(mode) ? (
             <>
               <div>
               <Label htmlFor="ignore">Ignore CSS selectors (one per line, optional)</Label>
@@ -338,7 +302,7 @@ function SitemapDiscovery({
   const [siteUrl, setSiteUrl] = useState("https://example.com/");
   const [discovery, setDiscovery] = useState<SitemapDiscoveryResult | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [mode, setMode] = useState<MonitorMode>("whole_page");
+  const [mode, setMode] = useState<MonitorMode>("site_links");
   const [interval, setInterval] = useState(60);
   const [jsRequired, setJsRequired] = useState(false);
   const [ignoreSelectors, setIgnoreSelectors] = useState("");
@@ -394,7 +358,7 @@ function SitemapDiscovery({
         urls: [...selected],
         mode,
         schedule_interval_minutes: interval,
-        js_required: jsRequired,
+        js_required: needsJs(mode) ? jsRequired : false,
         ignore_selectors: ignore.length ? ignore : null,
         ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
       });
@@ -497,11 +461,9 @@ function SitemapDiscovery({
                     value={mode}
                     onChange={(e) => setMode(e.target.value as MonitorMode)}
                   >
-                    <option value="whole_page">Whole page text</option>
-                    <option value="css_selector">CSS selector (HTML section)</option>
-                    <option value="json_field">JSON field</option>
-                    <option value="list_items">List items</option>
-                    <option value="visual">Visual (screenshot)</option>
+                    <option value="page_content">Page content (whole page text)</option>
+                    <option value="site_links">Site links (sitemap URL changes)</option>
+                    <option value="product_price">Product price (price / currency)</option>
                   </Select>
                 </div>
                 <div>
@@ -516,7 +478,7 @@ function SitemapDiscovery({
                   />
                 </div>
               </div>
-              {mode !== "visual" ? (
+              {needsJs(mode) ? (
                 <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
                   <input
                     type="checkbox"
@@ -526,6 +488,55 @@ function SitemapDiscovery({
                   />
                   JavaScript rendering required (Playwright)
                 </label>
+              ) : null}
+
+              {showsIgnore(mode) ? (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="sm-ignore">Ignore CSS selectors (one per line, optional)</Label>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      {Object.entries(IGNORE_PRESETS).map(([key, sels]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className="rounded-md border border-[var(--border)] px-2 py-1 text-xs capitalize text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+                          onClick={() => {
+                            const cur = new Set(
+                              ignoreSelectors
+                                .split("\n")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            );
+                            sels.forEach((s) => cur.add(s));
+                            setIgnoreSelectors([...cur].join("\n"));
+                          }}
+                        >
+                          + {key}
+                        </button>
+                      ))}
+                    </div>
+                    <Textarea
+                      id="sm-ignore"
+                      rows={3}
+                      value={ignoreSelectors}
+                      onChange={(e) => setIgnoreSelectors(e.target.value)}
+                      placeholder={".cookie-banner\n#ads"}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="sm-ignoreRegex">Ignore text by regex (one per line, optional)</Label>
+                    <Textarea
+                      id="sm-ignoreRegex"
+                      rows={3}
+                      value={ignoreRegexes}
+                      onChange={(e) => setIgnoreRegexes(e.target.value)}
+                      placeholder={"Price updated .* ago\nLast (login|visited): .*"}
+                    />
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                      Matched text is stripped before diffing — useful for timestamps or volatile counters.
+                    </p>
+                  </div>
+                </div>
               ) : null}
 
               <div className="flex gap-2 border-t border-[var(--border)] pt-5">

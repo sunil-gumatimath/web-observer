@@ -113,7 +113,7 @@ export default function DocsPage() {
           <DocSection id="how-it-works" title="How it works">
             <ol className="space-y-4">
               <Step n={1} title="You create a monitor">
-                Pick a URL, a mode (whole page, CSS section, JSON field, list, or visual), and how
+                Pick a URL, a mode (page content, site links, or product price), and how
                 often to check.
               </Step>
               <Step n={2} title="A worker fetches the page">
@@ -358,20 +358,16 @@ export default function DocsPage() {
             </p>
             <pre className="overflow-x-auto rounded-xl border border-[var(--border)] bg-slate-50 p-3 font-mono text-xs text-slate-700 dark:bg-slate-950/60 dark:text-slate-300">
               {`name,url,mode,schedule_interval_minutes
-Example,https://example.com/,whole_page,60
-Pricing,https://example.com/pricing,css_selector,30`}
+Example,https://example.com/,page_content,60
+Pricing,https://example.com/pricing,product_price,30`}
             </pre>
             <p>
               Valid modes:{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">whole_page</code>
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">page_content</code>
               ,{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">site_links</code>
               ,{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">json_field</code>
-              ,{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">list_items</code>
-              ,{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">visual</code>.
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">product_price</code>.
             </p>
           </DocSection>
 
