@@ -50,6 +50,20 @@ def list_notification_channels(
     )
 
 
+def _validate_channel_address(channel_type: str, address: str) -> None:
+    if channel_type not in ("slack", "discord"):
+        return
+    if not address.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Webhook address must be an https URL")
+    try:
+        validate_url_for_fetch(address, resolve_dns=True)
+    except SSRFError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": exc.code, "message": str(exc)},
+        ) from exc
+
+
 @router.post(
     "/workspaces/{workspace_id}/notification-channels",
     response_model=NotificationChannelOut,
@@ -63,16 +77,7 @@ def create_notification_channel(
     db: Db,
     _workspace: Workspace = Depends(require_role("member")),
 ) -> NotificationChannel:
-    if body.type in ("slack", "discord"):
-        address = str(body.address)
-        if address.startswith(("http://", "https://")):
-            try:
-                validate_url_for_fetch(address, resolve_dns=True)
-            except SSRFError as exc:
-                raise HTTPException(
-                    status_code=400,
-                    detail={"error_code": exc.code, "message": str(exc)},
-                ) from exc
+    _validate_channel_address(body.type, str(body.address))
     existing = db.scalar(
         select(NotificationChannel).where(
             NotificationChannel.workspace_id == workspace_id,
@@ -119,7 +124,9 @@ def update_notification_channel(
         raise HTTPException(status_code=404, detail="Notification channel not found")
 
     data = body.model_dump(exclude_unset=True)
+    channel_type = (channel.type or "email").lower()
     if "address" in data and data["address"] is not None:
+        _validate_channel_address(channel_type, str(data["address"]))
         channel.address = str(data["address"])
     if "enabled" in data and data["enabled"] is not None:
         channel.enabled = data["enabled"]

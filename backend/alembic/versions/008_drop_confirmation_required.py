@@ -24,5 +24,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.add_column(
         "monitors",
-        sa.Column("confirmation_required", sa.Boolean(), nullable=False),
+        sa.Column(
+            "confirmation_required",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.false(),
+        ),
     )
+    op.alter_column("monitors", "confirmation_required", server_default=None)

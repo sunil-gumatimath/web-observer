@@ -112,6 +112,15 @@ def _capture_screenshot_inline(
                     ignore_https_errors=False,
                 )
                 page = context.new_page()
+
+                def _route_handler(route, request):  # type: ignore[no-untyped-def]
+                    try:
+                        validate_url_for_fetch(request.url, resolve_dns=True)
+                    except Exception:
+                        return route.abort()
+                    return route.continue_()
+
+                page.route("**/*", _route_handler)
                 page.goto(validated.url, wait_until="domcontentloaded", timeout=timeout_ms)
                 try:
                     page.wait_for_load_state("networkidle", timeout=min(20_000, timeout_ms))

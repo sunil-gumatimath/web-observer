@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import WebhookDelivery, WebhookEndpoint
-from app.security.ssrf import SSRFError, validate_url_for_fetch
+from app.security.ssrf import PinnedIPTransport, SSRFError, validate_url_for_fetch
 
 logger = logging.getLogger(__name__)
 
@@ -98,21 +98,32 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
         delivery.status = "failed"
         delivery.last_error = f"blocked_address: {exc}"[:2000]
         db.commit()
-        logger.warning("webhook_delivery_blocked id=%s url=%s error=%s", delivery_id, endpoint.url, exc)
+        logger.warning(
+            "webhook_delivery_blocked id=%s url=%s error=%s",
+            delivery_id,
+            endpoint.url,
+            exc,
+        )
         return
 
     try:
-        resp = httpx.post(
-            endpoint.url,
-            content=body,
-            headers={
-                "Content-Type": "application/json",
-                "X-MTW-Timestamp": ts,
-                "X-MTW-Signature": sig,
-                "User-Agent": "WebObserver-Webhooks/1.0",
-            },
-            timeout=15.0,
+        validated = validate_url_for_fetch(endpoint.url, resolve_dns=True)
+        hostname = httpx.URL(endpoint.url).host
+        transport = PinnedIPTransport(
+            pinned_ip=validated.resolved_ips[0],
+            server_hostname=hostname,
         )
+        with httpx.Client(transport=transport, timeout=15.0, follow_redirects=False) as client:
+            resp = client.post(
+                endpoint.url,
+                content=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-MTW-Timestamp": ts,
+                    "X-MTW-Signature": sig,
+                    "User-Agent": "WebObserver-Webhooks/1.0",
+                },
+            )
         delivery.response_code = resp.status_code
         if 200 <= resp.status_code < 300:
             delivery.status = "sent"

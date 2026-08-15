@@ -80,7 +80,10 @@ def _fetch_url_browser_inline(
                     if request.resource_type in _BLOCKED_RESOURCE_TYPES:
                         return route.abort()
                     try:
-                        validate_url_for_fetch(request.url, resolve_dns=False)
+                        # Resolve every browser request, not just the initial URL.
+                        # This blocks private destinations reached through redirects,
+                        # scripts, iframes, and DNS changes.
+                        validate_url_for_fetch(request.url, resolve_dns=True)
                     except SSRFError:
                         return route.abort()
                     return route.continue_()
@@ -247,8 +250,13 @@ def _fetch_url_browser_subprocess(
         meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
         html = content.decode("utf-8", errors="replace")
         latency_ms = int(meta.get("latency_ms") or int((time.perf_counter() - started) * 1000))
+        final_url = str(meta.get("final_url") or url)
+        try:
+            validate_url_for_fetch(final_url, resolve_dns=True)
+        except SSRFError as exc:
+            raise FetchError(exc.code, f"Final navigation URL blocked: {exc}") from exc
         return FetchResult(
-            final_url=str(meta.get("final_url") or url),
+            final_url=final_url,
             status_code=int(meta.get("status_code") or 200),
             content=content,
             text=html,
