@@ -11,7 +11,7 @@ import httpx
 
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import NotificationChannel, NotificationDelivery, NotificationOutbox
+from app.models import NotificationChannel, NotificationDelivery, NotificationOutbox, Workspace
 from app.models.entities import OutboxStatus
 from app.services.email import send_email
 from app.services.usage import increment_notifications
@@ -79,7 +79,18 @@ def deliver_outbox_message(outbox_id: str) -> None:
             elif channel_type == "discord":
                 provider_id = _send_discord(to_addr, title, plain_body)
             else:
-                provider_id = send_email(to=to_addr, subject=title, text=plain_body)
+                # Per-account (bring-your-own) Resend credentials override the
+                # server-managed defaults when present.
+                workspace = db.get(Workspace, outbox.workspace_id)
+                ws_api_key = workspace.resend_api_key if workspace else None
+                ws_from = workspace.email_from if workspace else None
+                provider_id = send_email(
+                    to=to_addr,
+                    subject=title,
+                    text=plain_body,
+                    api_key=ws_api_key,
+                    from_addr_override=ws_from,
+                )
 
             outbox.status = OutboxStatus.SENT.value
             outbox.last_error = None

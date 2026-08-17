@@ -8,12 +8,14 @@ from app.models.entities import (
     NotificationChannel,
     NotificationDelivery,
     NotificationOutbox,
+    ShareLink,
     Snapshot,
     UsageCounter,
     User,
     WebhookDelivery,
     WebhookEndpoint,
     Workspace,
+    WorkspaceInvite,
     WorkspaceMember,
 )
 
@@ -29,6 +31,8 @@ __all__ = [
     "NotificationChannel",
     "NotificationOutbox",
     "NotificationDelivery",
+    "ShareLink",
+    "WorkspaceInvite",
     "UsageCounter",
     "ApiKey",
     "AuditLog",

@@ -22,16 +22,22 @@ def send_email(
     subject: str,
     text: str,
     html_body: str | None = None,
+    api_key: str | None = None,
+    from_addr_override: str | None = None,
 ) -> str:
     """Send an email via Resend. Returns provider message id.
 
-    If RESEND_API_KEY is empty, logs to console and returns "console".
+    ``api_key``/``from_addr_override`` allow per-account (bring-your-own)
+    credentials to override the server-managed ``RESEND_API_KEY``/``EMAIL_FROM``.
+
+    If no key resolves (fallback is empty), logs to console and returns "console".
     """
     settings = get_settings()
     to_list = [to] if isinstance(to, str) else list(to)
-    from_addr = settings.email_from or "onboarding@resend.dev"
+    from_addr = from_addr_override or settings.email_from or "onboarding@resend.dev"
+    effective_key = api_key or settings.resend_api_key
 
-    if not settings.resend_api_key:
+    if not effective_key:
         logger.info(
             "email_console from=%s to=%s subject=%s\n%s",
             from_addr,
@@ -43,7 +49,7 @@ def send_email(
 
     import resend
 
-    resend.api_key = settings.resend_api_key
+    resend.api_key = effective_key
 
     if html_body is None:
         # Simple HTML wrapper from plain text

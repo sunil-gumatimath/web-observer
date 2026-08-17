@@ -35,6 +35,8 @@ from app.rate_limit import limiter
 from app.schemas import (
     AlertInboxItem,
     AlertsSummary,
+    BrandInfoOut,
+    BrandInfoRequest,
     ChangeEventDetail,
     ChangeEventOut,
     LatestChangeOut,
@@ -52,6 +54,7 @@ from app.services.diffing import unified_diff
 from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_url
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
+from app.services.branding import fetch_brand_info, store_brand_assets
 from app.services.bulk_import import import_monitors
 from app.workers.enqueue import enqueue_check
 
@@ -188,6 +191,7 @@ def create_monitor(
         watch_note=(body.watch_note or None),
         ignore_selectors=body.ignore_selectors,
         ignore_regexes=body.ignore_regexes,
+        screenshots_enabled=body.screenshots_enabled,
         base_interval_minutes=body.schedule_interval_minutes,
     )
     db.add(monitor)
@@ -305,6 +309,56 @@ def create_from_sitemap(
         "errors": result.errors,
         "created_count": len(result.created),
     }
+
+
+@router.post(
+    "/workspaces/{workspace_id}/monitors/brand-info",
+    response_model=BrandInfoOut,
+)
+def monitor_brand_info(
+    workspace_id: UUID,
+    body: BrandInfoRequest,
+    db: Db,
+    _workspace: Workspace = Depends(require_workspace_member),
+) -> BrandInfoOut:
+    """Preview brand metadata for a URL without creating a monitor.
+
+    Authentication required (brand lookup is only a convenience); the result is
+    plaintext meta + remote image URLs that the client can show before saving.
+    """
+    try:
+        validate_url_for_fetch(body.url, resolve_dns=True)
+    except SSRFError as exc:
+        raise HTTPException(
+            status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+        ) from exc
+    meta = fetch_brand_info(body.url)
+    return BrandInfoOut(
+        title=meta.title,
+        description=meta.description,
+        logo_url=next(iter(meta.logo_candidates), None),
+        hero_url=next(iter(meta.hero_candidates), None),
+        assets_available=True,
+    )
+
+
+@router.post(
+    "/workspaces/{workspace_id}/monitors/{monitor_id}/brand",
+    response_model=MonitorOut,
+)
+def enrich_monitor_brand(
+    workspace_id: UUID,
+    monitor_id: UUID,
+    db: Db,
+    _workspace: Workspace = Depends(require_role("member")),
+) -> Monitor:
+    """Discover and re-host brand assets (logo/hero/title/description) for a monitor."""
+    monitor = _get_monitor(db, workspace_id, monitor_id)
+    meta = fetch_brand_info(monitor.url)
+    monitor.brand = store_brand_assets(monitor, meta)
+    db.commit()
+    db.refresh(monitor)
+    return monitor
 
 
 @router.patch(

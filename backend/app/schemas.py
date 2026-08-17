@@ -37,12 +37,29 @@ class WorkspaceUpdate(BaseModel):
     digest_cadence: str | None = None
     digest_hour_utc: int | None = Field(default=None, ge=0, le=23)
     ai_summaries_enabled: bool | None = None
+    # Per-account (bring-your-own) integration keys. Sent to override the
+    # server-managed defaults; the stored keys are never returned in API output.
+    llm_api_key: str | None = None
+    llm_api_base: str | None = None
+    llm_model: str | None = None
+    resend_api_key: str | None = None
+    email_from: str | None = None
 
     @field_validator("digest_cadence")
     @classmethod
     def validate_cadence(cls, v: str | None) -> str | None:
         if v is not None and v not in ("none", "daily", "weekly"):
             raise ValueError("digest_cadence must be none, daily, or weekly")
+        return v
+
+    @field_validator("llm_api_base")
+    @classmethod
+    def validate_llm_base(cls, v: str | None) -> str | None:
+        if v is not None and v.strip():
+            if not (v.startswith("http://") or v.startswith("https://")):
+                raise ValueError("llm_api_base must be an http(s) URL")
+        if v == "":  # allow clearing
+            return ""
         return v
 
 
@@ -72,6 +89,7 @@ class MonitorCreate(BaseModel):
     watch_note: str | None = Field(default=None, max_length=2000)
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
+    screenshots_enabled: bool = False
 
     @field_validator("mode")
     @classmethod
@@ -109,6 +127,7 @@ class MonitorUpdate(BaseModel):
     watch_note: str | None = Field(default=None, max_length=2000)
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
+    screenshots_enabled: bool | None = None
 
     @field_validator("mode")
     @classmethod
@@ -152,6 +171,8 @@ class MonitorOut(BaseModel):
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
     consecutive_failures: int = 0
+    screenshots_enabled: bool = False
+    brand: dict | None = None
     created_at: datetime
     latest_change: LatestChangeOut | None = None
 
@@ -297,3 +318,88 @@ class NotificationChannelOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# webdog.ai parity: public share links + team invite links
+# ---------------------------------------------------------------------------
+
+
+class ShareLinkCreate(BaseModel):
+    expires_days: int | None = Field(default=None, gt=0, le=365)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ShareLinkOut(BaseModel):
+    id: uuid.UUID
+    monitor_id: uuid.UUID
+    token: str
+    url: str
+    enabled: bool
+    expires_at: datetime | None
+    created_at: datetime
+    note: str | None = None
+
+
+class PublicShareMonitorOut(BaseModel):
+    monitor_id: uuid.UUID
+    name: str
+    url: str
+    mode: str
+    watch_note: str | None = None
+    brand: dict | None = None
+
+
+class PublicShareAlertOut(BaseModel):
+    id: uuid.UUID
+    change_category: str | None = None
+    ai_summary: str | None = None
+    diff_summary: str | None = None
+    diff: str | None = None
+    new_hash: str
+    previous_hash: str | None = None
+    created_at: datetime
+
+
+class PublicShareOut(BaseModel):
+    monitor: PublicShareMonitorOut
+    alerts: list[PublicShareAlertOut]
+    total: int
+
+
+class WorkspaceInviteCreate(BaseModel):
+    role: str = Field(default="member", max_length=32)
+    max_uses: int = Field(default=5, ge=1, le=100)
+    expires_days: int | None = Field(default=7, gt=0, le=365)
+
+
+class WorkspaceInviteOut(BaseModel):
+    id: uuid.UUID
+    token: str
+    url: str
+    role: str
+    max_uses: int
+    use_count: int
+    expires_at: datetime | None
+    created_at: datetime
+
+
+class WorkspaceInviteRedeemOut(BaseModel):
+    workspace_id: uuid.UUID
+    workspace_name: str
+    role: str
+    message: str
+
+
+class BrandInfoRequest(BaseModel):
+    url: str
+
+
+class BrandInfoOut(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    logo_url: str | None = None
+    hero_url: str | None = None
+    # Whether brand asset re-hosting is available for this monitor (always true;
+    # the field is a forward-compat hint for the UI).
+    assets_available: bool = True

@@ -92,10 +92,51 @@ def update_workspace(
     db: Db,
     workspace: Workspace = Depends(require_role("admin")),
 ) -> Workspace:
-    allowed = {"name", "digest_cadence", "digest_hour_utc", "ai_summaries_enabled"}
-    for key, value in body.model_dump(exclude_unset=True).items():
-        if key in allowed:
-            setattr(workspace, key, value)
+    allowed = {
+        "name",
+        "digest_cadence",
+        "digest_hour_utc",
+        "ai_summaries_enabled",
+        "llm_api_key",
+        "llm_api_base",
+        "llm_model",
+        "resend_api_key",
+        "email_from",
+    }
+    data = body.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        if key not in allowed:
+            continue
+        # Blank strings clear a stored secret; otherwise persist as-is.
+        if key in ("llm_api_key", "resend_api_key", "llm_api_base", "email_from"):
+            if isinstance(value, str) and value.strip() == "":
+                setattr(workspace, key, None)
+                continue
+            if value is None:
+                setattr(workspace, key, None)
+                continue
+        setattr(workspace, key, value)
     db.commit()
     db.refresh(workspace)
     return workspace
+
+
+@router.get("/workspaces/{workspace_id}/settings")
+def get_workspace_settings(
+    workspace_id: UUID,
+    db: Db,
+    workspace: Workspace = Depends(require_workspace_member),
+) -> dict:
+    from app.config import get_settings
+
+    server = get_settings()
+    return {
+        "workspace_id": str(workspace.id),
+        "ai_summaries_enabled": workspace.ai_summaries_enabled,
+        # Masked booleans — the actual stored keys are never returned.
+        "as_llm_api_key": bool(workspace.llm_api_key),
+        "llm_api_base": workspace.llm_api_base or server.llm_api_base,
+        "llm_model": workspace.llm_model or server.llm_model,
+        "as_resend_api_key": bool(workspace.resend_api_key),
+        "email_from": workspace.email_from or server.email_from,
+    }

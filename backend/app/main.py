@@ -58,12 +58,14 @@ from app.routers.enterprise import router as enterprise_router  # noqa: E402
 from app.routers.internal import router as internal_router  # noqa: E402
 from app.routers.monitors import router as monitors_router  # noqa: E402
 from app.routers.notifications import router as notifications_router  # noqa: E402
+from app.routers.sharing import router as sharing_router  # noqa: E402
 from app.routers.workspaces import router as workspaces_router  # noqa: E402
 
 app.include_router(enterprise_router)
 app.include_router(workspaces_router)
 app.include_router(monitors_router)
 app.include_router(notifications_router)
+app.include_router(sharing_router)
 app.include_router(internal_router)
 
 

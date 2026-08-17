@@ -337,6 +337,15 @@ def _create_change_event(
     workspace = db.get(Workspace, monitor.workspace_id)
     ai_enabled = bool(workspace.ai_summaries_enabled) if workspace is not None else True
     watch_note = getattr(monitor, "watch_note", None)
+    llm_cfg = None
+    if workspace is not None and (
+        workspace.llm_api_key or workspace.llm_api_base or workspace.llm_model
+    ):
+        llm_cfg = {
+            "api_key": workspace.llm_api_key,
+            "api_base": workspace.llm_api_base,
+            "model": workspace.llm_model,
+        }
     enrichment = enrich_change(
         monitor_name=monitor.name,
         url=monitor.url,
@@ -345,6 +354,7 @@ def _create_change_event(
         diff_text=ctx.diff_text,
         enabled=ai_enabled,
         watch_note=watch_note,
+        llm=llm_cfg,
     )
     ctx.enrichment = enrichment
 
@@ -363,6 +373,7 @@ def _create_change_event(
             diff_text=ctx.diff_text,
             watch_note=watch_note,
             suggested_category=enrichment.category,
+            llm=llm_cfg,
         )
         if is_noise and triage_reason:
             enrichment = AIEnrichment(
@@ -414,6 +425,21 @@ def _queue_notifications(
     if change.is_noise:
         return [], []
 
+    # webdog.ai parity: optional screenshot attached to every check/alert.
+    # Best-effort and non-fatal — a missing Playwright browser must never fail
+    # the content check. opt-in via monitor.screenshots_enabled.
+    screenshot_path: str | None = None
+    if monitor.screenshots_enabled:
+        try:
+            from app.services.visual import capture_screenshot
+
+            cap = capture_screenshot(monitor.url, timeout_seconds=30, full_page=True)
+            screenshot_path = f"screenshots/{monitor.id}/{change.run_id}.png"
+            put_bytes(key=screenshot_path, data=cap.png_bytes, content_type="image/png")
+        except Exception:  # noqa: BLE001
+            logger.warning("screenshot_capture_failed monitor_id=%s", monitor.id)
+            screenshot_path = None
+
     channels = db.scalars(
         select(NotificationChannel).where(
             NotificationChannel.workspace_id == monitor.workspace_id,
@@ -438,6 +464,7 @@ def _queue_notifications(
                 "diff": (ctx.diff_text or "")[:50_000],
                 "mode": monitor.mode,
                 "watch_note": getattr(monitor, "watch_note", None),
+                "screenshot_path": screenshot_path,
                 "change_event_id": str(change.id),
                 "channel_type": channel.type,
                 "to": channel.address,
@@ -469,6 +496,7 @@ def _queue_notifications(
             "ai_summary": enrichment.summary,
             "category": enrichment.category,
             "mode": monitor.mode,
+            "screenshot_path": screenshot_path,
         },
         idempotency_base=f"change:{change.id}",
     )

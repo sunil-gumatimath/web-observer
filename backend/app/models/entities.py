@@ -78,6 +78,13 @@ class Workspace(Base):
     plan_status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Per-account (bring-your-own) integration keys. When set they override the
+    # server-managed defaults below (webdog.ai-style "managed or self-serve").
+    llm_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_api_base: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    resend_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email_from: Mapped[str | None] = mapped_column(String(320), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -128,6 +135,11 @@ class Monitor(Base):
     watch_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     ignore_selectors: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     ignore_regexes: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    # webdog.ai-style brand-aware dashboard info (auto-filled on add):
+    # {title, description, logo_url, hero_url} with URLs pointing at our storage.
+    brand: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Capture a page screenshot on every check and attach it to change alerts.
+    screenshots_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     consecutive_unchanged: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     base_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -351,6 +363,51 @@ class AuditLog(Base):
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     meta: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShareLink(Base):
+    """Public read-only share link for a single monitor (webdog.ai-style).
+
+    Only the hashed token is stored; the opaque token is shown in the share URL.
+    """
+
+    __tablename__ = "share_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    monitor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    token_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkspaceInvite(Base):
+    """Expiring, multi-use team invite link (webdog.ai-style).
+
+    Only the hashed token is stored; the opaque token is shown in the invite URL.
+    """
+
+    __tablename__ = "workspace_invites"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    token_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")
+    max_uses: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    use_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
