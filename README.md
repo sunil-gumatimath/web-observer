@@ -158,6 +158,11 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Plans / billing | free / pro / business / enterprise tiers; Stripe or simulated checkout (solo: skip Stripe) |
 | Adaptive scheduling | Interval auto-stretches after quiet runs |
 | Retention | Background `retention_job` purges old runs / snapshots (default 90 days) |
+| Brand-aware dashboards | Auto-detected title/description/logo/hero per monitor; re-hosted brand assets on the dashboard and public share pages |
+| Bring-your-own keys | Per-workspace LLM (api key/base/model) and Resend (api key + sender) overrides; falls back to global keys |
+| Public share links | Opaque-token read-only share links for a monitor's change history (token hashed at rest, revocable) |
+| Team invites | Opaque-token workspace invite links with role / max-uses / expiry (token hashed at rest) |
+| Opt-in screenshots | `screenshots_enabled` captures a screenshot on every check (off by default to avoid forcing Playwright on text monitors) |
 
 The web UI (Next.js) exposes: **Dashboard**, **Monitors** (list / new / edit / detail), **Changes** (per-change diff), **Alerts** (inbox), **Import** (bulk CSV/JSON), **Settings** (channels, workspace, billing), and an in-app **Docs** page.
 
@@ -180,3 +185,15 @@ Quick smoke test of a running stack (API + worker must be up):
 ## Stack
 
 Python / FastAPI · Neon Postgres · Redis / Dramatiq · Next.js · Clerk · Resend · local disk snapshots · Playwright
+
+### webdog.ai-parity additions (post-roadmap)
+
+These extend the platform beyond the original roadmap:
+
+- **Brand-aware dashboards** — each monitor auto-detects a title, description, logo, and hero image (served via a public brand-asset endpoint so they render on the dashboard and the public share page). Trigger detection when creating a monitor or via the per-monitor *Brand* action.
+- **Bring-your-own keys** — a workspace owner can set per-workspace LLM keys (`llm_api_key` / `llm_api_base` / `llm_model`) and Resend keys (`resend_api_key` / `email_from`) in **Settings → Workspace keys**. AI summaries and email alerts use the workspace keys when present, otherwise the global keys. Settings values are masked on read.
+- **Public share links** — from a monitor's detail page, *Share* creates an opaque-token link (`/share/{token}`) that anyone can open to view the monitor's change history. The token is hashed at rest (only its prefix is stored) and the link is revocable.
+- **Team invites** — **Settings → Team** generates opaque-token invite links with a role, max uses, and expiry. Tokens are hashed at rest.
+- **Opt-in screenshots** — set `screenshots_enabled` on a monitor (UI: create monitor → screenshot option) to capture a screenshot on every check. Off by default so text monitors don't require Playwright.
+
+> Database: the columns/tables for these features are applied by `backend/scripts/apply_007.py` (idempotent; run with `PYTHONPATH=.` from `backend/`). New tables are also auto-created by `Base.metadata.create_all` at API startup.
