@@ -20,8 +20,27 @@ export type Monitor = {
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
   consecutive_failures?: number;
+  screenshots_enabled?: boolean;
+  brand?: MonitorBrand | null;
   created_at: string;
   latest_change: LatestChange | null;
+};
+
+export type MonitorBrand = {
+  title?: string | null;
+  description?: string | null;
+  logo_path?: string | null;
+  hero_path?: string | null;
+  logo_url?: string | null;
+  hero_url?: string | null;
+};
+
+export type BrandInfo = {
+  title: string | null;
+  description: string | null;
+  logo_url: string | null;
+  hero_url: string | null;
+  assets_available: boolean;
 };
 
 export type LatestChange = {
@@ -200,4 +219,93 @@ export type SitemapImportResult = {
   skipped: Array<{ row: string; reason?: string; url?: string }>;
   errors: Array<{ row: string; error: string }>;
   created_count: number;
+};
+
+export type ShareLinkCreated = {
+  id: string;
+  monitor_id: string;
+  token: string;
+  url: string;
+  enabled: boolean;
+  expires_at: string | null;
+  created_at: string;
+  note?: string | null;
+};
+
+export type ShareLinkRow = {
+  id: string;
+  monitor_id: string;
+  token_prefix: string;
+  enabled: boolean;
+  expires_at: string | null;
+  created_at: string;
+};
+
+export type InviteCreated = {
+  id: string;
+  token: string;
+  url: string;
+  role: string;
+  max_uses: number;
+  use_count: number;
+  expires_at: string | null;
+  created_at: string;
+};
+
+export type InviteRow = {
+  id: string;
+  token_prefix: string;
+  role: string;
+  max_uses: number;
+  use_count: number;
+  expires_at: string | null;
+  created_at: string;
+};
+
+export type WorkspaceSettings = {
+  workspace_id: string;
+  ai_summaries_enabled: boolean;
+  as_llm_api_key: boolean;
+  llm_api_base: string | null;
+  llm_model: string | null;
+  as_resend_api_key: boolean;
+  email_from: string | null;
+};
+
+export type PublicShareAlert = {
+  id: string;
+  change_category: string | null;
+  ai_summary: string | null;
+  diff_summary: string | null;
+  diff: string | null;
+  new_hash: string;
+  previous_hash: string | null;
+  created_at: string;
+};
+
+export type PublicShare = {
+  monitor: {
+    monitor_id: string;
+    name: string;
+    url: string;
+    mode: string;
+    watch_note: string | null;
+    brand: MonitorBrand | null;
+  };
+  alerts: PublicShareAlert[];
+  total: number;
+};
+
+export type InvitePreview = {
+  invite_id: string;
+  workspace_id: string;
+  workspace_name: string;
+  role: string;
+};
+
+export type InviteRedeem = {
+  workspace_id: string;
+  workspace_name: string;
+  role: string;
+  message: string;
 };

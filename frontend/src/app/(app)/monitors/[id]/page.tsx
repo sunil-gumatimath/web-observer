@@ -53,6 +53,10 @@ function MonitorDetailInner() {
 	const [busy, setBusy] = useState(false);
 	const [loading, setLoading] = useState(true);
 
+	const [shareUrl, setShareUrl] = useState<string | null>(null);
+	const [shareBusy, setShareBusy] = useState(false);
+	const [shareMsg, setShareMsg] = useState<string | null>(null);
+
 	const [pollSlow, setPollSlow] = useState(false);
 	const [pollTimedOut, setPollTimedOut] = useState(false);
 	const [previewText, setPreviewText] = useState<string | null>(null);
@@ -237,6 +241,30 @@ function MonitorDetailInner() {
 		}
 	}
 
+	async function handleShare() {
+		if (!workspaceId || !monitor) return;
+		setShareBusy(true);
+		setShareMsg(null);
+		setError(null);
+		try {
+			const created = await api.createShareLink(workspaceId, monitor.id);
+			setShareUrl(`${window.location.origin}${created.url}`);
+			setShareMsg("Share link created — anyone with this URL can view changes (shown only once).");
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Failed to create share link");
+		} finally {
+			setShareBusy(false);
+		}
+	}
+
+	function copyShare() {
+		if (!shareUrl) return;
+		navigator.clipboard?.writeText(shareUrl).then(
+			() => setShareMsg("Copied to clipboard."),
+			() => setShareMsg(shareUrl),
+		);
+	}
+
 	if (loading) return <Spinner />;
 	if (!monitor) {
 		return <ErrorBox message={error ?? "Monitor not found"} />;
@@ -303,6 +331,13 @@ function MonitorDetailInner() {
 								Resume
 							</Button>
 						)}
+						<Button
+							variant="secondary"
+							disabled={busy || shareBusy}
+							onClick={handleShare}
+						>
+							{shareBusy ? "Creating…" : "Share"}
+						</Button>
 						<ConfirmButton
 							variant="danger"
 							busy={busy}
@@ -313,10 +348,34 @@ function MonitorDetailInner() {
 						>
 							Delete
 						</ConfirmButton>
-					</>
-				}
+						</>
+						}
 			/>
 			{error ? <ErrorBox message={error} /> : null}
+
+			{shareUrl ? (
+				<Card className="mb-8 border-emerald-500/25 bg-emerald-500/5 dark:bg-emerald-500/[0.06]">
+					<div className="flex flex-wrap items-start justify-between gap-3">
+						<div className="min-w-0 flex-1">
+							<p className="section-label">Public share link</p>
+							<a
+								href={shareUrl}
+								target="_blank"
+								rel="noreferrer"
+								className="mt-1 block truncate text-sm text-sky-600 hover:underline dark:text-sky-400"
+							>
+								{shareUrl}
+							</a>
+						</div>
+						<Button type="button" size="sm" variant="secondary" onClick={copyShare}>
+							Copy
+						</Button>
+					</div>
+					{shareMsg ? (
+						<p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{shareMsg}</p>
+					) : null}
+				</Card>
+			) : null}
 
 			{showResultCard ? (
 				<Card className="mb-8 border-sky-500/25 bg-sky-500/5 dark:bg-sky-500/[0.06]">

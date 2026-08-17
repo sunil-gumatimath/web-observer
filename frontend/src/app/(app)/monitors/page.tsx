@@ -13,7 +13,7 @@ import {
 	PageHeader,
 	Spinner,
 } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, brandAssetUrl } from "@/lib/api";
 import type { Monitor } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -96,12 +96,21 @@ export default function MonitorsPage() {
 									onClick={() => router.push(`/monitors/${m.id}`)}
 								>
 									<td className="px-4 py-3.5">
-										<Link
-											href={`/monitors/${m.id}`}
-											className="font-medium text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-300"
-										>
-											{m.name}
-										</Link>
+										<div className="flex items-center gap-2.5">
+											{brandAssetUrl(m.brand?.logo_path) ? (
+												<img
+													src={brandAssetUrl(m.brand?.logo_path) ?? undefined}
+													alt=""
+													className="h-6 w-6 rounded object-contain"
+												/>
+											) : null}
+											<Link
+												href={`/monitors/${m.id}`}
+												className="font-medium text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-300"
+											>
+												{m.name}
+											</Link>
+										</div>
 									</td>
 									<td className="max-w-xs truncate px-4 py-3.5 text-slate-600 dark:text-slate-400">
 										{m.url}

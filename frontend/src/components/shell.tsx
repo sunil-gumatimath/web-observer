@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { api } from "@/lib/api";
 import { config } from "@/lib/config";
+import { invalidateWorkspace, setStoredWorkspaceId } from "@/lib/workspace";
 
 const nav = [
 	{
@@ -104,6 +106,52 @@ function ClerkUserControls() {
 	);
 }
 
+/** webdog.ai-parity account switcher — switch between workspaces you belong to. */
+function WorkspaceSwitcher() {
+	const [workspaces, setWorkspaces] = useState<Array<{ id: string; name: string }> | null>(null);
+	const [current, setCurrent] = useState("");
+	const { isLoaded, isSignedIn } = useAuth();
+
+	useEffect(() => {
+		if (!config.clerkEnabled || !isLoaded || !isSignedIn) return;
+		api
+			.me()
+			.then((me) => {
+				setWorkspaces(me.workspaces);
+				const preferred =
+					typeof window !== "undefined"
+						? localStorage.getItem("web_observer_workspace_id")
+						: null;
+				const first = me.workspaces[0]?.id ?? "";
+				setCurrent(me.workspaces.some((w) => w.id === preferred) ? String(preferred) : first);
+			})
+			.catch(() => setWorkspaces(null));
+	}, [config.clerkEnabled, isLoaded, isSignedIn]);
+
+	if (!workspaces || workspaces.length <= 1) return null;
+
+	return (
+		<select
+			aria-label="Switch workspace"
+			value={current}
+			className="hidden max-w-[10rem] rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-xs text-slate-700 sm:block dark:bg-slate-950 dark:text-slate-200"
+			onChange={(e) => {
+				const id = e.target.value;
+				setCurrent(id);
+				setStoredWorkspaceId(id);
+				invalidateWorkspace();
+				window.location.href = "/dashboard";
+			}}
+		>
+			{workspaces.map((w) => (
+				<option key={w.id} value={w.id}>
+					{w.name}
+				</option>
+			))}
+		</select>
+	);
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
 	const pathname = usePathname() || "";
 	const [open, setOpen] = useState(false);
@@ -153,6 +201,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 					</div>
 
 					<div className="flex items-center gap-3">
+						<WorkspaceSwitcher />
 						<ThemeToggle />
 						<div className="hidden items-center border-l border-[var(--border)] pl-3 sm:flex">
 							<ClerkAuthControls />

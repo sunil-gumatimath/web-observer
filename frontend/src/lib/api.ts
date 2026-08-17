@@ -4,14 +4,22 @@ import type {
   AlertInboxItem,
   AlertsSummary,
   ApiKeyCreated,
+  BrandInfo,
   BulkImportResponse,
   ChangeEvent,
   ChangeEventDetail,
+  InviteCreated,
+  InvitePreview,
+  InviteRedeem,
+  InviteRow,
   Monitor,
   MonitorCreateInput,
   MonitorRun,
   MonitorUpdateInput,
   NotificationChannel,
+  PublicShare,
+  ShareLinkCreated,
+  ShareLinkRow,
   SitemapDiscovery,
   SitemapImportResult,
   SeedResponse,
@@ -19,6 +27,7 @@ import type {
   Usage,
   WebhookDelivery,
   WebhookOut,
+  WorkspaceSettings,
 } from "@/lib/types";
 
 export class ApiError extends Error {
@@ -136,6 +145,49 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, message, body);
   }
 
+  return body as T;
+}
+
+/**
+ * Brand/logo asset URL for re-hosted monitor images (served via the public
+ * brand-asset endpoint so they render on the dashboard and public share pages).
+ */
+export function brandAssetUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  return `${config.apiBaseUrl}/api/v1/public/assets/${encodeURIComponent(path)}`;
+}
+
+/** GET helper for endpoints that must NOT attach API auth (public share/invite). */
+async function publicGet<T>(path: string): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${config.apiBaseUrl}${path}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } catch (err) {
+    throw new ApiError(
+      0,
+      err instanceof Error ? err.message : `Network error calling ${path}`,
+      { detail: "network_error" },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    let body: unknown = text;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* raw text */
+    }
+    throw new ApiError(res.status, res.statusText, body);
+  }
+  if (res.status === 204) return undefined as T;
+  const body = await res.json();
   return body as T;
 }
 
@@ -385,4 +437,81 @@ export const api = {
       `/api/v1/workspaces/${workspaceId}/webhook-deliveries/${deliveryId}/retry`,
       { method: "POST" },
     ),
+
+  // --- webdog.ai parity: brand-aware dashboard ---
+  brandInfo: (workspaceId: string, url: string) =>
+    request<BrandInfo>(`/api/v1/workspaces/${workspaceId}/monitors/brand-info`, {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    }),
+
+  enrichBrand: (workspaceId: string, monitorId: string) =>
+    request<Monitor>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/brand`, {
+      method: "POST",
+    }),
+
+  // --- webdog.ai parity: per-account (bring-your-own) keys ---
+  getWorkspaceSettings: (workspaceId: string) =>
+    request<WorkspaceSettings>(`/api/v1/workspaces/${workspaceId}/settings`),
+
+  updateWorkspaceKeys: (
+    workspaceId: string,
+    body: {
+      llm_api_key?: string;
+      llm_api_base?: string;
+      llm_model?: string;
+      resend_api_key?: string;
+      email_from?: string;
+    },
+  ) =>
+    request<WorkspaceSettings>(`/api/v1/workspaces/${workspaceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  // --- webdog.ai parity: public share links ---
+  createShareLink: (workspaceId: string, monitorId: string, expiresDays?: number) =>
+    request<ShareLinkCreated>(
+      `/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/share-links`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expires_days: expiresDays ?? null }),
+      },
+    ),
+
+  listShareLinks: (workspaceId: string, monitorId: string) =>
+    request<ShareLinkRow[]>(
+      `/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/share-links`,
+    ),
+
+  revokeShareLink: (workspaceId: string, monitorId: string, linkId: string) =>
+    request<void>(
+      `/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/share-links/${linkId}`,
+      { method: "DELETE" },
+    ),
+
+  getPublicShare: (token: string) => publicGet<PublicShare>(`/api/v1/public/share/${token}`),
+
+  // --- webdog.ai parity: team invite links ---
+  createInvite: (
+    workspaceId: string,
+    body: { role: string; max_uses: number; expires_days: number | null },
+  ) =>
+    request<InviteCreated>(`/api/v1/workspaces/${workspaceId}/invites`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  listInvites: (workspaceId: string) =>
+    request<InviteRow[]>(`/api/v1/workspaces/${workspaceId}/invites`),
+
+  revokeInvite: (workspaceId: string, inviteId: string) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/invites/${inviteId}`, {
+      method: "DELETE",
+    }),
+
+  previewInvite: (token: string) => publicGet<InvitePreview>(`/api/v1/invites/${token}/preview`),
+
+  redeemInvite: (token: string) =>
+    request<InviteRedeem>(`/api/v1/invites/${token}/redeem`, { method: "POST" }),
 };

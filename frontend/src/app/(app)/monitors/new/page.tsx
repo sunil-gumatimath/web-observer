@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import type {
+	BrandInfo,
 	MonitorMode,
 	SitemapDiscovery as SitemapDiscoveryResult,
 	SitemapImportResult,
@@ -36,6 +37,22 @@ const IGNORE_PRESETS: Record<string, string[]> = {
 		"[class*='chat-widget']",
 	],
 };
+
+/** webdog.ai-parity starter templates — one-click monitor presets. */
+const STARTER_TEMPLATES: Array<{
+	label: string;
+	name: string;
+	mode: MonitorMode;
+	interval: number;
+	urlHint: string;
+}> = [
+	{ label: "Pricing page", name: "Pricing", mode: "page_content", interval: 60, urlHint: "…/pricing" },
+	{ label: "Product price", name: "Product price", mode: "product_price", interval: 1440, urlHint: "…/product" },
+	{ label: "Changelog", name: "Changelog", mode: "page_content", interval: 1440, urlHint: "…/changelog" },
+	{ label: "Job listings", name: "Jobs", mode: "page_content", interval: 60, urlHint: "…/careers" },
+	{ label: "Docs page", name: "Docs", mode: "page_content", interval: 1440, urlHint: "…/docs" },
+	{ label: "Site links", name: "Site links", mode: "site_links", interval: 1440, urlHint: "domain.com" },
+];
 
 const MIN_INTERVAL_MIN = 15;
 const MAX_INTERVAL_MIN = 24 * 60; // once a day
@@ -79,6 +96,7 @@ export default function NewMonitorPage() {
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
 	const [runNow, setRunNow] = useState(true);
+	const [brand, setBrand] = useState<BrandInfo | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 
@@ -131,6 +149,19 @@ export default function NewMonitorPage() {
 		}
 	}
 
+	async function lookupBrand() {
+		if (!/^https?:\/\//i.test(url.trim())) return;
+		setError(null);
+		try {
+			const ws = await ensureWorkspace();
+			const info = await api.brandInfo(ws, url.trim());
+			setBrand(info);
+			if (info.title && !name.trim()) setName(info.title);
+		} catch {
+			setBrand(null);
+		}
+	}
+
 	return (
 		<div>
 			<PageHeader
@@ -176,10 +207,53 @@ export default function NewMonitorPage() {
 								required
 								type="url"
 								value={url}
+								onBlur={lookupBrand}
 								onChange={(e) => setUrl(e.target.value)}
 								placeholder="https://example.com/pricing"
 							/>
 						</div>{" "}
+						{brand ? (
+							<div className="mb-1 rounded-xl border border-[var(--border)] bg-slate-50/60 px-3.5 py-3 dark:bg-slate-950/40">
+								<div className="flex items-start gap-3">
+									{brand.logo_url ? (
+										<img src={brand.logo_url} alt="" className="h-9 w-9 rounded-lg object-contain" />
+									) : null}
+									<div className="min-w-0">
+										{brand.title ? (
+											<p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{brand.title}</p>
+										) : null}
+										{brand.description ? (
+											<p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{brand.description}</p>
+										) : (
+											<p className="text-xs text-slate-400">No brand info detected.</p>
+										)}
+									</div>
+								</div>
+							</div>
+						) : null}
+						<div>
+							<Label>Starter templates</Label>
+							<div className="flex flex-wrap gap-2">
+								{STARTER_TEMPLATES.map((t) => (
+									<button
+										key={t.label}
+										type="button"
+										className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium capitalize text-slate-600 transition hover:border-sky-400/60 hover:text-sky-600 dark:text-slate-300 dark:hover:text-sky-300"
+										onClick={() => {
+											if (!name.trim()) setName(t.name);
+											setMode(t.mode);
+											setIntervalRaw(String(t.interval));
+											setJsRequired(t.mode !== "site_links");
+										}}
+									>
+										{t.label}
+									</button>
+								))}
+							</div>
+							<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">
+								Pick a preset to pre-fill the mode and interval, then paste your URL.
+							</p>
+						</div>
 						<div>
 							<Label htmlFor="mode">Mode</Label>
 							<Select

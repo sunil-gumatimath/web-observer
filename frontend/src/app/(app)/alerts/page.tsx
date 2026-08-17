@@ -24,6 +24,50 @@ type Filter = "all" | "unread" | "noise";
 
 const PAGE_SIZE = 100;
 
+const CHANGE_COLORS: Record<string, string> = {
+	pricing: "bg-emerald-500",
+	availability: "bg-sky-500",
+	legal: "bg-amber-500",
+	content: "bg-violet-500",
+	design: "bg-pink-500",
+	api: "bg-indigo-500",
+	other: "bg-slate-400",
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+	pricing: "Pricing",
+	availability: "Availability",
+	legal: "Legal",
+	content: "Content",
+	design: "Design",
+	api: "API",
+	other: "Change",
+};
+
+function changeDotClass(cat: string | null): string {
+	if (!cat) return "bg-slate-300 dark:bg-slate-600";
+	return CHANGE_COLORS[cat] ?? "bg-slate-400";
+}
+
+function relativeTime(iso: string): string {
+	const diff = Date.now() - new Date(iso).getTime();
+	const m = Math.floor(diff / 60000);
+	if (m < 1) return "just now";
+	if (m < 60) return `${m}m ago`;
+	const h = Math.floor(m / 60);
+	if (h < 24) return `${h}h ago`;
+	const d = Math.floor(h / 24);
+	if (d < 30) return `${d}d ago`;
+	return new Date(iso).toLocaleDateString();
+}
+
+/** Pull the AI triage reason out of a noise item's summary, if present. */
+function triageReason(summary: string | null): string | null {
+	if (!summary) return null;
+	const m = summary.match(/^\[AI triage\]\s*(.+)$/i);
+	return m ? m[1] : null;
+}
+
 export default function AlertsPage() {
 	usePageTitle("Alerts");
 	const router = useRouter();
@@ -161,13 +205,15 @@ export default function AlertsPage() {
 		}
 	}
 
+	const signalCount = summary ? summary.total - summary.noise : 0;
+
 	if (loading) return <Spinner />;
 
 	return (
 		<div>
 			<PageHeader
 				title="Alerts"
-				description="Every detected change across your monitors — read, open, or mark as noise."
+				description="Every detected change across your monitors — summarized by AI and triaged against your watch notes."
 				actions={
 					<Button
 						type="button"
@@ -193,7 +239,7 @@ export default function AlertsPage() {
 					options={[
 						{
 							value: "all",
-							label: `Signal${summary ? ` · ${summary.total - summary.noise}` : ""}`,
+							label: `Signal${summary ? ` · ${signalCount}` : ""}`,
 						},
 						{
 							value: "unread",
@@ -271,7 +317,7 @@ export default function AlertsPage() {
 				) : (
 					<EmptyState
 						title="No alerts yet"
-						body="When a monitor detects a content change, it will appear here."
+						body="When a monitor detects a content change, AI will summarize it here."
 						action={
 							<Link href="/monitors/new">
 								<Button type="button">Create a monitor</Button>
@@ -286,68 +332,87 @@ export default function AlertsPage() {
 				/>
 			) : (
 				<div className="space-y-2">
-					{visibleAlerts.map((a) => (
-						<Card
-							key={a.id}
-							className={
-								a.is_read
-									? "!py-4 opacity-90"
-									: "!py-4 border-sky-500/30 bg-sky-500/[0.04] dark:bg-sky-500/[0.06]"
-							}
-						>
-							<div className="flex flex-wrap items-start justify-between gap-3">
-								<div className="min-w-0 flex-1">
-									<div className="flex flex-wrap items-center gap-2">
-										{!a.is_read ? <Badge tone="info">unread</Badge> : null}
-										{a.is_noise ? <Badge tone="warn">noise</Badge> : null}
-										{a.change_category ? (
-											<Badge tone="neutral">{a.change_category}</Badge>
+					{visibleAlerts.map((a) => {
+						const headline = a.ai_summary || a.diff_summary || "Content changed";
+						const reason = a.is_noise ? triageReason(a.ai_summary ?? null) : null;
+						return (
+							<Card
+								key={a.id}
+								className={
+									a.is_read
+										? "!py-0"
+										: "!py-0 border-l-4 border-l-sky-500 bg-sky-500/[0.04] dark:bg-sky-500/[0.06]"
+								}
+							>
+								<div className="flex items-start gap-3 p-4">
+									<span
+										className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${changeDotClass(
+											a.change_category ?? null,
+										)}`}
+										aria-hidden
+									/>
+									<div className="min-w-0 flex-1">
+										<div className="mb-1.5 flex flex-wrap items-center gap-2">
+											{!a.is_read ? <Badge tone="info">unread</Badge> : null}
+											{a.is_noise ? (
+												<Badge tone="warn">noise</Badge>
+											) : a.change_category ? (
+												<Badge tone="neutral">
+													{CATEGORY_LABEL[a.change_category] ??
+														a.change_category}
+												</Badge>
+											) : null}
+											<span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+												{a.monitor_name}
+											</span>
+										</div>
+										<p className="text-[15px] font-medium leading-snug text-slate-800 dark:text-slate-100">
+											{reason ?? headline}
+										</p>
+										{reason ? (
+											<p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400 line-through decoration-slate-400/60">
+												{headline}
+											</p>
 										) : null}
-										<span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-											{a.monitor_name}
-										</span>
+										<p className="mt-1.5 truncate text-xs text-slate-500 dark:text-slate-500">
+											{a.monitor_url} · {relativeTime(a.created_at)}
+										</p>
 									</div>
-									<p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
-										{a.ai_summary || a.diff_summary || "Content changed"}
-									</p>
-									<p className="mt-1.5 truncate text-xs text-slate-500 dark:text-slate-500">
-										{a.monitor_url} · {new Date(a.created_at).toLocaleString()}
-									</p>
+									<div className="flex shrink-0 flex-wrap gap-2">
+										<Button
+											type="button"
+											size="sm"
+											disabled={busy}
+											onClick={async () => {
+												if (!a.is_read) await markRead(a, true);
+												router.push(`/changes/${a.id}`);
+											}}
+										>
+											Open
+										</Button>
+										<Button
+											type="button"
+											size="sm"
+											variant="secondary"
+											disabled={busy}
+											onClick={() => markRead(a, !a.is_read)}
+										>
+											{a.is_read ? "Mark unread" : "Mark read"}
+										</Button>
+										<Button
+											type="button"
+											size="sm"
+											variant="ghost"
+											disabled={busy}
+											onClick={() => toggleNoise(a)}
+										>
+											{a.is_noise ? "Unmark noise" : "Noise"}
+										</Button>
+									</div>
 								</div>
-								<div className="flex flex-wrap gap-2">
-									<Button
-										type="button"
-										size="sm"
-										disabled={busy}
-										onClick={async () => {
-											if (!a.is_read) await markRead(a, true);
-											router.push(`/changes/${a.id}`);
-										}}
-									>
-										Open
-									</Button>
-									<Button
-										type="button"
-										size="sm"
-										variant="secondary"
-										disabled={busy}
-										onClick={() => markRead(a, !a.is_read)}
-									>
-										{a.is_read ? "Mark unread" : "Mark read"}
-									</Button>
-									<Button
-										type="button"
-										size="sm"
-										variant="ghost"
-										disabled={busy}
-										onClick={() => toggleNoise(a)}
-									>
-										{a.is_noise ? "Unmark noise" : "Noise"}
-									</Button>
-								</div>
-							</div>
-						</Card>
-					))}
+							</Card>
+						);
+					})}
 					{alerts.length >= limit ? (
 						<div className="flex flex-col items-center gap-1.5 pt-3">
 							<Button

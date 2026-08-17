@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { NotificationChannelsPanel } from "@/components/notification-channels";
+import { TeamInvites } from "@/components/team-invites";
+import { WorkspaceKeys } from "@/components/workspace-keys";
 import {
   Badge,
   Button,
@@ -110,6 +112,11 @@ export default function SettingsPage() {
       />
       {error ? <ErrorBox message={error} /> : null}
       {message ? <SuccessBox message={message} /> : null}
+
+      <div className="mb-6 space-y-6">
+        <WorkspaceKeys workspaceId={workspaceId} />
+        <TeamInvites workspaceId={workspaceId} />
+      </div>
 
       <div className="grid max-w-2xl gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
