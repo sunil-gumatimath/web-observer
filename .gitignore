@@ -37,6 +37,7 @@ data/
 backend/data/
 *.log
 logs-*.err
+logs/
 .docker-data/
 
 # Alembic
