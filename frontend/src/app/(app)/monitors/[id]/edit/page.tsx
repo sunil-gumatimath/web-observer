@@ -61,6 +61,7 @@ export default function EditMonitorPage() {
 	const [watchNote, setWatchNote] = useState("");
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
+	const [cssSelector, setCssSelector] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -84,6 +85,7 @@ export default function EditMonitorPage() {
 				setWatchNote(m.watch_note ?? "");
 				setIgnoreSelectors((m.ignore_selectors ?? []).join("\n"));
 				setIgnoreRegexes((m.ignore_regexes ?? []).join("\n"));
+				setCssSelector(m.css_selector ?? null);
 			} catch (e) {
 				if (!cancelled)
 					setError(e instanceof Error ? e.message : "Failed to load monitor");
@@ -105,6 +107,10 @@ export default function EditMonitorPage() {
 			setError(intervalProblem);
 			return;
 		}
+		if (mode === "list_items" && !cssSelector?.trim()) {
+			setError("List items mode requires a CSS selector.");
+			return;
+		}
 		setSaving(true);
 		setError(null);
 		try {
@@ -120,7 +126,7 @@ export default function EditMonitorPage() {
 				name,
 				url,
 				mode,
-				css_selector: null,
+				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
 				timezone,
 				js_required: needsJs(mode) ? jsRequired : false,
@@ -183,6 +189,9 @@ export default function EditMonitorPage() {
 							<option value="product_price">
 								Product price (price / currency)
 							</option>
+							<option value="list_items">
+								List items (e.g. blog/changelog entries)
+							</option>
 						</Select>
 					</div>
 					<div>
@@ -238,13 +247,28 @@ export default function EditMonitorPage() {
 							placeholder="e.g. Only care about pricing plan changes"
 						/>
 					</div>
-					{showsIgnore(mode) ? (
-						<>
-							<div>
-								<Label htmlFor="ignore">
-									Ignore CSS selectors (one per line)
-								</Label>
-								<Textarea
+{mode === "list_items" ? (
+					<div>
+						<Label htmlFor="listSelector">List CSS selector (required for List items)</Label>
+						<Input
+							id="listSelector"
+							required
+							value={cssSelector ?? ""}
+							onChange={(e) => setCssSelector(e.target.value || null)}
+							placeholder="article h2 a, .post-title a"
+						/>
+						<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+							Select the links to track, e.g. <code>.post-list li a</code>.
+						</p>
+					</div>
+				) : null}
+				{showsIgnore(mode) ? (
+					<>
+						<div>
+							<Label htmlFor="ignore">
+								Ignore CSS selectors (one per line)
+							</Label>
+							<Textarea
 									id="ignore"
 									rows={3}
 									value={ignoreSelectors}

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import io
-import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -99,7 +98,13 @@ def import_monitors(
             "page_content",
             "site_links",
             "product_price",
+            "list_items",
         ) else "page_content"
+        if mode == "list_items" and not row["css_selector"]:
+            result.errors.append(
+                {"row": str(idx), "error": "list_items mode requires a css_selector"}
+            )
+            continue
         js_required = row["js_required"]
 
         mon = Monitor(

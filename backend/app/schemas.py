@@ -3,11 +3,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.config import get_settings
 
-MONITOR_MODES = ("page_content", "site_links", "product_price")
+MONITOR_MODES = ("page_content", "site_links", "product_price", "list_items")
 
 
 class HealthResponse(BaseModel):
@@ -80,7 +80,7 @@ class MonitorCreate(BaseModel):
     url: str
     mode: str = "page_content"
     css_selector: str | None = None
-    schedule_interval_minutes: int = Field(default=60, ge=1)
+    schedule_interval_minutes: int | None = Field(default=None, ge=1)
     timezone: str = "UTC"
     timeout_seconds: int = Field(default=30, ge=5, le=120)
     max_response_bytes: int = Field(default=2_000_000, ge=1024, le=10_000_000)
@@ -107,11 +107,28 @@ class MonitorCreate(BaseModel):
 
     @field_validator("schedule_interval_minutes")
     @classmethod
-    def validate_interval(cls, v: int) -> int:
+    def validate_interval(cls, v: int | None) -> int | None:
+        if v is None:
+            return v
         minimum = get_settings().min_check_interval_minutes
         if v < minimum:
             raise ValueError(f"schedule_interval_minutes must be >= {minimum}")
         return v
+
+    @model_validator(mode="after")
+    def check_list_items_selector(self) -> MonitorCreate:
+        if self.mode == "list_items" and not (self.css_selector or "").strip():
+            raise ValueError("css_selector is required for list_items monitors")
+        return self
+
+    @model_validator(mode="after")
+    def apply_mode_interval_default(self) -> MonitorCreate:
+        if self.schedule_interval_minutes is None:
+            # Product price checks default to daily; everything else is hourly.
+            self.schedule_interval_minutes = (
+                1440 if self.mode == "product_price" else 60
+            )
+        return self
 
 class MonitorUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
@@ -152,6 +169,14 @@ class MonitorUpdate(BaseModel):
         if v < minimum:
             raise ValueError(f"schedule_interval_minutes must be >= {minimum}")
         return v
+
+    @model_validator(mode="after")
+    def check_list_items_selector(self) -> MonitorUpdate:
+        if self.mode == "list_items" and (
+            self.css_selector is None or not self.css_selector.strip()
+        ):
+            raise ValueError("css_selector is required for list_items monitors")
+        return self
 
 
 class MonitorOut(BaseModel):

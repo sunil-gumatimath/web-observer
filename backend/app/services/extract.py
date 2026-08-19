@@ -8,6 +8,11 @@ import unicodedata
 
 from selectolax.parser import HTMLParser
 
+try:
+    from markdownify import markdownify
+except ImportError:  # pragma: no cover - fallback when the optional dep is missing
+    markdownify = None
+
 
 class ExtractionError(Exception):
     def __init__(self, code: str, message: str) -> None:
@@ -37,7 +42,9 @@ def extract_text(
             for node in tree.css(str(selector).strip()):
                 node.decompose()
         except Exception as exc:  # noqa: BLE001
-            raise ExtractionError("extraction_failed", f"Invalid ignore selector: {selector}") from exc
+            raise ExtractionError(
+                "extraction_failed", f"Invalid ignore selector: {selector}"
+            ) from exc
 
     body = tree.body
     raw = body.text(separator="\n", strip=True) if body else tree.text(separator="\n", strip=True)
@@ -53,8 +60,61 @@ def apply_ignore_regexes(text: str, patterns: list[str]) -> str:
         try:
             text = re.sub(pattern, "", text, flags=re.MULTILINE)
         except re.error as exc:
-            raise ExtractionError("normalization_failed", f"Invalid ignore regex: {pattern}") from exc
+            raise ExtractionError(
+                "normalization_failed", f"Invalid ignore regex: {pattern}"
+            ) from exc
     return normalize_text(text)
+
+
+def extract_markdown(
+    html: str,
+    *,
+    ignore_selectors: list[str] | None = None,
+    ignore_regexes: list[str] | None = None,
+) -> str:
+    """Convert a page to readable Markdown for ``page_content`` monitors.
+
+    Unlike :func:`extract_text` (which flattens the DOM to bare text), this
+    preserves headings, links, lists, emphasis and images so the line-level
+    diff (``unified_diff``) reads like a document diff rather than a wall of
+    plain text. Same noise-reduction hooks as :func:`extract_text`.
+    """
+    tree = HTMLParser(html)
+    for node in tree.css("script, style, noscript, template"):
+        node.decompose()
+
+    for selector in ignore_selectors or []:
+        if not selector or not str(selector).strip():
+            continue
+        try:
+            for node in tree.css(str(selector).strip()):
+                node.decompose()
+        except Exception as exc:  # noqa: BLE001
+            raise ExtractionError(
+                "extraction_failed", f"Invalid ignore selector: {selector}"
+            ) from exc
+
+    body = tree.body
+    body_html = body.html if body else str(tree)
+    if markdownify is None:
+        raw = extract_text(
+            body_html,
+            ignore_selectors=ignore_selectors,
+            ignore_regexes=ignore_regexes,
+        )
+        return raw
+    md_text = markdownify(
+        body_html,
+        heading_style="ATX",
+        bullets="-",
+        convert=[
+            "a", "img", "strong", "em", "code", "pre",
+            "li", "h1", "h2", "h3", "h4", "h5", "h6",
+            "p", "blockquote", "table",
+        ],
+    )
+    text = normalize_text(md_text)
+    return apply_ignore_regexes(text, ignore_regexes or [])
 
 
 def normalize_text(text: str) -> str:
@@ -95,8 +155,8 @@ def extract_price(html: str) -> str:
     code_re = re.compile(
         r"(\d[\d,]*\.?\d{0,2})\s*(?:" + "|".join(_PRICE_CODES) + r")\b"
     )
-    for num, _ in code_re.findall(html + " "):
-        candidates.append(f"{num}")
+    for num in code_re.findall(html + " "):
+        candidates.append(num)
 
     if not candidates:
         # Fall back to a bare decimal number labelled as price-like text.

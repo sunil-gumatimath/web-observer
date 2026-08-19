@@ -88,6 +88,23 @@ class ListDiff:
             lines.append(f"~ {before} → {after}")
         return "\n".join(lines) if lines else "(no list changes)"
 
+    def as_link_diff(self) -> str:
+        """Render the diff with clickable links where available.
+
+        Each list item is formatted as ``[text](url)`` by ``extract_html_list``
+        (and ``extract_json_list`` callers that supply links), so an added item
+        becomes ``+ [text](url)`` and a removed item ``- [text](url)`` — the
+        same readable, link-rich shape webdog-style alerts use.
+        """
+        lines: list[str] = []
+        for item in self.removed:
+            lines.append(f"- {item}")
+        for item in self.added:
+            lines.append(f"+ {item}")
+        for before, after in self.modified:
+            lines.append(f"~ {before} → {after}")
+        return "\n".join(lines) if lines else "(no list changes)"
+
 
 def extract_json_list(text: str, path: str) -> list[str]:
     data = parse_json_body(text)
@@ -117,8 +134,39 @@ def extract_html_list(html: str, css_selector: str) -> list[str]:
     items: list[str] = []
     for node in nodes:
         t = normalize_text(node.text(separator=" ", strip=True))
-        if t:
-            items.append(t)
+        if not t:
+            continue
+        # Capture the link target so the diff renders as [text](url) (webdog-style).
+        href = ""
+        # 1) The matched node itself may be the link.
+        if node.attributes:
+            for attr in ("href", "src"):
+                v = (node.attributes.get(attr) or "").strip()
+                if v:
+                    href = v
+                    break
+        # 2) Most common case: the selector matches a container (li / article /
+        #    .post) that *contains* an <a>. Grab the first nested link.
+        if not href:
+            link = node.css_first("a[href], a[src]")
+            if link is not None and link.attributes:
+                for attr in ("href", "src"):
+                    v = (link.attributes.get(attr) or "").strip()
+                    if v:
+                        href = v
+                        break
+        # 3) Fallback: climb to the nearest ancestor <a>.
+        if not href:
+            parent = node.parent
+            for _ in range(4):
+                if parent is None:
+                    break
+                if parent.tag == "a" and parent.attributes:
+                    href = (parent.attributes.get("href") or "").strip()
+                    if href:
+                        break
+                parent = parent.parent
+        items.append(f"[{t}]({href})" if href else t)
     return items
 
 

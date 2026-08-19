@@ -65,8 +65,8 @@ async function authHeaders(): Promise<Record<string, string>> {
     "Content-Type": "application/json",
   };
 
-  if (config.clerkEnabled) {
-    // Never fall back to the internal token while Clerk is enabled — that would
+  if (config.useClerkAuth) {
+    // Never fall back to the internal token while Clerk auth is in use — that would
     // expose every workspace (including seeded "Dev Workspace") via /me and then
     // 404 on membership-scoped routes once the real JWT is used.
     const token = await waitForClerkToken();
@@ -79,7 +79,7 @@ async function authHeaders(): Promise<Record<string, string>> {
     return headers;
   }
 
-  // Dev / smoke fallback (Clerk disabled)
+  // Dev / smoke fallback (internal-token mode, never enabled in production)
   headers["X-Internal-Token"] = config.internalToken;
   return headers;
 }
@@ -154,7 +154,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  */
 export function brandAssetUrl(path: string | null | undefined): string | null {
   if (!path) return null;
-  return `${config.apiBaseUrl}/api/v1/public/assets/${encodeURIComponent(path)}`;
+  // The object key is a path with slashes; encoding each segment (not the whole
+  // string) preserves them so the /api/v1/public/assets/{object_key:path} route
+  // resolves correctly.
+  const encoded = path
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+  return `${config.apiBaseUrl}/api/v1/public/assets/${encoded}`;
 }
 
 /** GET helper for endpoints that must NOT attach API auth (public share/invite). */
@@ -231,6 +238,7 @@ export const api = {
       url: string;
       urls: string[];
       mode?: string;
+      css_selector?: string | null;
       schedule_interval_minutes?: number;
       js_required?: boolean;
       ignore_selectors?: string[] | null;

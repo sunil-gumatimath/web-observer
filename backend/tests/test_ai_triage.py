@@ -33,7 +33,9 @@ def test_triage_no_watch_note_is_passthrough() -> None:
 
 def test_triage_no_llm_key_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without an LLM key we must never suppress a real change."""
-    monkeypatch.setattr(ai_summary, "get_settings", lambda: Settings())
+    s = Settings()
+    s.llm_api_key = ""
+    monkeypatch.setattr(ai_summary, "get_settings", lambda: s)
     out = triage_change(
         monitor_name="Docs",
         url="https://example.com",

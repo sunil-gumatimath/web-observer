@@ -95,6 +95,7 @@ export default function NewMonitorPage() {
 	const [watchNote, setWatchNote] = useState("");
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
+	const [cssSelector, setCssSelector] = useState<string | null>(null);
 	const [runNow, setRunNow] = useState(true);
 	const [brand, setBrand] = useState<BrandInfo | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -106,6 +107,10 @@ export default function NewMonitorPage() {
 		const intervalProblem = intervalError(interval);
 		if (intervalProblem) {
 			setError(intervalProblem);
+			return;
+		}
+		if (mode === "list_items" && !cssSelector?.trim()) {
+			setError("List items mode requires a CSS selector.");
 			return;
 		}
 		setSaving(true);
@@ -124,7 +129,7 @@ export default function NewMonitorPage() {
 				name,
 				url,
 				mode,
-				css_selector: null,
+				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
 				notification_email: email || undefined,
 				js_required: needsJs(mode) ? jsRequired : false,
@@ -270,7 +275,15 @@ export default function NewMonitorPage() {
 								<option value="product_price">
 									Product price (price / currency)
 								</option>
+								<option value="list_items">
+									List items (e.g. blog/changelog entries)
+								</option>
 							</Select>
+						{mode === "list_items" ? (
+							<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+								List items: watches a list of elements (headlines, posts, entries) and reports what was added or removed as clickable links. Set the target CSS selector below.
+							</p>
+						) : null}
 						</div>
 						<div>
 							<Label htmlFor="interval">
@@ -330,12 +343,27 @@ export default function NewMonitorPage() {
 								Focuses AI summaries and helps you remember intent.
 							</p>
 						</div>
-						{showsIgnore(mode) ? (
-							<>
-								<div>
-									<Label htmlFor="ignore">
-										Ignore CSS selectors (one per line, optional)
-									</Label>
+{mode === "list_items" ? (
+					<div>
+						<Label htmlFor="listSelector">List CSS selector (required for List items)</Label>
+						<Input
+							id="listSelector"
+							required
+							value={cssSelector ?? ""}
+							onChange={(e) => setCssSelector(e.target.value || null)}
+							placeholder="article h2 a, .post-title a"
+						/>
+						<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+							Select the links to track, e.g. <code>.post-list li a</code>.
+						</p>
+					</div>
+				) : null}
+				{showsIgnore(mode) ? (
+						<>
+							<div>
+								<Label htmlFor="ignore">
+									Ignore CSS selectors (one per line, optional)
+								</Label>
 									<div className="mb-2 flex flex-wrap gap-2">
 										{Object.entries(IGNORE_PRESETS).map(([key, sels]) => (
 											<button
@@ -436,6 +464,7 @@ function SitemapDiscovery({
 	const [jsRequired, setJsRequired] = useState(false);
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
+	const [cssSelector, setCssSelector] = useState<string | null>(null);
 	const [discovering, setDiscovering] = useState(false);
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -481,6 +510,10 @@ function SitemapDiscovery({
 			setError(intervalProblem);
 			return;
 		}
+		if (mode === "list_items" && !cssSelector?.trim()) {
+			setError("List items mode requires a CSS selector.");
+			return;
+		}
 		setCreating(true);
 		setError(null);
 		setResult(null);
@@ -498,6 +531,7 @@ function SitemapDiscovery({
 				url: discovery.url,
 				urls: [...selected],
 				mode,
+				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
 				js_required: needsJs(mode) ? jsRequired : false,
 				ignore_selectors: ignore.length ? ignore : null,
@@ -626,6 +660,9 @@ function SitemapDiscovery({
 										<option value="product_price">
 											Product price (price / currency)
 										</option>
+										<option value="list_items">
+											List items (e.g. blog/changelog entries)
+										</option>
 									</Select>
 								</div>
 								<div>
@@ -650,6 +687,24 @@ function SitemapDiscovery({
 									) : null}
 								</div>
 							</div>
+							{mode === "list_items" ? (
+								<div>
+									<Label htmlFor="sm-listSelector">
+										List CSS selector (required for List items)
+									</Label>
+									<Input
+										id="sm-listSelector"
+										required
+										value={cssSelector ?? ""}
+										onChange={(e) => setCssSelector(e.target.value || null)}
+										placeholder="article h2 a, .post-title a"
+									/>
+									<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+										Select the links to track on each page, e.g.{" "}
+										<code>.post-list li a</code>.
+									</p>
+								</div>
+							) : null}
 							{needsJs(mode) ? (
 								<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
 									<input

@@ -1,3 +1,6 @@
+import pytest
+
+from app.config import Settings
 from app.services.ai_summary import classify_heuristic, enrich_change, template_summary
 
 
@@ -9,7 +12,10 @@ def test_classify_visual_mode() -> None:
     assert classify_heuristic("ahash changed", mode="product_price") == "pricing"
 
 
-def test_enrich_without_llm_is_heuristic() -> None:
+def test_enrich_without_llm_is_heuristic(monkeypatch: pytest.MonkeyPatch) -> None:
+    s = Settings()
+    s.llm_api_key = ""
+    monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: s)
     result = enrich_change(
         monitor_name="Docs",
         url="https://example.com",

@@ -8,7 +8,6 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import distinct
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import OperationalError
@@ -50,13 +49,27 @@ from app.schemas import (
     SnapshotAccessOut,
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
+from app.services.branding import fetch_brand_info, store_brand_assets
+from app.services.bulk_import import import_monitors
 from app.services.diffing import unified_diff
 from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_url
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
-from app.services.branding import fetch_brand_info, store_brand_assets
-from app.services.bulk_import import import_monitors
 from app.workers.enqueue import enqueue_check
+
+# Cap how much snapshot text is decoded and returned / diffed in one response so
+# a very large page cannot balloon memory or produce a multi-MB payload.
+MAX_RESPONSE_TEXT_CHARS = 1_000_000
+_TEXT_TRUNCATED_MARKER = "\n…[text truncated]\n"
+
+
+def _cap_text(text: str | None) -> str | None:
+    """Truncate snapshot text before it is diffed / returned in a response."""
+    if text is None:
+        return None
+    if len(text) <= MAX_RESPONSE_TEXT_CHARS:
+        return text
+    return text[:MAX_RESPONSE_TEXT_CHARS] + _TEXT_TRUNCATED_MARKER
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
@@ -145,24 +158,18 @@ def create_monitor(
 ) -> Monitor:
     workspace = db.get(Workspace, workspace_id)
     assert workspace is not None
+    from app.services.plans import assert_can_create_monitor, get_plan
+
     try:
-        from app.services.plans import assert_can_create_monitor, get_plan
-
         assert_can_create_monitor(db, workspace)
-        plan = get_plan(workspace)
-        if body.schedule_interval_minutes < plan.min_interval_minutes:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Minimum interval for plan {plan.name} is {plan.min_interval_minutes} minutes",
-            )
-    except Exception as exc:  # noqa: BLE001
-        from app.services.usage import QuotaExceeded
-
-        if isinstance(exc, QuotaExceeded):
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if isinstance(exc, HTTPException):
-            raise
-        raise
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    plan = get_plan(workspace)
+    if body.schedule_interval_minutes < plan.min_interval_minutes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum interval for plan {plan.name} is {plan.min_interval_minutes} minutes",
+        )
 
     try:
         validate_url_for_fetch(body.url, resolve_dns=True)
@@ -237,6 +244,7 @@ class SitemapCreateIn(BaseModel):
     url: str
     urls: list[str] = Field(min_length=1)
     mode: str = "page_content"
+    css_selector: str | None = None
     schedule_interval_minutes: int = Field(default=60, ge=1)
     js_required: bool = False
     ignore_selectors: list[str] | None = None
@@ -293,6 +301,7 @@ def create_from_sitemap(
             "name": name_from_url(u),
             "url": u,
             "mode": body.mode,
+            "css_selector": body.css_selector,
             "schedule_interval_minutes": body.schedule_interval_minutes,
             "js_required": body.js_required,
             "ignore_selectors": body.ignore_selectors,
@@ -700,7 +709,7 @@ def get_change(
                 prev_text = b.decode("utf-8") if b else (prev.normalized_text or "")
             else:
                 prev_text = prev.normalized_text or ""
-                
+
     new_snap = db.get(Snapshot, change.new_snapshot_id)
     if new_snap and new_snap.workspace_id == workspace_id:
         if getattr(new_snap, "text_object_key", None):
@@ -708,6 +717,9 @@ def get_change(
             new_text = b.decode("utf-8") if b else (new_snap.normalized_text or "")
         else:
             new_text = new_snap.normalized_text or ""
+
+    prev_text = _cap_text(prev_text)
+    new_text = _cap_text(new_text)
 
     diff = None
     if prev_text is not None and new_text is not None:
@@ -925,6 +937,8 @@ def get_snapshot(
         b = get_bytes(snap.text_object_key)
         if b:
             full_text = b.decode("utf-8")
+
+    full_text = _cap_text(full_text)
 
     return SnapshotAccessOut(
         id=snap.id,

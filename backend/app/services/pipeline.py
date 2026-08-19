@@ -22,12 +22,18 @@ from app.models import (
 from app.models.entities import OutboxStatus, RunStatus
 from app.services.ai_summary import AIEnrichment, enrich_change
 from app.services.diffing import short_summary, unified_diff
-from app.services.extract import ExtractionError, content_hash, extract_price, extract_text
+from app.services.extract import (
+    ExtractionError,
+    content_hash,
+    extract_markdown,
+    extract_price,
+)
 from app.services.fetcher import FetchResult
 from app.services.storage import StorageError, put_bytes, snapshot_object_key
 from app.services.structured import (
     ListDiff,
     diff_lists,
+    extract_html_list,
     list_to_normalized,
 )
 from app.services.usage import add_storage_bytes, increment_checks
@@ -47,7 +53,9 @@ class PipelineResult:
     unchanged: bool = False
 
 
-def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, str | None, ListDiff | None]:
+def extract_normalized(
+    monitor: Monitor, result: FetchResult
+) -> tuple[str, str | None, ListDiff | None]:
     """Return (normalized_text, structured_diff_text_or_none, list_diff_or_none)."""
     mode = monitor.mode
     ignore_selectors = [str(s) for s in (monitor.ignore_selectors or [])]
@@ -60,8 +68,19 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, str 
         urls = [u.strip() for u in result.text.splitlines() if u.strip()]
         return list_to_normalized(urls), None, None
 
-    # page_content (default): whole page text diff
-    text = extract_text(
+    if mode == "list_items":
+        if not monitor.css_selector:
+            raise ExtractionError(
+                "extraction_failed",
+                "css_selector is required for list_items monitors",
+            )
+        items = extract_html_list(result.text, monitor.css_selector)
+        norm = list_to_normalized(items)
+        ld = diff_lists([], items)  # baseline shape; real diff computed in _detect_change
+        return norm, ld.as_link_diff(), ld
+
+    # page_content (default): whole page as markdown (readable line-level diff)
+    text = extract_markdown(
         result.text,
         ignore_selectors=ignore_selectors,
         ignore_regexes=ignore_regexes,
@@ -284,7 +303,7 @@ def _detect_change(
                 )
     ctx.prev_text = prev_text
 
-    if monitor.mode == "site_links":
+    if monitor.mode in ("site_links", "list_items"):
         if prev.content_hash == digest:
             from app.services.adaptive import note_check_outcome
 
@@ -303,7 +322,7 @@ def _detect_change(
         ]
         ld = diff_lists(before_items, after_items)
         ctx.summary = ld.summary
-        ctx.diff_text = ld.as_text_diff()
+        ctx.diff_text = ld.as_link_diff() if monitor.mode == "list_items" else ld.as_text_diff()
     else:
         if prev.content_hash == digest:
             from app.services.adaptive import note_check_outcome

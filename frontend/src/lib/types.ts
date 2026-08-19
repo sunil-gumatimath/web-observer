@@ -1,7 +1,8 @@
 export type MonitorMode =
   | "page_content"
   | "site_links"
-  | "product_price";
+  | "product_price"
+  | "list_items";
 
 export type Monitor = {
   id: string;
