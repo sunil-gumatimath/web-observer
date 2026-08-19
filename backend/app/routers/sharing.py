@@ -17,6 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -361,12 +362,29 @@ def redeem_invite(
 ) -> WorkspaceInviteRedeemOut:
     if principal.user is None:
         raise HTTPException(status_code=401, detail="Sign in to accept this invite")
-    row = db.scalar(select(WorkspaceInvite).where(WorkspaceInvite.token_hash == hash_token(token)))
+
+    # Claim a use atomically so concurrent redeems cannot overshoot max_uses.
+    # The conditional UPDATE re-evaluates `use_count < max_uses` against the
+    # latest committed row version, so the count can never exceed the cap.
     now = datetime.now(UTC)
-    if row is None or (row.expires_at and row.expires_at < now):
-        raise HTTPException(status_code=404, detail="Invite link not found")
-    if row.use_count >= row.max_uses:
+    claimed = db.execute(
+        sa_update(WorkspaceInvite)
+        .where(
+            WorkspaceInvite.token_hash == hash_token(token),
+            (WorkspaceInvite.expires_at.is_(None))
+            | (WorkspaceInvite.expires_at >= now),
+            WorkspaceInvite.use_count < WorkspaceInvite.max_uses,
+        )
+        .values(use_count=WorkspaceInvite.use_count + 1)
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
         raise HTTPException(status_code=410, detail="Invite link has expired")
+
+    row = db.scalar(select(WorkspaceInvite).where(WorkspaceInvite.token_hash == hash_token(token)))
+    if row is None or (row.expires_at and row.expires_at < now):
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Invite link not found")
 
     existing = db.scalar(
         select(WorkspaceMember).where(
@@ -382,8 +400,7 @@ def redeem_invite(
                 role=row.role,
             )
         )
-        row.use_count += 1
-        db.commit()
+    db.commit()
     workspace = db.get(Workspace, row.workspace_id)
     return WorkspaceInviteRedeemOut(
         workspace_id=row.workspace_id,

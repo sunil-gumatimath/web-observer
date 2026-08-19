@@ -74,6 +74,7 @@ def detect_bot_challenge(
 class FetchError(Exception):
     def __init__(self, code: str, message: str, *, http_status: int | None = None) -> None:
         self.code = code
+        self.message = message
         self.http_status = http_status
         super().__init__(message)
 
@@ -127,6 +128,87 @@ def _pinned_client(url: str, *, timeout: httpx.Timeout, headers: dict[str, str])
         follow_redirects=False,
         headers=headers,
     )
+
+
+def fetch_binary(
+    url: str,
+    *,
+    timeout_seconds: int,
+    max_response_bytes: int,
+) -> FetchResult:
+    """Fetch arbitrary bytes (images etc.) with the same SSRF protection as ``fetch_url``.
+
+    Unlike ``fetch_url`` this does not reject binary content types (brand
+    assets are images) and skips robots.txt.  Every redirect hop is re-validated
+    against private/internal IPs and each hop's IP is pinned into the transport,
+    so a first-hop redirect to ``169.254.169.254`` / ``127.0.0.1`` is blocked.
+    """
+    current = validate_url_for_fetch(url, resolve_dns=True).url
+    timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, float(timeout_seconds)))
+    headers = {"User-Agent": get_settings().http_user_agent}
+
+    import time
+
+    started = time.perf_counter()
+    redirects = 0
+
+    while True:
+        try:
+            client = _pinned_client(current, timeout=timeout, headers=headers)
+        except SSRFError as exc:
+            raise FetchError(exc.code, str(exc)) from exc
+
+        with client:
+            try:
+                response = client.get(current, follow_redirects=False)
+            except httpx.TimeoutException as exc:
+                raise FetchError("read_timeout", str(exc)) from exc
+            except httpx.ConnectError as exc:
+                raise FetchError("connection_timeout", str(exc)) from exc
+            except httpx.RequestError as exc:
+                raise FetchError("internal_error", str(exc)) from exc
+
+            if response.is_redirect:
+                response.close()
+                redirects += 1
+                if redirects > MAX_REDIRECTS:
+                    raise FetchError("redirect_limit", f"Exceeded {MAX_REDIRECTS} redirects")
+                location = response.headers.get("location")
+                if not location:
+                    raise FetchError("invalid_url", "Redirect without Location header")
+                next_url = urljoin(current, location)
+                try:
+                    current = validate_url_for_fetch(next_url, resolve_dns=True).url
+                except SSRFError as exc:
+                    raise FetchError(exc.code, str(exc)) from exc
+                continue
+
+            chunks: list[bytes] = []
+            total = 0
+            try:
+                for chunk in response.iter_bytes():
+                    total += len(chunk)
+                    if total > max_response_bytes:
+                        response.close()
+                        raise FetchError(
+                            "response_too_large",
+                            f"Response size exceeds limit {max_response_bytes}",
+                            http_status=response.status_code,
+                        )
+                    chunks.append(chunk)
+            except httpx.TimeoutException as exc:
+                raise FetchError("read_timeout", str(exc)) from exc
+            except httpx.RequestError as exc:
+                raise FetchError("internal_error", str(exc)) from exc
+
+            return FetchResult(
+                final_url=str(response.url),
+                status_code=response.status_code,
+                content=b"".join(chunks),
+                text="",
+                content_type=response.headers.get("content-type", ""),
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
 
 
 def fetch_url(

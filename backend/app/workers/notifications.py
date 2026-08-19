@@ -59,10 +59,21 @@ def deliver_outbox_message(outbox_id: str) -> None:
         if payload.get("watch_note"):
             body_lines.append(f"*Watching:* {payload.get('watch_note')}")
         body_lines.append(f"*Summary:* {payload.get('ai_summary') or payload.get('summary') or 'Content changed'}")
-        if payload.get("diff"):
-            body_lines.append("")
-            body_lines.append("*Diff (truncated):*")
-            body_lines.append(f"```{str(payload.get('diff'))[:2500]}```")
+        # list_items diffs are link-rich ("+ [title](url)") — render them as
+        # plain mrkdwn so Slack/Discord turn them into clickable links, mirroring
+        # webdog's readable added/removed list. Code-fenced diffs are kept for
+        # the text/visual modes where raw +/- lines are more useful.
+        mode = payload.get("mode")
+        diff = payload.get("diff")
+        if diff:
+            if mode == "list_items":
+                body_lines.append("")
+                body_lines.append("*Changes:*")
+                body_lines.append(str(diff))
+            else:
+                body_lines.append("")
+                body_lines.append("*Diff (truncated):*")
+                body_lines.append(f"```{str(diff)[:2500]}```")
         if payload.get("body"):
             body_lines.append(str(payload.get("body"))[:8000])
         body = "\n".join(line for line in body_lines if line is not None)
@@ -167,11 +178,35 @@ def reap_stuck_outbox_messages(db, *, older_than_seconds: int = 600) -> int:
     return reaped
 
 
+def _pinned_post(url: str, payload: dict, *, timeout: float = 30.0) -> httpx.Response:
+    """POST a JSON payload to a validated, IP-pinned URL (SSRF-safe delivery).
+
+    Validates the target against private/internal IPs and pins the resolved IP
+    into the transport so the DNS record cannot be re-pointed between validation
+    and connection.  Redirects are not followed — a notification webhook URL
+    should resolve directly.
+    """
+    from app.security.ssrf import PinnedIPTransport, SSRFError, validate_url_for_fetch
+
+    if not url.startswith("https://"):
+        raise ValueError("Webhook URL must be https")
+    try:
+        validated = validate_url_for_fetch(url, resolve_dns=True)
+    except SSRFError as exc:
+        raise ValueError(f"Blocked webhook address: {exc}") from exc
+    hostname = httpx.URL(url).host
+    transport = PinnedIPTransport(
+        pinned_ip=validated.resolved_ips[0],
+        server_hostname=hostname,
+    )
+    with httpx.Client(
+        transport=transport, timeout=timeout, follow_redirects=False
+    ) as client:
+        return client.post(url, json=payload)
+
+
 def _send_slack(webhook_url: str, title: str, body: str) -> str:
     """Post a Block Kit message to a Slack incoming webhook."""
-    if not webhook_url.startswith("https://"):
-        raise ValueError("Slack webhook must be https URL")
-    # Prefer structured blocks; fall back fields live in the plain text body.
     blocks = [
         {
             "type": "header",
@@ -195,15 +230,13 @@ def _send_slack(webhook_url: str, title: str, body: str) -> str:
         "text": f"{title}\n{body[:500]}",  # notification fallback
         "blocks": blocks,
     }
-    resp = httpx.post(webhook_url, json=payload, timeout=30.0)
+    resp = _pinned_post(webhook_url, payload)
     resp.raise_for_status()
     return "slack"
 
 
 def _send_discord(webhook_url: str, title: str, body: str) -> str:
     content = f"**{title}**\n```\n{body[:1800]}\n```"
-    if not webhook_url.startswith("https://"):
-        raise ValueError("Discord webhook must be https URL")
-    resp = httpx.post(webhook_url, json={"content": content}, timeout=30.0)
+    resp = _pinned_post(webhook_url, {"content": content})
     resp.raise_for_status()
     return "discord"

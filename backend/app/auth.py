@@ -84,8 +84,15 @@ def verify_clerk_token(token: str, settings: Settings) -> dict[str, Any]:
 def upsert_clerk_user(db: Session, *, clerk_user_id: str, email: str) -> User:
     user = db.scalar(select(User).where(User.clerk_user_id == clerk_user_id))
     if user is None:
-        # Prefer clerk id; if email already exists from seed, attach clerk id
+        # Prefer clerk id; if email already exists from seed, attach clerk id —
+        # but never hijack an account that is already linked to a different
+        # Clerk identity (would be a cross-account merge / takeover).
         by_email = db.scalar(select(User).where(User.email == email))
+        if by_email is not None and by_email.clerk_user_id:
+            raise HTTPException(
+                status_code=401,
+                detail="This email is already linked to a different account.",
+            )
         if by_email is not None:
             by_email.clerk_user_id = clerk_user_id
             user = by_email

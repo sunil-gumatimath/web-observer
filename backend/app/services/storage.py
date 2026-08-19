@@ -36,6 +36,28 @@ def _local_root() -> Path:
     return root
 
 
+def _resolve_local_path(key: str) -> Path | None:
+    """Resolve ``key`` under the storage root, blocking path traversal.
+
+    Returns *None* when the key escapes the storage root (or is otherwise
+    unsafe), so callers can bail out instead of reading/writing an arbitrary
+    file.  Object keys are always relative paths (``workspaces/...``,
+    ``brand-assets/...``), so absolute paths or ``..`` segments are invalid.
+    """
+    root = _local_root().resolve()
+    candidate = Path(key)
+    if candidate.is_absolute() or ".." in candidate.parts or "\\" in key:
+        logger.warning("storage_path_rejected key=%s", key)
+        return None
+    resolved = (root / candidate).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        logger.warning("storage_path_escape_rejected key=%s", key)
+        return None
+    return resolved
+
+
 @lru_cache
 def _client():
     import boto3
@@ -64,7 +86,9 @@ def put_bytes(
     content_type: str = "text/html; charset=utf-8",
 ) -> str:
     if _use_local():
-        path = _local_root() / key
+        path = _resolve_local_path(key)
+        if path is None:
+            raise StorageError("invalid_key", f"Unsafe storage key: {key}")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         return key
@@ -86,7 +110,9 @@ def put_bytes(
 
 def get_bytes(key: str) -> bytes | None:
     if _use_local():
-        path = _local_root() / key
+        path = _resolve_local_path(key)
+        if path is None:
+            return None
         try:
             if path.exists():
                 return path.read_bytes()
@@ -106,7 +132,9 @@ def get_bytes(key: str) -> bytes | None:
 
 def delete_object(key: str) -> None:
     if _use_local():
-        path = _local_root() / key
+        path = _resolve_local_path(key)
+        if path is None:
+            return
         try:
             if path.exists():
                 path.unlink()

@@ -158,7 +158,9 @@ def delete_notification_channel(
 
 
 @router.post("/workspaces/{workspace_id}/notification-channels/{channel_id}/test")
+@limiter.limit("5/minute")
 def test_notification_channel(
+    request: Request,
     workspace_id: UUID,
     channel_id: UUID,
     db: Db,

@@ -16,10 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from urllib.parse import urljoin
 
-import httpx
-
-from app.security.ssrf import SSRFError, validate_url_for_fetch
-from app.services.fetcher import FetchError, FetchResult, fetch_url
+from app.services.fetcher import FetchError, FetchResult, fetch_binary, fetch_url
 from app.services.storage import put_bytes
 
 logger = logging.getLogger(__name__)
@@ -113,22 +110,15 @@ def fetch_brand_info(url: str, *, timeout_seconds: int = 30) -> BrandMeta:
 
 def _download_image(url: str, *, max_bytes: int = MAX_IMAGE_BYTES) -> bytes | None:
     try:
-        validate_url_for_fetch(url, resolve_dns=True)
-    except SSRFError:
-        return None
-    try:
-        with httpx.Client(
-            timeout=15.0,
-            follow_redirects=True,
-            headers={"User-Agent": "WebObserver/0.1"},
-        ) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            body = resp.content
-            if len(body) > max_bytes or not body:
-                return None
-            return body
-    except Exception as exc:  # noqa: BLE001
+        result = fetch_binary(
+            url,
+            timeout_seconds=15,
+            max_response_bytes=max_bytes,
+        )
+        if result.status_code >= 400 or not result.content:
+            return None
+        return result.content
+    except FetchError as exc:  # noqa: BLE001
         logger.debug("brand_asset_download_failed url=%s error=%s", url, exc)
         return None
 
@@ -177,4 +167,10 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
 
 
 def brand_asset_allowed(object_key: str | None) -> bool:
-    return bool(object_key and object_key.startswith("brand-assets/"))
+    if not object_key or not object_key.startswith("brand-assets/"):
+        return False
+    # Belt-and-braces alongside the storage-layer containment check: reject
+    # anything that could escape the object namespace (traversal / absolute).
+    if ".." in object_key.split("/") or "\\" in object_key or object_key.startswith("/"):
+        return False
+    return True
