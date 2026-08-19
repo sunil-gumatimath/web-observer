@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -36,8 +37,17 @@ def _ok_fetch(_monitor, _db) -> FetchResult:
     )
 
 
+class _Cursor:
+    def __init__(self, rowcount):
+        self.rowcount = rowcount
+
+
 def _make_db(*, run=None, monitor=None):
-    """Minimal Session-like object with get/commit used by run_guard."""
+    """Minimal Session-like object with get/commit/execute used by run_guard.
+
+    ``execute`` models the atomic claim: a QUEUED/SCHEDULED run is transitioned
+    to RUNNING (rowcount 1); anything else is unclaimable (rowcount 0).
+    """
     store = {}
     if run is not None:
         store[("run", run.id)] = run
@@ -55,6 +65,17 @@ def _make_db(*, run=None, monitor=None):
 
         def commit(self):
             return None
+
+        def execute(self, *_a, **_k):
+            run = next((v for k, v in store.items() if k[0] == "run"), None)
+            if run is not None and getattr(run, "status", None) in (
+                RunStatus.QUEUED.value,
+                RunStatus.SCHEDULED.value,
+            ):
+                run.status = RunStatus.RUNNING.value
+                run.started_at = datetime.now(UTC)
+                return _Cursor(1)
+            return _Cursor(0)
 
     return DB()
 

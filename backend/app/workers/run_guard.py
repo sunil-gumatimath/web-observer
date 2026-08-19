@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -92,21 +93,6 @@ def execute_monitored_run(
         if run is None:
             logger.warning("run_not_found run_id=%s", run_id)
             return
-        # Idempotency guard: a run that has already reached a terminal status
-        # must NOT be re-processed.  Dramatiq re-delivers the same run_id when an
-        # actor re-raises (read/connection timeout re-raise, or unexpected
-        # exception after the run was set to FAILED inside fail_run).  Re-running
-        # would duplicate snapshots/change events, re-send notifications, and
-        # double-count usage.  A genuine user-triggered re-run always creates a
-        # NEW run_id (via manual_run), so this guard is safe.
-        if run.status in (
-            RunStatus.SUCCEEDED.value,
-            RunStatus.CANCELLED.value,
-            RunStatus.FAILED.value,
-        ):
-            logger.info("run_already_terminal run_id=%s status=%s", run_id, run.status)
-            return
-
         monitor = db.get(Monitor, run.monitor_id)
         if monitor is None:
             run.status = RunStatus.FAILED.value
@@ -120,9 +106,30 @@ def execute_monitored_run(
         if pre_run_hook is not None and pre_run_hook(monitor, run, db):
             return
 
-        run.status = RunStatus.RUNNING.value
-        run.started_at = datetime.now(UTC)
+        # Idempotency guard: claim the run atomically.  Dramatiq at-least-once
+        # redelivery can hand the same run_id to two workers, and a read-then-set
+        # terminal check lets both through (duplicate snapshots, change events,
+        # notifications, usage counts).  A conditional UPDATE is race-safe: only
+        # one worker transitions QUEUED/SCHEDULED -> RUNNING; the loser sees
+        # rowcount 0 and exits.  Terminal runs are simply not claimable, so a
+        # redelivered finished run can never be re-processed.
+        claimed = db.execute(
+            sa_update(MonitorRun)
+            .where(
+                MonitorRun.id == run.id,
+                MonitorRun.status.in_(
+                    (RunStatus.SCHEDULED.value, RunStatus.QUEUED.value)
+                ),
+            )
+            .values(
+                status=RunStatus.RUNNING.value,
+                started_at=datetime.now(UTC),
+            )
+        )
         db.commit()
+        if claimed.rowcount != 1:
+            logger.info("run_not_claimable run_id=%s", run_id)
+            return
 
         slot_acquired = False
         try:

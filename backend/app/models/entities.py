@@ -31,6 +31,7 @@ class MonitorMode(str, enum.Enum):
     PAGE_CONTENT = "page_content"
     SITE_LINKS = "site_links"
     PRODUCT_PRICE = "product_price"
+    LIST_ITEMS = "list_items"
 
 
 class RunStatus(str, enum.Enum):
@@ -174,6 +175,13 @@ class MonitorRun(Base):
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_monitor_run_idempotency"),
         Index("ix_monitor_runs_monitor_created", "monitor_id", "created_at"),
+        Index(
+            "ix_monitor_runs_config_status_finished",
+            "monitor_id",
+            "config_version",
+            "status",
+            "finished_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
