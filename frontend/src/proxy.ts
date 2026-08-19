@@ -13,20 +13,25 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/docs(.*)",
+  "/invite(.*)",
   "/api/health(.*)",
 ]);
 
 const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const devModeEnabled = process.env.NODE_ENV !== "production";
 
-export default clerkKey
-  ? clerkMiddleware(async (auth, req: NextRequest) => {
+// Pass-through is strictly a dev-mode convenience.  In a production build the
+// Clerk middleware always runs (even without a publishable key) so routes fail
+// closed instead of silently trusting the client-side internal-token mode.
+export default devModeEnabled && !clerkKey
+  ? function middleware() {
+      return NextResponse.next();
+    }
+  : clerkMiddleware(async (auth, req: NextRequest) => {
       if (!isPublicRoute(req)) {
         await auth.protect();
       }
-    })
-  : function middleware() {
-      return NextResponse.next();
-    };
+    });
 
 export const config = {
   matcher: [

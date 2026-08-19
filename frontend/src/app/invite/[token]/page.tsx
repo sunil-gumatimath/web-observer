@@ -72,7 +72,14 @@ export default function InvitePage() {
               </p>
               {!me ? (
                 <p className="text-xs text-slate-500">
-                  You&apos;ll need to <Link className="text-sky-600 dark:text-sky-400 underline" href="/sign-in">sign in</Link> first.
+                  You&apos;ll need to{" "}
+                  <Link
+                    className="text-sky-600 dark:text-sky-400 underline"
+                    href={`/sign-in?redirect_url=/invite/${encodeURIComponent(token)}`}
+                  >
+                    sign in
+                  </Link>{" "}
+                  first.
                 </p>
               ) : null}
               <Button type="button" disabled={working} onClick={redeem} className="w-full">

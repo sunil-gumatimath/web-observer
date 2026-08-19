@@ -47,8 +47,16 @@ def purge_expired_snapshots(
     snapshots = list(db.scalars(snap_q).all())
     objects_deleted = 0
     for snap in snapshots:
-        if snap.raw_object_key:
-            delete_object(snap.raw_object_key)
+        # Raw HTML snapshot, normalized-text object, and (when captured) the
+        # screenshot for this run all live in object storage under different
+        # keys — purge all of them so retention actually frees space.
+        for key in (snap.raw_object_key, snap.text_object_key):
+            if key:
+                delete_object(key)
+                objects_deleted += 1
+        if snap.run_id:
+            screenshot_key = f"screenshots/{snap.monitor_id}/{snap.run_id}.png"
+            delete_object(screenshot_key)
             objects_deleted += 1
         # Clear run FK to snapshot before delete if needed
         runs = db.scalars(select(MonitorRun).where(MonitorRun.snapshot_id == snap.id)).all()

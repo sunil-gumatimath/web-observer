@@ -34,8 +34,9 @@ function ClerkTokenBridge({ children }: { children: ReactNode }) {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
-  // Always wrap with token bridge when Clerk keys exist so API calls send Bearer JWT
-  if (config.clerkEnabled) {
+  // Always wrap with the token bridge when Clerk auth is in use (configured, or
+  // any non-dev build) so API calls send a Bearer JWT and never the internal token.
+  if (config.useClerkAuth) {
     return <ClerkTokenBridge>{children}</ClerkTokenBridge>;
   }
   return <>{children}</>;

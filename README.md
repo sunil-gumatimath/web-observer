@@ -136,18 +136,18 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 
 1. Open http://127.0.0.1:3000 → **Sign up / Sign in** (Clerk).  
 2. **Settings → Alert channels** → add your email (optional).  
-3. **New monitor** → e.g. `https://example.com/` (or Visual for screenshots).  
+3. **New monitor** → e.g. `https://example.com/` (enable screenshots for image history).  
 4. Open monitor → **Run now** (first success = baseline, no alert).  
 
 ## Features
 
 | Area | What's included |
 |------|-----------------|
-| Monitoring modes | `whole_page` text, `css_selector` section, `json_field`, `list_items`, `visual` (screenshot aHash), plus `js_required` for SPAs |
+| Monitoring modes | `page_content` (whole page text), `site_links` (sitemap URL changes), `product_price` (price/currency), `list_items` (CSS-selector link list) — plus `js_required` for SPAs |
 | Alert channels | Email (Resend), Slack webhook, Discord webhook |
 | AI summaries | Heuristic by default; optional OpenAI-compatible LLM for category + plain-language summary |
-| Diffs | Before/after text diffs; structured JSON / list diffs; visual hamming-distance change gate |
-| Screenshots | Visual monitors: screenshot history gallery + side-by-side change comparison with aHash distance, served via the existing storage layer |
+| Diffs | Before/after text diffs; structured JSON / list diffs; optional screenshot change gate |
+| Screenshots | Per-monitor `screenshots_enabled`: Playwright screenshot history + side-by-side comparison with aHash distance, served via the existing storage layer |
 | Outbound webhooks | Signed (`X-MTW-Signature`) deliveries on change events + delivery log |
 | API keys | `mtw_...` bearer tokens for programmatic access |
 | Bulk workflows | CSV / JSON import + export of monitors and changes |

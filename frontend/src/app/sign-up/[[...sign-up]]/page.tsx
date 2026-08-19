@@ -17,7 +17,7 @@ export default function SignUpPage() {
 	const isDark = mounted && resolvedTheme === "dark";
 
 	// Dev mode: no Clerk keys — there is no hosted sign-up to render.
-	if (!config.clerkEnabled) {
+	if (config.devModeEnabled && !config.clerkEnabled) {
 		return (
 			<div className="relative flex min-h-screen flex-col items-center justify-center gap-6 overflow-hidden px-4 py-12 text-center">
 				<div className="pointer-events-none absolute inset-0 hero-grid" />

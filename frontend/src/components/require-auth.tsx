@@ -12,7 +12,8 @@ import { config } from "@/lib/config";
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
   // Dev mode without Clerk: pages use X-Internal-Token, no session gate.
-  if (!config.clerkEnabled) {
+  // Only active when devModeEnabled — production always requires a Clerk session.
+  if (config.devModeEnabled && !config.clerkEnabled) {
     return <>{children}</>;
   }
   return <ClerkRequireAuth>{children}</ClerkRequireAuth>;

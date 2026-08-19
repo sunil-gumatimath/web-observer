@@ -108,12 +108,20 @@ function ClerkUserControls() {
 
 /** webdog.ai-parity account switcher — switch between workspaces you belong to. */
 function WorkspaceSwitcher() {
+	// In dev mode (no Clerk) there is no <ClerkProvider>, so calling useAuth()
+	// would throw "useAuth can only be used within the <ClerkProvider />".
+	// The switcher only makes sense with a session, so render nothing.
+	if (!config.clerkEnabled) return null;
+	return <ClerkWorkspaceSwitcher />;
+}
+
+function ClerkWorkspaceSwitcher() {
 	const [workspaces, setWorkspaces] = useState<Array<{ id: string; name: string }> | null>(null);
 	const [current, setCurrent] = useState("");
 	const { isLoaded, isSignedIn } = useAuth();
 
 	useEffect(() => {
-		if (!config.clerkEnabled || !isLoaded || !isSignedIn) return;
+		if (!isLoaded || !isSignedIn) return;
 		api
 			.me()
 			.then((me) => {
@@ -126,7 +134,7 @@ function WorkspaceSwitcher() {
 				setCurrent(me.workspaces.some((w) => w.id === preferred) ? String(preferred) : first);
 			})
 			.catch(() => setWorkspaces(null));
-	}, [config.clerkEnabled, isLoaded, isSignedIn]);
+	}, [isLoaded, isSignedIn]);
 
 	if (!workspaces || workspaces.length <= 1) return null;
 
