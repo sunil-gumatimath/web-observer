@@ -4,6 +4,7 @@ import { SignUp } from "@clerk/nextjs";
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
+import { LogoIcon } from "@/components/logo";
 import { clerkAppearance } from "@/lib/clerk-appearance";
 import { config } from "@/lib/config";
 
@@ -22,10 +23,8 @@ export default function SignUpPage() {
 			<div className="relative flex min-h-screen flex-col items-center justify-center gap-6 overflow-hidden px-4 py-12 text-center">
 				<div className="pointer-events-none absolute inset-0 hero-grid" />
 				<div className="relative z-10">
-					<h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
-						Sign-up is disabled
-					</h1>
-					<p className="mx-auto mt-2 max-w-sm text-sm text-slate-500 dark:text-slate-400">
+					<h1 className="text-2xl font-semibold text-[var(--text)]">Sign-up is disabled</h1>
+					<p className="mx-auto mt-2 max-w-sm text-sm text-[var(--muted)]">
 						This environment runs without Clerk (dev internal-token auth). Head
 						straight to the dashboard.
 					</p>
@@ -46,19 +45,15 @@ export default function SignUpPage() {
 			<div className="relative z-10 text-center">
 				<Link
 					href="/"
-					className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-slate-900 dark:text-white"
+					className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-[var(--text)]"
 				>
-					<span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold shadow-glow-sm">
-						W
-					</span>
+					<LogoIcon size={36} />
 					<span>Web Observer</span>
 				</Link>
-				<h1 className="mt-4 text-2xl font-semibold text-slate-900 dark:text-white">
+				<h1 className="mt-4 text-2xl font-semibold text-[var(--text)]">
 					Create your account
 				</h1>
-				<p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-					Start monitoring pages in a few minutes
-				</p>
+				<p className="mt-1 text-sm text-[var(--muted)]">Start monitoring pages in a few minutes</p>
 			</div>
 			<div className="relative z-10 w-full max-w-md">
 				<SignUp

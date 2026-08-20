@@ -48,10 +48,7 @@ export default function HomePage() {
   // suppressHydrationWarning: browser extensions (e.g. Retriever) inject attrs
   // like `rtrvr-ls` into the DOM before React hydrates — not an app bug.
   return (
-    <div
-      className="relative min-h-screen overflow-hidden text-slate-900 dark:text-slate-100"
-      suppressHydrationWarning
-    >
+      <div className="relative min-h-screen overflow-hidden text-[var(--text)]" suppressHydrationWarning>
       <div className="pointer-events-none absolute inset-0 hero-grid" />
 
       <header
