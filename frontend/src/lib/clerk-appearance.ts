@@ -25,7 +25,9 @@ export function clerkAppearance(isDark: boolean) {
         ? "border border-white/10 bg-slate-950/60 text-slate-100 hover:bg-slate-800"
         : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100",
       formButtonPrimary: "bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-500/20",
-      footerActionLink: "text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300",
+      footerActionLink: isDark
+        ? "text-sky-400 hover:text-sky-300"
+        : "text-sky-600 hover:text-sky-700",
       formFieldInput: isDark
         ? "border-white/10 bg-slate-950 text-slate-100"
         : "border-slate-300 bg-white text-slate-900",

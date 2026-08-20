@@ -15,7 +15,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       defaultTheme="system"
       enableSystem
       disableTransitionOnChange
-      storageKey="theme"
+      storageKey="web-observer-theme"
     >
       {children}
     </NextThemesProvider>
