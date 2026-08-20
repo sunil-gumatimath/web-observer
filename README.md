@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/logo.svg" alt="Web Observer logo" width="260" />
+</p>
+
 # Web Observer
 
 Web change-detection and alerting platform.
@@ -31,7 +35,33 @@ Verified end-to-end: backend unit tests pass, the frontend type-checks, and the 
 1. You create a monitor (URL + mode).  
 2. Worker fetches the page (HTTP or Playwright) and builds a content hash.  
 3. First success = **baseline** (no alert).  
-4. Later hash differs → save diff → notify via configured channels (email / Slack / Discord) or outbound signed webhooks.  
+4. Later hash differs → save diff → notify via configured channels (email / Slack / Discord) or outbound signed webhooks.
+
+## Architecture
+
+```mermaid
+flowchart TB
+  Sched["app/scheduler.py\npoll 5s + jitter, lease 60s\nclaim_due_monitors"]
+  API["FastAPI POST /monitors/{id}/run\n+ POST /monitors"]
+  Redis[("Redis dramatiq broker")]
+  HTTPW["run_http_check (http_checks)\nfetch_url / sitemap_monitor_text"]
+  BrowW["run_browser_check (browser_checks)\nfetch_url_browser + optional capture_screenshot"]
+  Pipe["pipeline.apply_fetch_result\n extract_normalized[page_content|site_links|product_price|list_items] → SHA256 → Snapshot (Postgres + Object Storage) → unified_diff/list diff → enrich_change (heuristic or OpenAI/Vercel Gateway) + watch_note triage (fails open) → ChangeEvent(is_noise,is_read)"]
+  Inbox[("Postgres: ChangeEvent Alerts Inbox")]
+  Outbox[("NotificationOutbox + WebhookDelivery")]
+  WorkN["notifications worker\ndeliver_outbox_message"]
+  WorkW["webhooks worker\ndeliver_webhook_message"]
+  Ext["Slack · Email(Resend) · Webhook(signed X-MTW-Signature) · Dashboard /alerts"]
+  Target["Monitored pages"]
+  Brand[("Object Storage\nbrand-assets/ + screenshots/")]
+
+  Target --> HTTPW & BrowW
+  Sched & API --> Redis --> HTTPW & BrowW --> Pipe --> Inbox --> Outbox --> WorkN & WorkW --> Ext
+  Pipe -.->|"best-effort HTML <meta> (og:*, favicon) re-host brand-assets/ (no Context.dev)"| Brand
+```
+
+* **No `worker.ts` / `SCRAPE_CRON` / `Context.dev API`.** Workers are Python `dramatiq` (`backend/app/workers/checks.py:21`, `browser_checks.py:24`) via `RedisBroker` (`backend/app/workers/broker.py:9`). Scheduling is Postgres-driven `claim_due_monitors` (`SELECT ... FOR UPDATE SKIP LOCKED`) with 60s lease + jitter `backend/app/config.py:73-75`, `backend/app/scheduler.py:40`. Extraction/screenshot is in-process (`backend/app/services/pipeline.py:56`, `backend/app/services/visual.py:280`) only calling an external LLM when `LLM_API_KEY` is set (OpenAI or `https://ai-gateway.vercel.sh/v1`). Snapshots cover all 4 modes, not just sitemap/markdown/product.
+* Full diagrams: `docs/architecture-uml.md` (Components, ERD, Sequence).  
 
 ## What you need
 
@@ -101,7 +131,7 @@ Redis must already be running. Prefer loading env from `backend/.env` (Neon).
 | 4 | **Scheduler** | `python -m app.scheduler` |
 | 5 | **Frontend** | `npm run dev` (port 3000) |
 
-**Browser worker is required** for `visual` mode and `js_required` monitors.  
+**Browser worker is required** for `js_required` monitors and opt-in `screenshots_enabled`.  
 Use **`--threads 1`** on Windows. Playwright runs in a **subprocess** (`playwright_job`) to avoid `[Errno 9] Bad file descriptor`.
 
 **Optional background jobs** (not required for manual checks or alerts):
@@ -145,24 +175,25 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 |------|-----------------|
 | Monitoring modes | `page_content` (whole page text), `site_links` (sitemap URL changes), `product_price` (price/currency), `list_items` (CSS-selector link list) — plus `js_required` for SPAs |
 | Alert channels | Email (Resend), Slack webhook, Discord webhook |
-| AI summaries | Heuristic by default; optional OpenAI-compatible LLM for category + plain-language summary |
-| Diffs | Before/after text diffs; structured JSON / list diffs; optional screenshot change gate |
-| Screenshots | Per-monitor `screenshots_enabled`: Playwright screenshot history + side-by-side comparison with aHash distance, served via the existing storage layer |
+| AI change summaries | Optional plain-language summaries per change (heuristic by default; enable OpenAI-compatible LLM via `LLM_API_BASE` — works with OpenAI or Vercel AI Gateway — and toggle per-workspace via `ai_summaries_enabled`) |
+| AI relevance filter | Optional per-monitor `watch_note` triage — LLM scores each diff vs. watch note; routine noise (cookie banners, ads, counters) is marked `is_noise=true`, held in dashboard (not deleted), excluded from notifications/digests, fails open on LLM error |
+| Diffs | GitHub-style added/removed line views for every content change (unified diff + split view) via `GithubDiff` |
+| Screenshots | Opt-in per-monitor `screenshots_enabled`: when enabled, every check captures a fresh Playwright screenshot (`brand-assets/` + `screenshots/` storage) with aHash history and side-by-side comparison |
 | Outbound webhooks | Signed (`X-MTW-Signature`) deliveries on change events + delivery log |
 | API keys | `mtw_...` bearer tokens for programmatic access |
 | Bulk workflows | CSV / JSON import + export of monitors and changes |
-| Alerts inbox | In-app unread/read alerts, `is_noise` flag to exclude from digests |
-| Watch notes | Free-text notes per monitor |
-| Digests | Daily / weekly workspace digest emails (background `digest_job`) |
+| Alerts inbox | Every change stored in-app with `is_read`/`is_noise` state, independent of external notifications — filter Signal/Unread/Noise |
+| Watch notes | Free-text `watch_note` per monitor drives AI relevance filter |
+| Digests | Daily / weekly workspace digest emails (background `digest_job`) — noise excluded |
 | RBAC & audit | Owner / admin / member / viewer roles, member management, audit log |
 | Plans / billing | free / pro / business / enterprise tiers; Stripe or simulated checkout (solo: skip Stripe) |
 | Adaptive scheduling | Interval auto-stretches after quiet runs |
 | Retention | Background `retention_job` purges old runs / snapshots (default 90 days) |
-| Brand-aware dashboards | Auto-detected title/description/logo/hero per monitor; re-hosted brand assets on the dashboard and public share pages |
-| Bring-your-own keys | Per-workspace LLM (api key/base/model) and Resend (api key + sender) overrides; falls back to global keys |
-| Public share links | Opaque-token read-only share links for a monitor's change history (token hashed at rest, revocable) |
-| Team invites | Opaque-token workspace invite links with role / max-uses / expiry (token hashed at rest) |
-| Opt-in screenshots | `screenshots_enabled` captures a screenshot on every check (off by default to avoid forcing Playwright on text monitors) |
+| Brand-aware dashboard | Adding a website auto-fills logo/title/description/hero from page `<meta>` (`og:*`, favicon) and re-hosts via `brand-assets/` for dashboard + public share pages (no external Context.dev dependency) |
+| Managed or self-serve keys | Server provides global `LLM_API_*`/`RESEND_API_KEY`; or each workspace brings its own keys in Settings → Workspace keys (overrides global) |
+| Public share links | Opaque-token read-only public page per monitor (`/share/{token}` — unguessable, hashed at rest, expiring, no login required) |
+| Teams | Expiring multi-use invite links (`/invite/{token}`) + switch between workspaces you belong to (`GET /me` + localStorage) |
+| Opt-in screenshots | `screenshots_enabled` (off by default) — when enabled, every check captures a fresh screenshot at a glance |
 
 The web UI (Next.js) exposes: **Dashboard**, **Monitors** (list / new / edit / detail), **Changes** (per-change diff), **Alerts** (inbox), **Import** (bulk CSV/JSON), **Settings** (channels, workspace, billing), and an in-app **Docs** page.
 
@@ -190,10 +221,10 @@ Python / FastAPI · Neon Postgres · Redis / Dramatiq · Next.js · Clerk · Res
 
 These extend the platform beyond the original roadmap:
 
-- **Brand-aware dashboards** — each monitor auto-detects a title, description, logo, and hero image (served via a public brand-asset endpoint so they render on the dashboard and the public share page). Trigger detection when creating a monitor or via the per-monitor *Brand* action.
-- **Bring-your-own keys** — a workspace owner can set per-workspace LLM keys (`llm_api_key` / `llm_api_base` / `llm_model`) and Resend keys (`resend_api_key` / `email_from`) in **Settings → Workspace keys**. AI summaries and email alerts use the workspace keys when present, otherwise the global keys. Settings values are masked on read.
+- **Brand-aware dashboard** — adding a website auto-fills title/description/logo/hero from HTML `<meta>` (no Context.dev) and re-hosts via `brand-assets/` for dashboard + public share pages. Also refreshable via per-monitor *Brand* action (`POST /workspaces/{id}/monitors/{id}/brand`).
+- **Managed or self-serve keys** — a workspace owner can set per-workspace LLM keys (`llm_api_key` / `llm_api_base` / `llm_model`) and Resend keys (`resend_api_key` / `email_from`) in **Settings → Workspace keys**. AI summaries and email alerts use the workspace keys when present, otherwise the global keys. Works with OpenAI or Vercel AI Gateway (set `LLM_API_BASE=https://ai-gateway.vercel.sh/v1`). Settings values are masked on read.
 - **Public share links** — from a monitor's detail page, *Share* creates an opaque-token link (`/share/{token}`) that anyone can open to view the monitor's change history. The token is hashed at rest (only its prefix is stored) and the link is revocable.
-- **Team invites** — **Settings → Team** generates opaque-token invite links with a role, max uses, and expiry. Tokens are hashed at rest.
-- **Opt-in screenshots** — set `screenshots_enabled` on a monitor (UI: create monitor → screenshot option) to capture a screenshot on every check. Off by default so text monitors don't require Playwright.
+- **Teams** — **Settings → Team** generates expiring multi-use invite links with role/max-uses. Switch workspaces via `GET /me` and `localStorage` (`web_observer_workspace_id`).
+- **Opt-in screenshots** — `screenshots_enabled` off by default; when enabled, every check captures a fresh Playwright screenshot (`screenshots/{monitor_id}/{run_id}.png`) with aHash history.
 
 > Database: the columns/tables for these features are applied by `backend/scripts/apply_007.py` (idempotent; run with `PYTHONPATH=.` from `backend/`). New tables are also auto-created by `Base.metadata.create_all` at API startup.

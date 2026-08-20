@@ -4,6 +4,7 @@ import { UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
+import { Logo } from "@/components/logo";
 import { cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { api } from "@/lib/api";
@@ -39,17 +40,13 @@ const nav = [
 	},
 ];
 
-function Logo({ compact = false }: { compact?: boolean }) {
+function HeaderLogo({ compact = false }: { compact?: boolean }) {
 	return (
 		<Link
 			href="/dashboard"
 			className="group flex items-center gap-2.5 font-semibold tracking-tight text-slate-900 dark:text-white"
 		>
-			<span className="relative flex h-9 w-9 items-center justify-center">
-				<span className="absolute inset-0 rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 opacity-90 shadow-glow-sm transition group-hover:opacity-100" />
-				<span className="relative text-sm font-bold text-white">W</span>
-			</span>
-			{!compact ? <span className="hidden sm:inline">Web Observer</span> : null}
+			<Logo compact={compact} iconSize={36} />
 		</Link>
 	);
 }
@@ -191,7 +188,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 			>
 				<div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
 					<div className="flex items-center gap-3">
-						<Logo />
+						<HeaderLogo />
 						<nav className="ml-2 hidden items-center gap-0.5 md:flex">
 							{nav.map((item) => {
 								const active = item.match(pathname);

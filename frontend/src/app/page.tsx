@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { LogoIcon } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const features = [
   {
     title: "Precise change detection",
-    body: "Watch a page's content, a site's sitemap links, or a product's price.",
+    body: "Watch a page's content, a site's sitemap links, a product's price, or a list of links.",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path
@@ -57,12 +58,10 @@ export default function HomePage() {
         className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-4 py-5"
         suppressHydrationWarning
       >
-        <div className="flex items-center gap-2.5 font-semibold tracking-tight">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white shadow-glow-sm">
-            W
-          </span>
-          <span className="hidden sm:inline">Web Observer</span>
-        </div>
+        <Link href="/dashboard" className="flex items-center gap-2.5 font-semibold tracking-tight">
+          <LogoIcon size={36} />
+          <span className="hidden sm:inline text-slate-900 dark:text-white">Web Observer</span>
+        </Link>
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <Link
@@ -160,7 +159,7 @@ export default function HomePage() {
 
         <div className="mx-auto mt-16 max-w-3xl rounded-2xl border border-[var(--border)] bg-gradient-to-br from-white/80 to-slate-100/80 p-8 text-center shadow-card backdrop-blur dark:from-slate-900/80 dark:to-slate-950/80">
           <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Page content · Site links · Product price
+            Page content · Site links · Product price · List items
           </p>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
             Auth powered by Clerk. After sign-in you land on the dashboard.
