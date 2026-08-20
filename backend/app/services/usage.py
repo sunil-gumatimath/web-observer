@@ -56,6 +56,14 @@ def add_storage_bytes(db: Session, workspace_id: uuid.UUID, *, nbytes: int) -> U
     return counter
 
 
+def increment_ai_tokens(db: Session, workspace_id: uuid.UUID, *, n: int = 1) -> UsageCounter:
+    if n <= 0:
+        return get_or_create_counter(db, workspace_id)
+    counter = get_or_create_counter(db, workspace_id)
+    counter.ai_tokens += n
+    return counter
+
+
 class QuotaExceeded(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)

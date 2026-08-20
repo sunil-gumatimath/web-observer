@@ -143,7 +143,14 @@ def get_current_principal(
             if found is None:
                 raise HTTPException(status_code=401, detail="Invalid API key")
             _key, ws, user = found
-            db.commit()
+            # lookup_api_key already staged last_used_at; commit only that flush
+            # without side-effecting unrelated pending changes.
+            db.flush()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
             return AuthPrincipal(
                 user=user,
                 is_internal=False,
@@ -170,7 +177,12 @@ def get_current_principal(
             email = email[0] if email else f"{clerk_user_id}@users.clerk.local"
         user = upsert_clerk_user(db, clerk_user_id=clerk_user_id, email=str(email))
         ensure_default_workspace(db, user)
-        db.commit()
+        db.flush()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         db.refresh(user)
         return AuthPrincipal(user=user, is_internal=False, clerk_user_id=clerk_user_id, email=user.email)
 

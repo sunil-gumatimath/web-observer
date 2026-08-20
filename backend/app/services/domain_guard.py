@@ -59,19 +59,38 @@ def assert_domain_allowed(url: str) -> str:
 
 
 def acquire_domain_slot(domain: str, *, ttl_seconds: int = 120) -> None:
-    """Atomically increment concurrency counter and check limit.
+    """Increment concurrency counter and check limit.
 
+    Uses a Lua script for atomic incr+expire+check to avoid race over-allocation.
     Raises DomainBlocked if the domain is at capacity.
     """
     settings = get_settings()
     r = _redis()
     key = f"conc:{domain}"
-    current = r.incr(key)
-    r.expire(key, ttl_seconds)
-    if current > settings.per_domain_concurrency:
-        # Over limit — rollback and reject
-        r.decr(key)
-        raise DomainBlocked(domain, "domain concurrency limit")
+    limit = int(settings.per_domain_concurrency)
+    # Atomic Lua: incr, set expire if first, check limit, rollback if over
+    lua = """
+    local cur = redis.call('INCR', KEYS[1])
+    if cur == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+    if cur > tonumber(ARGV[2]) then
+        redis.call('DECR', KEYS[1])
+        return cur
+    end
+    return cur
+    """
+    try:
+        current = r.eval(lua, 1, key, str(ttl_seconds), str(limit))
+    except Exception:
+        # Fallback for fakeredis / non-Lua envs (tests)
+        current = r.incr(key)
+        if current == 1:
+            r.expire(key, ttl_seconds)
+        if current > limit:
+            r.decr(key)
+            raise DomainBlocked(domain, "domain concurrency limit") from None
+        return
+    if int(current) > limit:
+        raise DomainBlocked(domain, "domain concurrency limit") from None
 
 
 def release_domain_slot(domain: str) -> None:

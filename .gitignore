@@ -15,9 +15,10 @@ venv/
 htmlcov/
 *.egg
 
-# Env / secrets
+# Env / secrets — both root and backend/.env must be ignored (backend/.env is the runtime source)
 .env
 .env.local
+backend/.env
 *.pem
 
 # IDE / OS

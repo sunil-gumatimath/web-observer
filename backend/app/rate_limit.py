@@ -32,17 +32,26 @@ def _storage_uri() -> str | None:
 def _key_func(request: Request) -> str:
     """Rate-limit key: authenticated principal when available, else IP.
 
-    Reads the Authorization/Bearer header directly to avoid an import cycle
-    with app.auth (which imports this module transitively via routers). The
-    JWT `sub` claim is decoded without signature verification — acceptable
-    here since the limit is best-effort and not a security boundary.
+    Prefers a verified principal if the request has already been authenticated
+    (via app.auth). Falls back to best-effort JWT sub parsing for unauthenticated
+    endpoints that still want per-user limiting, else IP.
     """
+    # Prefer verified principal stash set by auth middleware if present
+    principal = getattr(request.state, "auth_principal", None)
+    if principal is not None:
+        # AuthPrincipal.user_id or clerk_user_id
+        uid = getattr(principal, "clerk_user_id", None) or getattr(principal, "user_id", None)
+        if uid:
+            return f"user:{uid}"
+        ak_ws = getattr(principal, "api_key_workspace_id", None)
+        if ak_ws:
+            return f"apikey:{ak_ws}"
     auth = request.headers.get("authorization")
     if auth and auth.lower().startswith("bearer "):
         tok = auth.split(" ", 1)[1].strip()
         if tok.startswith("mtw_"):
             return f"apikey:{tok[:24]}"
-        # Clerk JWT: take sub claim without verifying (cheap, best-effort)
+        # Clerk JWT: take sub claim without verifying (cheap, best-effort fallback)
         try:
             import base64
             import json
@@ -52,7 +61,8 @@ def _key_func(request: Request) -> str:
             payload = json.loads(base64.urlsafe_b64decode(part))
             sub = payload.get("sub")
             if sub:
-                return f"user:{sub}"
+                # Prefix to distinguish unverified fallback
+                return f"user_unverified:{sub}"
         except Exception:
             pass
     return f"ip:{get_remote_address(request)}"

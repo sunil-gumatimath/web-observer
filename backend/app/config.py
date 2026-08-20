@@ -20,6 +20,8 @@ class Settings(BaseSettings):
         "WebObserver/0.1 (+https://example.com/bot; contact=ops@example.com)"
     )
 
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
     # Quotas (beta defaults)
     min_check_interval_minutes: int = 15
     max_monitors_per_workspace: int = 25
@@ -65,6 +67,8 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     ai_max_diff_chars: int = 6000
     ai_max_output_tokens: int = 200
+    ai_async_enrichment: bool = False  # if true, LLM runs in background worker
+    ai_dedup_ttl_seconds: int = 600
 
     scheduler_poll_seconds: float = 5.0
     scheduler_batch_size: int = 50

@@ -1,9 +1,11 @@
 """Brand-aware dashboard info (webdog.ai parity).
 
 When a monitor URL is added we auto-discover the site's title, description,
-favicon/logo and a hero image from its ``<meta>`` tags, then re-host those two
-images in our own object storage so they can be shown in the dashboard and on
-public share pages without relying on the upstream host staying up.
+favicon/logo and a hero image from its HTML ``<meta>`` tags (og:title,
+og:description, og:image, twitter:image, link[rel~="icon"]) — no external
+Context.dev or other brand API dependency — then re-host those two images in
+our own object storage so they can be shown in the dashboard and on public
+share pages without relying on the upstream host staying up.
 
 Image/asset responses are served through the public brand-asset endpoint and are
 deliberately scoped to the ``brand-assets/`` object-key prefix.

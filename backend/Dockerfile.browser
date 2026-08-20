@@ -12,5 +12,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN useradd -m appuser 2>/dev/null || true; chown -R appuser:appuser /app || true
+# Playwright image runs as root by default; keep root for browser sandbox but
+# drop to appuser if you run with --user. No HEALTHCHECK here — compose handles it.
+
 # Dramatiq worker listening only to browser_checks queue
 CMD ["dramatiq", "app.workers", "--queues", "browser_checks", "--processes", "1", "--threads", "1"]

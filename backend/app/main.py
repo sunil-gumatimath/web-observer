@@ -28,7 +28,10 @@ Db = Annotated[Session, Depends(get_db)]
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     logging.basicConfig(level=settings.log_level)
-    Base.metadata.create_all(bind=engine)
+    # Only auto-create tables in development/test — production schema is managed by Alembic.
+    # This prevents silent drift where a new model field appears via create_all without a migration.
+    if settings.is_development or settings.app_env in ("test", "testing"):
+        Base.metadata.create_all(bind=engine)
     logger.info("web-observer api starting version=%s env=%s", __version__, settings.app_env)
     yield
 
@@ -43,12 +46,17 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
+
+def _cors_origins() -> list[str]:
+    raw = (getattr(settings, "cors_origins", "") or "").strip()
+    if not raw:
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -84,9 +92,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     Handling exceptions here keeps the response inside the CORS middleware and
     gives the frontend a parseable body to render.
     """
-    logger.exception(
-        "unhandled_error path=%s method=%s", request.url.path, request.method
-    )
+    logger.exception("unhandled_error path=%s method=%s", request.url.path, request.method)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 

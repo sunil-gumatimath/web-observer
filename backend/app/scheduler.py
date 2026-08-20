@@ -77,14 +77,18 @@ def claim_due_monitors(limit: int) -> list[tuple[uuid.UUID, bool]]:
                 .limit(1)
             )
             if active is not None:
-                # Push next_run slightly to avoid tight loop
+                # Push next_run slightly to avoid tight loop and release lease immediately
                 monitor.next_run_at = now + timedelta(seconds=30)
+                monitor.lease_owner = None
+                monitor.lease_expires_at = None
                 continue
 
             try:
                 assert_can_run_check(db, monitor.workspace_id)
             except QuotaExceeded:
-                logger.warning("quota_exceeded workspace_id=%s monitor_id=%s", monitor.workspace_id, monitor.id)
+                logger.warning(
+                    "quota_exceeded workspace_id=%s monitor_id=%s", monitor.workspace_id, monitor.id
+                )
                 monitor.next_run_at = now + timedelta(hours=1)
                 continue
 

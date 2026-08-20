@@ -1,0 +1,22 @@
+# Keep image small and secret-free
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.git/
+.gitignore
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+data/
+logs/
+.docker-data/
+.env
+.env.local
+*.pem
+frontend/
+node_modules/
+*.log
+logs-*.err

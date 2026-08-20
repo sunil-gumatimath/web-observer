@@ -37,14 +37,20 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      sleep 3;
       mc alias set local http://minio:9000 minioadmin minioadmin;
       mc mb -p local/monitor-snapshots || true;
       exit 0;
@@ -61,8 +67,9 @@ services:
       DATABASE_URL: postgresql+psycopg://monitor:monitor@postgres:5432/web_observer
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     ports:
-      - "8000:8000"
+      - "8002:8000"
     volumes:
       - ./backend:/app
     healthcheck:
@@ -91,6 +98,11 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ./backend:/app
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'app.scheduler' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,6 +125,11 @@ services:
       S3_ENDPOINT_URL: http://minio:9000
     volumes:
       - ./backend:/app
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f dramatiq > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
@@ -133,13 +150,18 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ./backend:/app
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'digest_job' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       worker:
-        condition: service_started
+        condition: service_healthy
 
   worker-browser:
     build:
@@ -155,6 +177,11 @@ services:
       MAX_BROWSER_CHECKS_PER_DAY: "50"
     volumes:
       - ./backend:/app
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f dramatiq > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
@@ -170,7 +197,7 @@ services:
     working_dir: /app
     command: sh -c "npm install && npm run dev -- -H 0.0.0.0 -p 3000"
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8002
       NEXT_PUBLIC_INTERNAL_API_TOKEN: dev-internal-token
       WATCHPACK_POLLING: "true"
     ports:
@@ -178,6 +205,12 @@ services:
     volumes:
       - ./frontend:/app
       - web_node_modules:/app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       api:
         condition: service_healthy
