@@ -55,8 +55,10 @@ function ClerkAuthControls() {
 	if (!config.clerkEnabled) {
 		// Dev mode: no Clerk session. The app authenticates via the backend
 		// X-Internal-Token; show a static dev indicator instead of auth buttons.
+		// suppressHydrationWarning: Retriever / other extensions inject rtrvr-ls attributes before hydrate
 		return (
 			<span
+				suppressHydrationWarning
 				title="Dev mode — internal token auth"
 				className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 dark:border-white/10 dark:text-slate-300"
 			>
@@ -71,12 +73,12 @@ function ClerkUserControls() {
 	const { isSignedIn, isLoaded } = useAuth();
 	if (!isLoaded) {
 		return (
-			<span className="h-8 w-8 animate-pulse-soft rounded-full bg-slate-200 dark:bg-slate-800" />
+			<span suppressHydrationWarning className="h-8 w-8 animate-pulse-soft rounded-full bg-slate-200 dark:bg-slate-800" />
 		);
 	}
 	if (!isSignedIn) {
 		return (
-			<div className="flex items-center gap-2">
+			<div className="flex items-center gap-2" suppressHydrationWarning>
 				<Link
 					href="/sign-in"
 					className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
@@ -139,7 +141,7 @@ function ClerkWorkspaceSwitcher() {
 		<select
 			aria-label="Switch workspace"
 			value={current}
-			className="hidden max-w-[10rem] rounded-lg border border-[var(--border)] bg-white px-2 py-1.5 text-xs text-slate-700 sm:block dark:bg-slate-950 dark:text-slate-200"
+			className="hidden max-w-[10rem] rounded-lg border border-[var(--border)] bg-[var(--field-bg)] px-2 py-1.5 text-xs text-[var(--text)] sm:block"
 			onChange={(e) => {
 				const id = e.target.value;
 				setCurrent(id);
@@ -178,18 +180,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 	// suppressHydrationWarning: browser extensions (e.g. Retriever) inject attributes
 	// like `rtrvr-ls` into the DOM before React hydrates, which is not an app bug.
 	return (
-		<div
-			className="min-h-screen text-slate-900 dark:text-slate-100"
-			suppressHydrationWarning
-		>
+		<div className="min-h-screen text-[var(--text)]" suppressHydrationWarning>
 			<header
-				className="sticky top-0 z-40 border-b border-[var(--border)] bg-white/75 backdrop-blur-xl dark:bg-slate-950/75"
+				className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--bg-elevated)]/75 backdrop-blur-xl"
 				suppressHydrationWarning
 			>
-				<div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-					<div className="flex items-center gap-3">
+				<div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3" suppressHydrationWarning>
+					<div className="flex items-center gap-3" suppressHydrationWarning>
 						<HeaderLogo />
-						<nav className="ml-2 hidden items-center gap-0.5 md:flex">
+						<nav className="ml-2 hidden items-center gap-0.5 md:flex" suppressHydrationWarning>
 							{nav.map((item) => {
 								const active = item.match(pathname);
 								return (
@@ -205,15 +204,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 						</nav>
 					</div>
 
-					<div className="flex items-center gap-3">
+					<div className="flex items-center gap-3" suppressHydrationWarning>
 						<WorkspaceSwitcher />
 						<ThemeToggle />
-						<div className="hidden items-center border-l border-[var(--border)] pl-3 sm:flex">
+						<div className="hidden items-center border-l border-[var(--border)] pl-3 sm:flex" suppressHydrationWarning>
 							<ClerkAuthControls />
 						</div>
 						<button
 							type="button"
-							className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-white/5 md:hidden"
+							className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)] md:hidden"
 							onClick={() => setOpen((v) => !v)}
 							aria-label="Toggle menu"
 							aria-expanded={open}
@@ -256,8 +255,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 					<div
 						id="mobile-nav"
 						className="border-t border-[var(--border)] px-4 py-3 md:hidden"
+						suppressHydrationWarning
 					>
-						<nav className="flex flex-col gap-1">
+						<nav className="flex flex-col gap-1" suppressHydrationWarning>
 							{nav.map((item) => {
 								const active = item.match(pathname);
 								return (
@@ -275,7 +275,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 								);
 							})}
 						</nav>
-						<div className="mt-3 flex items-center border-t border-[var(--border)] pt-3 sm:hidden">
+						<div className="mt-3 flex items-center border-t border-[var(--border)] pt-3 sm:hidden" suppressHydrationWarning>
 							<ClerkAuthControls />
 						</div>
 					</div>

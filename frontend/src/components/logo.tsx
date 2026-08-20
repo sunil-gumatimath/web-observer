@@ -45,7 +45,7 @@ export function LogoIcon({ size = 36, className }: { size?: number; className?: 
 
 export function Logo({ compact = false, iconSize = 36 }: { compact?: boolean; iconSize?: number }) {
   return (
-    <span className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-slate-900 dark:text-white">
+    <span className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-[var(--text)]">
       <LogoIcon size={iconSize} className="shrink-0 rounded-xl shadow-glow-sm" />
       {!compact ? (
         <span className="hidden sm:inline text-[17px] font-bold tracking-[-0.02em]">Web Observer</span>

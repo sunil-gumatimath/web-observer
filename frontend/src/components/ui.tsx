@@ -28,11 +28,11 @@ export function Button({
 		primary:
 			"bg-gradient-to-b from-sky-500 to-sky-600 text-white shadow-glow-sm hover:from-sky-400 hover:to-sky-500 border border-sky-400/30",
 		secondary:
-			"bg-slate-100 text-slate-800 hover:bg-slate-200 border border-slate-300 shadow-sm dark:bg-slate-800/80 dark:text-slate-100 dark:hover:bg-slate-700/90 dark:border-white/10",
+			"bg-[var(--bg-elevated)] text-[var(--text)] border border-[var(--border)] hover:bg-[var(--surface-bg)] shadow-sm dark:border-white/10 dark:hover:bg-white/5",
 		danger:
 			"bg-rose-600/90 text-white hover:bg-rose-500 border border-rose-400/20 shadow-sm",
 		ghost:
-			"bg-transparent text-slate-600 hover:bg-slate-200/60 hover:text-slate-900 border border-transparent dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white",
+			"bg-transparent text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)] border border-transparent dark:hover:bg-white/5",
 	}[variant];
 
 	const sizes = {
@@ -109,7 +109,7 @@ export function Label({
 	return (
 		<label
 			htmlFor={htmlFor}
-			className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400"
+			className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]"
 		>
 			{children}
 		</label>
@@ -184,11 +184,11 @@ export function PageHeader({
 	return (
 		<div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 			<div className="min-w-0">
-				<h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl dark:text-white">
+				<h1 className="text-2xl font-semibold tracking-tight text-[var(--text)] sm:text-3xl">
 					{title}
 				</h1>
 				{description ? (
-					<p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+					<p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
 						{description}
 					</p>
 				) : null}
@@ -232,12 +232,8 @@ export function EmptyState({
 					</svg>
 				)}
 			</div>
-			<p className="text-base font-medium text-slate-900 dark:text-slate-100">
-				{title}
-			</p>
-			<p className="mt-1.5 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-				{body}
-			</p>
+			<p className="text-base font-medium text-[var(--text)]">{title}</p>
+			<p className="mt-1.5 max-w-sm text-sm text-[var(--muted)]">{body}</p>
 			{action ? <div className="mt-5">{action}</div> : null}
 		</Card>
 	);
@@ -342,16 +338,14 @@ export function StatCard({
 		<Card className="relative overflow-hidden">
 			<div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-sky-500/10 blur-2xl" />
 			<p className="section-label">{label}</p>
-			<p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+			<p className="mt-3 text-3xl font-semibold tracking-tight text-[var(--text)]">
 				{value}
 			</p>
 			{hint ? (
-				<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">
-					{hint}
-				</p>
+				<p className="mt-1.5 text-xs text-[var(--muted)]">{hint}</p>
 			) : null}
 			{pct != null ? (
-				<div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+				<div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
 					<div
 						className="h-full rounded-full bg-gradient-to-r from-sky-500 to-indigo-400 transition-all"
 						style={{ width: `${pct}%` }}
@@ -403,7 +397,7 @@ export function SegmentedControl<T extends string>({
 			role="group"
 			aria-label={ariaLabel}
 			className={cn(
-				"inline-flex flex-wrap gap-1 rounded-lg border border-[var(--border)] bg-slate-50/60 p-0.5 dark:bg-slate-950/40",
+				"inline-flex flex-wrap gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-bg)] p-0.5",
 				className,
 			)}
 		>
@@ -419,7 +413,7 @@ export function SegmentedControl<T extends string>({
 							segmentedBtn,
 							active
 								? "bg-sky-600 text-white shadow-sm"
-								: "border border-transparent text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5",
+								: "border border-transparent text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)]",
 						)}
 					>
 						{opt.label}
@@ -444,11 +438,11 @@ export function DataTable({
 			<div className="overflow-x-auto">
 				<table className="w-full text-left text-sm">
 					<thead>
-						<tr className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-950/40">
+						<tr className="border-b border-[var(--border)] bg-[var(--surface-bg)]">
 							{headers.map((h) => (
 								<th
 									key={h}
-									className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500"
+									className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]"
 								>
 									{h}
 								</th>
