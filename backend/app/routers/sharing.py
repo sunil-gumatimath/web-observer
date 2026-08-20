@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
@@ -27,6 +27,7 @@ from app.auth import (
     require_workspace_member,
 )
 from app.db import get_db
+from app.rate_limit import limiter
 from app.models import (
     ChangeEvent,
     Monitor,
@@ -181,8 +182,11 @@ def revoke_share_link(
         resource_id=str(monitor_id),
     )
     db.commit()
+
+
 @router.get("/public/share/{token}", response_model=PublicShareOut)
-def get_public_share(token: str, db: Db) -> PublicShareOut:
+@limiter.limit("30/minute")
+def get_public_share(request: Request, token: str, db: Db) -> PublicShareOut:
     row = db.scalar(select(ShareLink).where(ShareLink.token_hash == hash_token(token)))
     now = datetime.now(UTC)
     if row is None or not row.enabled or (row.expires_at and row.expires_at < now):
@@ -229,6 +233,8 @@ def get_public_share(token: str, db: Db) -> PublicShareOut:
         alerts=alerts,
         total=len(alerts),
     )
+
+
 # ---------------------------------------------------------------------------
 # Team invite links
 # ---------------------------------------------------------------------------
@@ -337,8 +343,11 @@ def revoke_invite(
         resource_id=str(workspace_id),
     )
     db.commit()
+
+
 @router.get("/invites/{token}/preview")
-def preview_invite(token: str, db: Db) -> dict:
+@limiter.limit("30/minute")
+def preview_invite(request: Request, token: str, db: Db) -> dict:
     row = db.scalar(select(WorkspaceInvite).where(WorkspaceInvite.token_hash == hash_token(token)))
     now = datetime.now(UTC)
     if row is None or (row.expires_at and row.expires_at < now):
@@ -371,8 +380,7 @@ def redeem_invite(
         sa_update(WorkspaceInvite)
         .where(
             WorkspaceInvite.token_hash == hash_token(token),
-            (WorkspaceInvite.expires_at.is_(None))
-            | (WorkspaceInvite.expires_at >= now),
+            (WorkspaceInvite.expires_at.is_(None)) | (WorkspaceInvite.expires_at >= now),
             WorkspaceInvite.use_count < WorkspaceInvite.max_uses,
         )
         .values(use_count=WorkspaceInvite.use_count + 1)
@@ -416,7 +424,8 @@ def redeem_invite(
 
 
 @router.get("/public/assets/{object_key:path}")
-def get_public_brand_asset(object_key: str) -> Response:
+@limiter.limit("60/minute")
+def get_public_brand_asset(request: Request, object_key: str) -> Response:
     if not brand_asset_allowed(object_key):
         return Response(status_code=404)
     data = get_bytes(object_key)

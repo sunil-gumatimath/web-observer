@@ -93,7 +93,9 @@ def deliver_outbox_message(outbox_id: str) -> None:
                 # Per-account (bring-your-own) Resend credentials override the
                 # server-managed defaults when present.
                 workspace = db.get(Workspace, outbox.workspace_id)
-                ws_api_key = workspace.resend_api_key if workspace else None
+                from app.services.crypto import decrypt_secret as _decrypt
+
+                ws_api_key = _decrypt(workspace.resend_api_key) if workspace else None
                 ws_from = workspace.email_from if workspace else None
                 provider_id = send_email(
                     to=to_addr,

@@ -24,18 +24,35 @@ def run_browser_check(run_id: str) -> None:
     """Execute a JS-required or visual monitor run with Playwright."""
 
     def _pre_run_hook(monitor, run, db):
-        # Daily browser-check quota per workspace
+        # Daily browser-check quota per workspace — atomic incr with check
         day = datetime.now(UTC).strftime("%Y%m%d")
         bkey = f"browser_quota:{monitor.workspace_id}:{day}"
         r = _redis()
-        bcount = int(r.get(bkey) or 0)
-        if bcount >= settings.max_browser_checks_per_day:
+        lua = """
+        local cur = redis.call('INCR', KEYS[1])
+        if cur == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+        return cur
+        """
+        try:
+            cur = int(r.eval(lua, 1, bkey, "86400"))
+        except Exception:
+            cur = int(r.incr(bkey) or 1)
+            if cur == 1:
+                r.expire(bkey, 86_400)
+        if cur > settings.max_browser_checks_per_day:
+            # Rollback overshoot
+            try:
+                r.decr(bkey)
+            except Exception:
+                pass
             run.status = RunStatus.FAILED.value
             run.error_code = "internal_error"
             run.error_message = "Browser check daily quota exceeded"
             run.finished_at = datetime.now(UTC)
             db.commit()
             return True
+        # We already reserved quota; avoid double-increment in _fetch
+        run._quota_reserved = True  # type: ignore[attr-defined]
         return False
 
     def _fetch(monitor: Monitor, db):
@@ -44,14 +61,13 @@ def run_browser_check(run_id: str) -> None:
             timeout_seconds=max(monitor.timeout_seconds, 45),
             max_response_bytes=monitor.max_response_bytes,
         )
-
-        # Increment browser-quota counter after successful fetch
-        day = datetime.now(UTC).strftime("%Y%m%d")
-        bkey = f"browser_quota:{monitor.workspace_id}:{day}"
-        r = _redis()
-        r.incr(bkey)
-        r.expire(bkey, 86_400)
-
+        # Quota already reserved atomically in _pre_run_hook; just refresh expiry.
+        try:
+            day = datetime.now(UTC).strftime("%Y%m%d")
+            bkey = f"browser_quota:{monitor.workspace_id}:{day}"
+            _redis().expire(bkey, 86_400)
+        except Exception:
+            pass
         return result
 
     execute_monitored_run(

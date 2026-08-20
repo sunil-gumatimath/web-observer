@@ -6,11 +6,14 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models import ChangeEvent, Monitor, NotificationChannel, NotificationOutbox, Workspace
 from app.models.entities import OutboxStatus
+from app.services.crypto import decrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,78 @@ def build_digest_body(db: Session, workspace: Workspace, *, since: datetime) -> 
         cat = ev.change_category or "other"
         summary = ev.ai_summary or ev.diff_summary or "change"
         lines.append(f"- [{cat}] {name}: {summary}")
-    return "\n".join(lines), len(events)
+
+    plain = "\n".join(lines)
+    # P2: optional LLM executive summary for digest
+    llm_summary = _digest_llm_summary(workspace, events, since)
+    if llm_summary:
+        return f"{plain}\n\n---\nExecutive summary (AI):\n{llm_summary}", len(events)
+    return plain, len(events)
+
+
+def _digest_llm_summary(
+    workspace: Workspace, events: list[ChangeEvent], since: datetime
+) -> str | None:
+    """Generate an executive summary for the digest via LLM if a key is available."""
+    settings = get_settings()
+    # resolve workspace BYO key over global
+    api_key = None
+    api_base = settings.llm_api_base
+    model = settings.llm_model
+    max_tokens = 300
+    if workspace.llm_api_key:
+        api_key = decrypt_secret(workspace.llm_api_key)
+        if workspace.llm_api_base:
+            api_base = workspace.llm_api_base
+        if workspace.llm_model:
+            model = workspace.llm_model
+    else:
+        api_key = settings.llm_api_key
+    if not api_key or not events:
+        return None
+    # Cap to top 20 most recent for prompt size
+    snippet_lines = []
+    for ev in events[:20]:
+        snippet_lines.append(f"- [{ev.change_category or 'other'}] {ev.ai_summary or ev.diff_summary or 'change'}")
+    snippet = "\n".join(snippet_lines)
+    try:
+        from app.services.ai_summary import _post_with_retries
+
+        base = (api_base or "https://api.openai.com/v1").rstrip("/")
+        system = (
+            "You summarize a daily website monitoring digest. Given bullet list of change summaries, "
+            "write a 3-4 sentence executive summary highlighting most important signals grouped by theme. "
+            "No markdown, plain text."
+        )
+        user = f"Workspace: {workspace.name}\nPeriod since {since.isoformat()}\nChanges:\n{snippet}"
+        payload = {
+            "model": model,
+            "temperature": 0.3,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        # Try JSON mode not needed; plain text summarizer
+        resp = _post_with_retries(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            payload=payload,
+            timeout=30.0,
+            max_attempts=2,
+        )
+        data = resp.json()
+        content = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+        content = content.strip()
+        if content:
+            # strip fences
+            if content.startswith("```"):
+                content = "\n".join([l for l in content.splitlines() if not l.strip().startswith("```")]).strip()
+            return content[:1500]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("digest_llm_failed workspace_id=%s error=%s", workspace.id, exc)
+    return None
 
 
 def enqueue_workspace_digest(

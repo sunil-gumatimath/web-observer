@@ -36,7 +36,7 @@ from app.services.structured import (
     extract_html_list,
     list_to_normalized,
 )
-from app.services.usage import add_storage_bytes, increment_checks
+from app.services.usage import add_storage_bytes, increment_ai_tokens, increment_checks
 
 logger = logging.getLogger(__name__)
 
@@ -360,11 +360,58 @@ def _create_change_event(
     if workspace is not None and (
         workspace.llm_api_key or workspace.llm_api_base or workspace.llm_model
     ):
+        from app.services.crypto import decrypt_secret
+
         llm_cfg = {
-            "api_key": workspace.llm_api_key,
+            "api_key": decrypt_secret(workspace.llm_api_key),
             "api_base": workspace.llm_api_base,
             "model": workspace.llm_model,
         }
+
+    from app.config import get_settings as _get_settings
+
+    _settings = _get_settings()
+    # P3: async path — heuristic placeholder now, LLM in background
+    if _settings.ai_async_enrichment and llm_cfg and llm_cfg.get("api_key") and ai_enabled:
+        enrichment = enrich_change(
+            monitor_name=monitor.name,
+            url=monitor.url,
+            mode=monitor.mode,
+            deterministic_summary=ctx.summary,
+            diff_text=ctx.diff_text,
+            enabled=True,
+            watch_note=watch_note,
+            llm=None,  # heuristic only for immediate row
+            brand=getattr(monitor, "brand", None),
+        )
+        # Mark provider as pending to signal async upgrade
+        enrichment.provider = "heuristic_pending"
+        ctx.enrichment = enrichment
+        change = ChangeEvent(
+            workspace_id=monitor.workspace_id,
+            monitor_id=monitor.id,
+            run_id=run.id,
+            previous_snapshot_id=ctx.prev_snapshot_id,
+            new_snapshot_id=snapshot.id,
+            previous_hash=ctx.prev_hash,
+            new_hash=run.content_hash,
+            diff_summary=ctx.summary,
+            ai_summary=enrichment.summary,
+            change_category=enrichment.category,
+            is_noise=False,  # triage deferred to worker
+            is_read=False,
+        )
+        db.add(change)
+        db.flush()
+        try:
+            from app.workers.ai_enrich import enrich_change_event
+
+            enrich_change_event.send(str(change.id), ctx.diff_text)
+            logger.info("ai_enrich_enqueued change_id=%s monitor_id=%s", change.id, monitor.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ai_enrich_enqueue_failed change_id=%s error=%s", change.id, exc)
+        return change
+
     enrichment = enrich_change(
         monitor_name=monitor.name,
         url=monitor.url,
@@ -374,18 +421,28 @@ def _create_change_event(
         enabled=ai_enabled,
         watch_note=watch_note,
         llm=llm_cfg,
+        brand=getattr(monitor, "brand", None),
     )
+    # P0: token accounting — record LLM usage for this change
+    try:
+        tokens = int(getattr(enrichment, "tokens_used", 0) or 0)
+        if tokens:
+            increment_ai_tokens(db, monitor.workspace_id, n=tokens)
+    except Exception:  # noqa: BLE001
+        logger.warning("ai_token_accounting_failed workspace_id=%s", monitor.workspace_id)
     ctx.enrichment = enrichment
 
-    # AI triage: if the monitor has a watch note, ask the LLM whether this
-    # change is relevant to that intent or routine noise. Fails open (False)
-    # when there is no note, no LLM key, or an LLM error — never suppresses a
-    # real change by accident.
-    is_noise = False
-    if watch_note:
+    # P0: single-call enrichment already includes triage (is_noise/noise_reason)
+    # when a watch_note is present. Avoid a second LLM call.
+    is_noise = bool(getattr(enrichment, "is_noise", False))
+    triage_reason = getattr(enrichment, "noise_reason", None)
+    # Backward-compat fallback: if enrichment came from a mocked heuristic/fallback
+    # provider with no noise flag but watch_note exists, fall back to triage_change
+    # so existing tests mocking _call_llm_triage still work.
+    if watch_note and not is_noise and enrichment.provider != "llm":
         from app.services.ai_summary import triage_change
 
-        is_noise, triage_reason = triage_change(
+        fallback_noise, fallback_reason = triage_change(
             monitor_name=monitor.name,
             url=monitor.url,
             mode=monitor.mode,
@@ -394,13 +451,23 @@ def _create_change_event(
             suggested_category=enrichment.category,
             llm=llm_cfg,
         )
-        if is_noise and triage_reason:
+        is_noise = fallback_noise
+        triage_reason = fallback_reason
+    if is_noise:
+        # Preserve category/model but surface triage reason for inbox visibility.
+        # If LLM already supplied a noise_reason, show it; otherwise generic.
+        display_reason = triage_reason or getattr(enrichment, "noise_reason", None)
+        if display_reason:
             enrichment = AIEnrichment(
-                summary=f"[AI triage] {triage_reason} (watched: {watch_note[:200]})",
+                summary=f"[AI triage] {display_reason} (watched: {watch_note[:200]})",
                 category=enrichment.category,
                 provider=enrichment.provider,
                 model=enrichment.model,
+                is_noise=True,
+                noise_reason=display_reason,
+                tokens_used=getattr(enrichment, "tokens_used", 0),
             )
+        ctx.enrichment = enrichment
 
     change = ChangeEvent(
         workspace_id=monitor.workspace_id,
@@ -555,7 +622,16 @@ def apply_fetch_result(
     # Step 3 – AI enrichment & ChangeEvent
     change = _create_change_event(db, monitor, run, snapshot, ctx)
 
-    # Step 4 – notification outbox & webhooks
+    # Step 4 – notification outbox & webhooks (deferred when async enrichment pending)
+    enrichment = getattr(ctx, "enrichment", None)
+    if enrichment is not None and getattr(enrichment, "provider", None) == "heuristic_pending":
+        db.commit()
+        return PipelineResult(
+            status=run.status,
+            content_hash=digest,
+            change_event_id=change.id,
+            outbox_ids=[],
+        )
     outbox_ids, webhook_ids = _queue_notifications(db, monitor, change, ctx)
 
     db.commit()

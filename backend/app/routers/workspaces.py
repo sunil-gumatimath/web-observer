@@ -24,6 +24,7 @@ from app.schemas import (
     WorkspaceOut,
     WorkspaceUpdate,
 )
+from app.services.crypto import decrypt_secret, encrypt_secret
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
@@ -107,8 +108,17 @@ def update_workspace(
     for key, value in data.items():
         if key not in allowed:
             continue
-        # Blank strings clear a stored secret; otherwise persist as-is.
-        if key in ("llm_api_key", "resend_api_key", "llm_api_base", "email_from"):
+        # Blank strings clear a stored secret; encrypt sensitive keys at rest
+        if key in ("llm_api_key", "resend_api_key"):
+            if isinstance(value, str) and value.strip() == "":
+                setattr(workspace, key, None)
+                continue
+            if value is None:
+                setattr(workspace, key, None)
+                continue
+            setattr(workspace, key, encrypt_secret(str(value)))
+            continue
+        if key in ("llm_api_base", "email_from"):
             if isinstance(value, str) and value.strip() == "":
                 setattr(workspace, key, None)
                 continue

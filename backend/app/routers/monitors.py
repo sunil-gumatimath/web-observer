@@ -230,6 +230,17 @@ def create_monitor(
                 )
             )
 
+    # Brand-aware dashboard: best-effort auto-populate logo/title/description/hero
+    # from the page's HTML meta (og:title, og:description, og:image, favicon).
+    # Must never fail monitor creation — brand is optional enrichment.
+    try:
+        meta = fetch_brand_info(monitor.url)
+        # Only store if we found something useful
+        if meta.title or meta.description or meta.logo_candidates or meta.hero_candidates:
+            monitor.brand = store_brand_assets(monitor, meta)
+    except Exception:  # noqa: BLE001
+        pass
+
     db.commit()
     db.refresh(monitor)
     return monitor
