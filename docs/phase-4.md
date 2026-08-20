@@ -2,18 +2,16 @@
 
 ## Modes
 
-| Mode | Input | Extract | Worker |
+Actual shipped modes (`backend/app/schemas.py:10`, `backend/app/models/entities.py:30-34`):
+
+| Mode | What it watches | Extract | Worker |
 |------|--------|---------|--------|
-| `whole_page` | HTML | Normalized page text | HTTP (or browser if `js_required`) |
-| `css_selector` | HTML + CSS | Section text | HTTP / browser |
-| `json_field` | JSON body + path | Single field / object (stable JSON) | HTTP |
-| `list_items` | JSON array path **or** HTML CSS for items | Ordered list; diffs added/removed | HTTP / browser |
-| `visual` | Page URL + optional region CSS | Screenshot PNG + aHash | **Browser always** |
+| `page_content` | A single page, scraped to markdown | Normalized markdown text (`extract_markdown`) – line-level unified diff | HTTP (or browser if `js_required`) |
+| `site_links` | The site's sitemap | Sitemap URLs joined by newline (`sitemap_monitor_text`) – added/removed link diff | HTTP |
+| `product_price` | A product page | Price/currency string (`extract_price`, e.g. `USD 19.99`) – checks every 24h by default (`1440m`) | HTTP / browser |
+| `list_items` | A CSS-selector link list on a page | HTML list items as `[text](url)` (`extract_html_list`) – added/removed link diff | HTTP / browser |
 
-`css_selector` column is reused as:
-
-- CSS selector (`css_selector`, `list_items` HTML, `visual` region)
-- JSON path (`json_field`, `list_items` JSON) e.g. `$.items` or `$.product.price`
+`css_selector` is required for `list_items` (`backend/app/schemas.py:119-121`). `site_links` ignores `css_selector` and `js_required`.
 
 ## Structured diffs
 

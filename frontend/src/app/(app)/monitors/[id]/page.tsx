@@ -7,6 +7,7 @@ import {
 	Badge,
 	Button,
 	Card,
+	CategoryBadge,
 	ErrorBox,
 	ModeBadge,
 	PageHeader,
@@ -691,9 +692,7 @@ function MonitorDetailInner() {
 						<Link key={c.id} href={`/changes/${c.id}`} className="block">
 							<Card hover className="!py-4">
 								<div className="flex flex-wrap items-center gap-2">
-									{c.change_category ? (
-										<Badge tone="info">{c.change_category}</Badge>
-									) : null}
+									<CategoryBadge category={c.change_category} />
 									{c.is_noise ? <Badge tone="warn">noise</Badge> : null}
 								</div>
 								<p className="mt-2 text-sm text-slate-800 dark:text-slate-200">

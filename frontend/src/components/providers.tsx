@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useEffect, type ReactNode } from "react";
 import { setAuthTokenGetter } from "@/lib/auth-token";
 import { config } from "@/lib/config";
+import { invalidateWorkspace } from "@/lib/workspace";
 
 /**
  * Bridges Clerk session tokens to the FastAPI client.
@@ -15,7 +16,7 @@ import { config } from "@/lib/config";
  * API calls already wait for a token in `lib/api.ts`.
  */
 function ClerkTokenBridge({ children }: { children: ReactNode }) {
-  const { getToken, isLoaded } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -29,6 +30,12 @@ function ClerkTokenBridge({ children }: { children: ReactNode }) {
     });
     return () => setAuthTokenGetter(null);
   }, [getToken, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      invalidateWorkspace();
+    }
+  }, [isLoaded, isSignedIn]);
 
   return <>{children}</>;
 }

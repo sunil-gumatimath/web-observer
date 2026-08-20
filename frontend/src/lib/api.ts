@@ -199,7 +199,7 @@ async function publicGet<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ status: string; version: string }>("/health"),
+  health: () => publicGet<{ status: string; version: string }>("/health"),
 
   me: () => request<MeResponse>("/api/v1/me"),
 
@@ -498,7 +498,8 @@ export const api = {
       { method: "DELETE" },
     ),
 
-  getPublicShare: (token: string) => publicGet<PublicShare>(`/api/v1/public/share/${token}`),
+  getPublicShare: (token: string) =>
+    publicGet<PublicShare>(`/api/v1/public/share/${encodeURIComponent(token)}`),
 
   // --- webdog.ai parity: team invite links ---
   createInvite: (
@@ -518,8 +519,11 @@ export const api = {
       method: "DELETE",
     }),
 
-  previewInvite: (token: string) => publicGet<InvitePreview>(`/api/v1/invites/${token}/preview`),
+  previewInvite: (token: string) =>
+    publicGet<InvitePreview>(`/api/v1/invites/${encodeURIComponent(token)}/preview`),
 
   redeemInvite: (token: string) =>
-    request<InviteRedeem>(`/api/v1/invites/${token}/redeem`, { method: "POST" }),
+    request<InviteRedeem>(`/api/v1/invites/${encodeURIComponent(token)}/redeem`, {
+      method: "POST",
+    }),
 };

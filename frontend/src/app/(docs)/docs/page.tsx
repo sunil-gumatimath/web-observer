@@ -113,8 +113,8 @@ export default function DocsPage() {
           <DocSection id="how-it-works" title="How it works">
             <ol className="space-y-4">
               <Step n={1} title="You create a monitor">
-                Pick a URL, a mode (page content, site links, or product price), and how
-                often to check.
+                Pick a URL, a mode (page content, site links, product price, or list
+                items), and how often to check.
               </Step>
               <Step n={2} title="A worker fetches the page">
                 The backend pulls the page (HTTP or Playwright if JavaScript is required) and
@@ -173,64 +173,59 @@ export default function DocsPage() {
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-slate-50 dark:bg-slate-950/40">
                     <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Mode
+                      Monitor
                     </th>
                     <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Best for
+                      What it watches
                     </th>
                     <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Path / selector
+                      Alerts on
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   <tr>
                     <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
-                      Whole page text
+                      Site links
                     </td>
-                    <td className="px-3 py-3">Full visible text of the page</td>
-                    <td className="px-3 py-3 text-slate-500">—</td>
+                    <td className="px-3 py-3">The site&apos;s sitemap</td>
+                    <td className="px-3 py-3">New links, removed links, or both</td>
                   </tr>
                   <tr>
                     <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
-                      CSS selector
+                      Page content
                     </td>
-                    <td className="px-3 py-3">One section (price, hero, changelog)</td>
-                    <td className="px-3 py-3 font-mono text-xs">main .price</td>
+                    <td className="px-3 py-3">A single page, scraped to markdown</td>
+                    <td className="px-3 py-3">Any content change, with a line-level diff</td>
                   </tr>
                   <tr>
                     <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
-                      JSON field
+                      Product price
                     </td>
-                    <td className="px-3 py-3">API / JSON responses</td>
-                    <td className="px-3 py-3 font-mono text-xs">$.price</td>
+                    <td className="px-3 py-3">A product page</td>
+                    <td className="px-3 py-3">Price or currency changes (checks every 24h by default)</td>
                   </tr>
                   <tr>
                     <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
                       List items
                     </td>
-                    <td className="px-3 py-3">Arrays of products, posts, jobs</td>
-                    <td className="px-3 py-3 font-mono text-xs">$.items or li.product</td>
-                  </tr>
-                  <tr>
-                    <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
-                      Visual
-                    </td>
-                    <td className="px-3 py-3">Screenshot / perceptual hash</td>
-                    <td className="px-3 py-3 font-mono text-xs">#main (optional)</td>
+                    <td className="px-3 py-3">A CSS-selector link list on a page</td>
+                    <td className="px-3 py-3">Added or removed items as clickable links</td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <p>
               <strong className="text-slate-800 dark:text-slate-200">JavaScript rendering</strong> —
-              enable Playwright when the page only shows content after client-side render. Visual
-              mode always uses Playwright.
+              enable Playwright when the page only shows content after client-side render.
+              Site links reads the sitemap over HTTP; the other modes can use Playwright when
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">js_required</code> is enabled.
             </p>
             <p>
               <strong className="text-slate-800 dark:text-slate-200">Ignore selectors</strong> — for
-              whole page / CSS modes, list CSS selectors (one per line) to strip cookie banners,
-              ads, or timestamps that would otherwise create noise.
+              page content monitors, list CSS selectors (one per line) to strip cookie banners,
+              ads, or timestamps that would otherwise create noise. List items uses its own{" "}
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>.
             </p>
           </DocSection>
 
@@ -287,15 +282,33 @@ export default function DocsPage() {
                 <strong className="text-slate-800 dark:text-slate-200">Changes</strong> — events where
                 content differed from the previous hash. Open one for the full diff.
               </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Visual diffs</strong> — GitHub-style added/removed line views (split + unified) for every content change via <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">GithubDiff</code> + <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">unified_diff</code>.
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Opt-in screenshots</strong> — when <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">screenshots_enabled</code> is on, every check captures a fresh Playwright screenshot (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">screenshots/{"{monitor_id}/{run_id}.png"}</code>) with aHash history — off by default to avoid forcing Playwright on text monitors.
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">AI change summaries</strong> — optional plain-language summaries per change (heuristic by default; enable OpenAI or Vercel AI Gateway via <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">LLM_API_BASE</code> and toggle per-workspace <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">ai_summaries_enabled</code>).
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">AI relevance filter</strong> — optional per-monitor <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">watch_note</code> triage; routine noise is held as <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_noise=true</code> in the dashboard (not deleted), excluded from notifications, fails open on LLM error.
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Brand-aware dashboard</strong> — adding a website auto-fills logo/title/description/hero from HTML <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">og:*</code> meta and re-hosts via <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">brand-assets/</code> for dashboard + public share pages (no Context.dev).
+              </li>
             </ul>
             <p>
               On a change detail page you can mark something as <strong>noise</strong> (false alarm)
               so you can filter signal later. Diffs are deterministic text comparisons of the
-              extracted content.
+              extracted content. Nothing is deleted — held noise is still stored and viewable, just not delivered.
             </p>
           </DocSection>
 
           <DocSection id="alerts" title="Alerts & channels">
+            <p>
+              <strong className="text-slate-800 dark:text-slate-200">Alerts inbox</strong> — every change is stored in-app with <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_read</code>/<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_noise</code> state, independent of external notifications. Filter Signal / Unread / Noise at <Link href="/alerts" className="text-sky-600 hover:text-sky-500 dark:text-sky-400">Alerts</Link>.
+            </p>
             <p>
               Configure channels under{" "}
               <Link href="/settings" className="text-sky-600 hover:text-sky-500 dark:text-sky-400">
@@ -306,7 +319,7 @@ export default function DocsPage() {
             <ul className="list-disc space-y-1.5 pl-5">
               <li>
                 <strong className="text-slate-800 dark:text-slate-200">Email</strong> — uses Resend
-                when the API key is configured on the server.
+                when the API key is configured on the server (or per-workspace override).
               </li>
               <li>
                 <strong className="text-slate-800 dark:text-slate-200">Slack</strong> — paste an
@@ -319,7 +332,7 @@ export default function DocsPage() {
             </ul>
             <p>
               Enable only the channels you want. Alerts fire when a non-baseline content change is
-              detected (and the notifications worker is running).
+              detected (and the notifications worker is running). Noise-marked changes do not notify.
             </p>
             <p>
               Optional <strong>digests</strong> (daily / weekly) summarize activity instead of only
@@ -339,11 +352,20 @@ export default function DocsPage() {
               </li>
               <li>
                 <strong className="text-slate-800 dark:text-slate-200">Preferences</strong> — digests
-                and AI summaries (heuristic if no LLM key is set).
+                and AI summaries (heuristic if no LLM key is set; toggle <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">ai_summaries_enabled</code>).
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Managed or self-serve keys</strong> — run managed (server provides <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">LLM_API_*</code>/<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">RESEND_API_KEY</code>) or let each workspace bring its own keys in Settings → Workspace keys (overrides global; supports OpenAI or Vercel AI Gateway).
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Teams</strong> — invite members with expiring multi-use links (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/invite/{"{token}"}</code>) and switch between workspaces you belong to.
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Public share links</strong> — generate a read-only public page per monitor (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/share/{"{token}"}</code> — unguessable, hashed at rest, no login required).
               </li>
               <li>
                 <strong className="text-slate-800 dark:text-slate-200">API keys & webhooks</strong> —
-                optional automation hooks for external tools.
+                optional automation hooks for external tools (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">mtw_*</code> + <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">X-MTW-Signature</code>).
               </li>
             </ul>
           </DocSection>
@@ -359,7 +381,8 @@ export default function DocsPage() {
             <pre className="overflow-x-auto rounded-xl border border-[var(--border)] bg-slate-50 p-3 font-mono text-xs text-slate-700 dark:bg-slate-950/60 dark:text-slate-300">
               {`name,url,mode,schedule_interval_minutes
 Example,https://example.com/,page_content,60
-Pricing,https://example.com/pricing,product_price,30`}
+Pricing,https://example.com/pricing,product_price,1440
+Links,https://example.com/blog,list_items,60`}
             </pre>
             <p>
               Valid modes:{" "}
@@ -367,7 +390,10 @@ Pricing,https://example.com/pricing,product_price,30`}
               ,{" "}
               <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">site_links</code>
               ,{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">product_price</code>.
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">product_price</code>
+              ,{" "}
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">list_items</code>{" "}
+              (requires <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>).
             </p>
           </DocSection>
 

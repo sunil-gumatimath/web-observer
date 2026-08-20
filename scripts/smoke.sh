@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Phase 1 smoke test against a running API.
 set -eu
-BASE="${API_BASE:-http://localhost:8000}"
+BASE="${API_BASE:-http://localhost:8002}"
 TOKEN="${INTERNAL_API_TOKEN:-dev-internal-token}"
 H="X-Internal-Token: ${TOKEN}"
 

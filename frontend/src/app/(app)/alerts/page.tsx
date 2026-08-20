@@ -31,6 +31,7 @@ const CHANGE_COLORS: Record<string, string> = {
 	content: "bg-violet-500",
 	design: "bg-pink-500",
 	api: "bg-indigo-500",
+	security: "bg-rose-500",
 	other: "bg-slate-400",
 };
 
@@ -41,6 +42,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 	content: "Content",
 	design: "Design",
 	api: "API",
+	security: "Security",
 	other: "Change",
 };
 

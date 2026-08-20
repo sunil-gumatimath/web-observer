@@ -144,9 +144,14 @@ function SplitCell({
 				: "text-slate-700 dark:text-slate-300";
 	const sign = variant === "del" ? "−" : variant === "add" ? "+" : "";
 	return (
-		<div className={cn("flex min-h-[1.375rem]", bg)}>
+		<div className={cn("flex min-h-[1.375rem] min-w-0 overflow-hidden", bg)}>
 			<Gutter no={no} />
-			<span className={cn("whitespace-pre-wrap break-words px-2", txt)}>
+			<span
+				className={cn(
+					"min-w-0 flex-1 overflow-hidden whitespace-pre-wrap break-words px-2 [overflow-wrap:anywhere] [word-break:break-word]",
+					txt,
+				)}
+			>
 				{sign}
 				{text ?? ""}
 			</span>
@@ -171,8 +176,8 @@ function UnifiedLine({
 	const srPrefix =
 		variant === "del" ? "Removed: " : variant === "add" ? "Added: " : "";
 	return (
-		<div className={cn("flex px-3", cls)}>
-			<span className="whitespace-pre-wrap break-words">
+		<div className={cn("flex min-w-0 overflow-hidden px-3", cls)}>
+			<span className="min-w-0 flex-1 overflow-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]">
 				{srPrefix ? <span className="sr-only">{srPrefix}</span> : null}
 				<span aria-hidden="true">{sign}</span>
 				{text}
@@ -264,10 +269,10 @@ export function GithubDiff({
 
 	if (tooLarge) {
 		return (
-			<div>
+			<div className="min-w-0 w-full max-w-full overflow-hidden">
 				{header}
 				<CardShell>
-					<pre className="diff m-0 whitespace-pre-wrap break-words p-3 font-mono text-[13px] leading-5">
+					<pre className="diff m-0 w-full min-w-0 max-w-full overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[13px] leading-5 [overflow-wrap:anywhere]">
 						{unifiedDiff ? (
 							unifiedDiff.split("\n").map((line, i) => {
 								const t = line.trimStart();
@@ -300,10 +305,10 @@ export function GithubDiff({
 
 	if (view === "unified") {
 		return (
-			<div>
+			<div className="min-w-0 w-full max-w-full overflow-hidden">
 				{header}
 				<CardShell>
-					<div className="max-h-[min(70vh,32rem)] overflow-auto py-1 font-mono text-[13px] leading-5">
+					<div className="max-h-[min(70vh,32rem)] w-full min-w-0 max-w-full overflow-auto py-1 font-mono text-[13px] leading-5">
 						{rows.map((r, i) => {
 							if (r.kind === "equal")
 								return (
@@ -331,19 +336,19 @@ export function GithubDiff({
 	}
 
 	return (
-		<div>
+		<div className="min-w-0 w-full max-w-full overflow-hidden">
 			{header}
 			{/* Screen-reader alternative: linear added/removed summary of the split view. */}
 			<SrOnlyDiffSummary rows={rows} />
-			<div aria-hidden="true">
+			<div aria-hidden="true" className="min-w-0 w-full max-w-full overflow-hidden">
 				<CardShell>
-					<div className="grid grid-cols-2 border-b border-[var(--border)] bg-slate-50/70 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
-						<div className="px-2 py-1.5">Before</div>
-						<div className="px-2 py-1.5">After</div>
+					<div className="grid w-full min-w-0 grid-cols-2 border-b border-[var(--border)] bg-slate-50/70 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
+						<div className="min-w-0 overflow-hidden px-2 py-1.5">Before</div>
+						<div className="min-w-0 overflow-hidden px-2 py-1.5">After</div>
 					</div>
-					<div className="max-h-[min(70vh,32rem)] overflow-auto">
+					<div className="max-h-[min(70vh,32rem)] w-full min-w-0 max-w-full overflow-auto">
 						{rows.map((r, i) => (
-							<div key={i} className="grid grid-cols-2">
+							<div key={i} className="grid w-full min-w-0 grid-cols-2">
 								{r.kind === "del" ? (
 									<>
 										<SplitCell text={r.left} no={r.leftNo} variant="del" />
@@ -376,7 +381,7 @@ export function GithubDiff({
 
 function CardShell({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm dark:bg-slate-950/40">
+		<div className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm dark:bg-slate-950/40">
 			{children}
 		</div>
 	);

@@ -472,3 +472,19 @@ export function ModeBadge({ mode }: { mode: string }) {
 	};
 	return <Badge tone="info">{labels[mode] ?? mode}</Badge>;
 }
+
+export function CategoryBadge({ category }: { category: string | null | undefined }) {
+	if (!category) return null;
+	const toneMap: Record<string, "neutral" | "success" | "danger" | "warn" | "info"> = {
+		pricing: "warn",
+		availability: "success",
+		legal: "info",
+		security: "danger",
+		design: "neutral",
+		api: "info",
+		content: "neutral",
+		other: "neutral",
+	};
+	const tone = toneMap[category.toLowerCase()] ?? "neutral";
+	return <Badge tone={tone}>{category}</Badge>;
+}

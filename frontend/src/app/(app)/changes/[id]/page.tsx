@@ -7,6 +7,7 @@ import {
 	Badge,
 	Button,
 	Card,
+	CategoryBadge,
 	ErrorBox,
 	PageHeader,
 	SectionTitle,
@@ -141,9 +142,7 @@ export default function ChangeDetailPage() {
 			{error ? <ErrorBox message={error} /> : null}
 
 			<div className="mb-5 flex flex-wrap gap-2">
-				{change.change_category ? (
-					<Badge tone="info">{change.change_category}</Badge>
-				) : null}
+				<CategoryBadge category={change.change_category} />
 				{change.is_noise ? (
 					<Badge tone="warn">noise</Badge>
 				) : (

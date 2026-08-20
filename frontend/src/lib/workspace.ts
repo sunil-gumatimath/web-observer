@@ -49,6 +49,17 @@ let workspacePromiseUid: string | null = null;
 export function invalidateWorkspace(): void {
   workspacePromise = null;
   workspacePromiseUid = null;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === STORAGE_KEY && e.newValue === null) invalidateWorkspace();
+  });
 }
 
 export async function ensureWorkspace(): Promise<string> {

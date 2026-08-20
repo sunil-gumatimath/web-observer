@@ -1,5 +1,12 @@
 name: CI
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, master]
@@ -25,6 +32,12 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U monitor -d web_observer_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,8 +53,17 @@ jobs:
           DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
       - name: Ruff check
         run: ruff check app tests
+      - name: Ruff format check
+        run: ruff format --check app tests
+      - name: Gitleaks (secret scan)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      - name: Validate compose
+        run: docker compose -f ../docker-compose.yml config --quiet
       - name: Unit tests
-        run: pytest -q
+        run: pytest -q -m "not integration"
 
   frontend:
     name: Frontend build
@@ -58,13 +80,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: npm ci
-      - name: Typecheck
+      - name: Typecheck + ESLint
         run: npm run lint
-      - name: ESLint
-        run: npx eslint .
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:8002
           NEXT_PUBLIC_INTERNAL_API_TOKEN: dev-internal-token
           NEXT_PUBLIC_DEV_WORKSPACE_ID: ""

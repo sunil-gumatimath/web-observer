@@ -120,7 +120,7 @@ classDiagram
         +UUID id
         +UUID workspace_id
         +String url
-        +String mode  whole_page|css_selector|json_field|list_items|visual
+        +String mode  page_content|site_links|product_price|list_items
         +int schedule_interval_minutes
         +bool enabled
         +int config_version
@@ -301,7 +301,7 @@ sequenceDiagram
 flowchart TD
     A[FetchResult] --> B{status >= 400?}
     B -->|yes| F1[Run FAILED\nhttp_client/server_error]
-    B -->|no| C[extract_normalized by mode\nwhole_page / css_selector / json_field / list_items / visual]
+    B -->|no| C[extract_normalized by mode\npage_content / site_links / product_price / list_items]
     C --> D{extraction OK\nand non-empty?}
     D -->|no| F2[Run FAILED\nextraction_failed]
     D -->|yes| E[content_hash + store raw + Snapshot]
