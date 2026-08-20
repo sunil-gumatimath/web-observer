@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     # AI summaries (optional OpenAI-compatible API)
     ai_summaries_enabled: bool = True
     llm_api_key: str | None = None
-    llm_api_base: str = "https://api.openai.com/v1"
-    llm_model: str = "gpt-4o-mini"
+    llm_api_base: str = "https://api.kilo.ai/api/gateway"
+    llm_model: str = "tencent/hy3:free"
     ai_max_diff_chars: int = 6000
     ai_max_output_tokens: int = 200
     ai_async_enrichment: bool = False  # if true, LLM runs in background worker
