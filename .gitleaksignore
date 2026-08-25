@@ -1,0 +1,8 @@
+# Accepted findings: local dev env files are git-ignored, were never
+# committed (verified against full git history), and are the intended
+# runtime secret store for local Docker Compose runs.
+.env:generic-api-key:21
+.env:stripe-access-token:27
+backend/.env:generic-api-key:21
+backend/.env:jwt:31
+backend/.env:stripe-access-token:27

@@ -1,0 +1,18 @@
+# Gitleaks configuration — extends the default rule set, but skips
+# developer-local env files. These paths are git-ignored (.gitignore) and
+# exist solely to hold runtime secrets for local Docker Compose runs;
+# they must never enter version control (and don't).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local-only env files and git-ignored runtime data"
+paths = [
+  "^\\.env(\\..*)?$",
+  "^backend/\\.env$",
+  # App-local runtime artifacts (all git-ignored): fetched page snapshots
+  # contain THIRD-PARTY content, not project credentials.
+  "^backend/data/",
+  "^data/",
+  "^logs/",
+]

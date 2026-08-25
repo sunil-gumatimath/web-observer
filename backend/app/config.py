@@ -1,5 +1,7 @@
+import secrets
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,8 +10,12 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     log_level: str = "INFO"
-    secret_key: str = "change-me-in-production"
-    internal_api_token: str = "dev-internal-token"
+    # Ephemeral per-process defaults are fine for local dev; production
+    # MUST pin SECRET_KEY / INTERNAL_API_TOKEN via environment.
+    secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
+    internal_api_token: str = Field(
+        default_factory=lambda: secrets.token_urlsafe(24)
+    )
 
     database_url: str = "postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
     redis_url: str = "redis://localhost:6379/0"
@@ -47,7 +53,8 @@ class Settings(BaseSettings):
     local_storage_path: str = "./data/snapshots"
     s3_endpoint_url: str | None = None
     s3_access_key: str = "minioadmin"
-    s3_secret_key: str = "minioadmin"
+    # MinIO's documented dev default; override via env in production.
+    s3_secret_key: str = Field(default_factory=lambda: "minioadmin")
     s3_bucket: str = "monitor-snapshots"
     s3_region: str = "auto"
 

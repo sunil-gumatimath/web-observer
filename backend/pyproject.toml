@@ -18,3 +18,13 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyright]
+# Type-check against the project virtualenv so typed/compiled deps like
+# selectolax resolve; keep `app.*` importable with backend/ as the root.
+venvPath = "."
+venv = ".venv"
+extraPaths = ["."]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = "none"
