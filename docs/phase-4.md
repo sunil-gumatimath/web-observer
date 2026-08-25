@@ -10,8 +10,9 @@ Actual shipped modes (`backend/app/schemas.py:10`, `backend/app/models/entities.
 | `site_links` | The site's sitemap | Sitemap URLs joined by newline (`sitemap_monitor_text`) – added/removed link diff | HTTP |
 | `product_price` | A product page | Price/currency string (`extract_price`, e.g. `USD 19.99`) – checks every 24h by default (`1440m`) | HTTP / browser |
 | `list_items` | A CSS-selector link list on a page | HTML list items as `[text](url)` (`extract_html_list`) – added/removed link diff | HTTP / browser |
+| `json_field` | A single value in a JSON API response | Scalar extracted via a JSONPath-style query (e.g. `$.data.price`) – hash diff of the normalized value | HTTP / browser |
 
-`css_selector` is required for `list_items` (`backend/app/schemas.py:119-121`). `site_links` ignores `css_selector` and `js_required`.
+`css_selector` is required for `list_items` (`backend/app/schemas.py:119-121`). For `json_field`, the URL must return JSON and the JSONPath-style query is stored in the `css_selector` field. `site_links` ignores `css_selector` and `js_required`.
 
 ## Structured diffs
 
@@ -20,25 +21,16 @@ Actual shipped modes (`backend/app/schemas.py:10`, `backend/app/models/entities.
 
 ## Visual
 
-- Playwright screenshot (full page or region) via `visual.py` + subprocess `playwright_job` (Windows-safe)  
-- Average hash (aHash) via Pillow  
-- Alert only if hamming distance **>** `VISUAL_AHASH_THRESHOLD` (default 5)  
-- PNG stored in object storage; metadata in `normalized_text`  
+Screenshots are **not** a monitor mode. Any monitor can opt in with
+`screenshots_enabled` (`monitors.screenshots_enabled`, default off):
 
-### Screenshot gallery (UI)
-
-Visual monitors expose a **screenshot history** on the monitor detail page and a
-**side-by-side visual comparison** on each visual change event.
-
-- `GET /api/v1/workspaces/{id}/monitors/{id}/screenshots` — most-recent-first list of
-  image snapshots, each with its capture timestamp, run status, aHash, and the
-  perceptual-hash **distance from the previous capture** (`distance_from_previous`).
-  Non-image (text/HTML) snapshots are excluded.
-- `GET /api/v1/workspaces/{id}/snapshots/{id}/image` — streams the raw PNG bytes for a
-  snapshot (reuses the existing local/S3 storage layer). Missing or expired objects
-  return `410` so the UI can show a graceful fallback.
-- Thumbnails open in a lightbox with full metadata; previous/current screenshots on a
-  change event show timestamps, run status, and the visual distance.
+- When enabled, each check best-effort captures a full-page Playwright screenshot via
+  `visual.py` + subprocess `playwright_job` (Windows-safe) and attaches it to the run/alert
+  (`backend/app/services/pipeline.py`). A missing browser or failed capture never fails the check.
+- Each PNG is stored in object storage; an average hash (aHash, via Pillow) is computed for
+  similarity comparison against `VISUAL_AHASH_THRESHOLD` (default hamming distance 5).
+- Works for every mode; `js_required` monitors additionally use the same Playwright stack for
+  page rendering.
 
 ## Config
 

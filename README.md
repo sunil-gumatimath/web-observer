@@ -40,24 +40,45 @@ Verified end-to-end: backend unit tests pass, the frontend type-checks, and the 
 ## Architecture
 
 ```mermaid
-flowchart TB
-  Sched["app/scheduler.py\npoll 5s + jitter, lease 60s\nclaim_due_monitors"]
-  API["FastAPI POST /monitors/{id}/run\n+ POST /monitors"]
-  Redis[("Redis dramatiq broker")]
-  HTTPW["run_http_check (http_checks)\nfetch_url / sitemap_monitor_text"]
-  BrowW["run_browser_check (browser_checks)\nfetch_url_browser + optional capture_screenshot"]
-  Pipe["pipeline.apply_fetch_result\n extract_normalized[page_content|site_links|product_price|list_items] → SHA256 → Snapshot (Postgres + Object Storage) → unified_diff/list diff → enrich_change (heuristic or OpenAI/Vercel Gateway) + watch_note triage (fails open) → ChangeEvent(is_noise,is_read)"]
-  Inbox[("Postgres: ChangeEvent Alerts Inbox")]
-  Outbox[("NotificationOutbox + WebhookDelivery")]
-  WorkN["notifications worker\ndeliver_outbox_message"]
-  WorkW["webhooks worker\ndeliver_webhook_message"]
-  Ext["Slack · Email(Resend) · Webhook(signed X-MTW-Signature) · Dashboard /alerts"]
-  Target["Monitored pages"]
-  Brand[("Object Storage\nbrand-assets/ + screenshots/")]
+sequenceDiagram
+    autonumber
+    participant S as Scheduler
+    participant API as FastAPI
+    participant DB as Postgres
+    participant R as Redis (broker)
+    participant W as Check Worker (dramatiq)
+    participant T as Monitored page
+    participant P as Pipeline
+    participant OBJ as Object Storage
+    participant N as Notify/Webhook Worker
+    participant EXT as Email · Slack · Discord · Webhook
 
-  Target --> HTTPW & BrowW
-  Sched & API --> Redis --> HTTPW & BrowW --> Pipe --> Inbox --> Outbox --> WorkN & WorkW --> Ext
-  Pipe -.->|"best-effort HTML <meta> (og:*, favicon) re-host brand-assets/ (no Context.dev)"| Brand
+    Note over API: Manual run: POST /monitors/{id}/run also enqueues a check
+
+    S->>DB: claim_due_monitors (FOR UPDATE SKIP LOCKED)
+    DB-->>S: due monitors (60s lease + jitter)
+    S->>R: enqueue_check(run_id, needs_browser)
+    R->>W: run_http_check / run_browser_check
+    W->>T: fetch_url / Playwright (+ optional screenshot)
+    T-->>W: FetchResult (text, status, latency)
+    W->>P: apply_fetch_result(monitor, run, result)
+    P->>OBJ: store raw html + normalized text
+    P->>DB: insert Snapshot (SHA256 content_hash)
+
+    alt first success
+        P-->>W: baseline set — no alert
+    else same hash / similar image
+        P-->>W: unchanged — no alert
+    else content changed
+        P->>P: unified diff → AI summary + watch_note triage
+        P->>DB: insert ChangeEvent (is_noise, is_read)
+        P->>DB: insert NotificationOutbox + WebhookDelivery
+        W->>R: enqueue deliver_outbox_message / deliver_webhook_message
+        N->>EXT: send email (Resend) / Slack / Discord / signed webhook (X-MTW-Signature)
+        EXT-->>N: delivery logged
+    end
+
+    W->>DB: run status = succeeded/failed (adaptive interval update)
 ```
 
 * **No `worker.ts` / `SCRAPE_CRON` / `Context.dev API`.** Workers are Python `dramatiq` (`backend/app/workers/checks.py:21`, `browser_checks.py:24`) via `RedisBroker` (`backend/app/workers/broker.py:9`). Scheduling is Postgres-driven `claim_due_monitors` (`SELECT ... FOR UPDATE SKIP LOCKED`) with 60s lease + jitter `backend/app/config.py:73-75`, `backend/app/scheduler.py:40`. Extraction/screenshot is in-process (`backend/app/services/pipeline.py:56`, `backend/app/services/visual.py:280`) only calling an external LLM when `LLM_API_KEY` is set (OpenAI or `https://ai-gateway.vercel.sh/v1`). Snapshots cover all 4 modes, not just sitemap/markdown/product.
@@ -173,7 +194,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 
 | Area | What's included |
 |------|-----------------|
-| Monitoring modes | `page_content` (whole page text), `site_links` (sitemap URL changes), `product_price` (price/currency), `list_items` (CSS-selector link list) — plus `js_required` for SPAs |
+| Monitoring modes | `page_content` (whole page text; `js_required` for SPAs), `site_links` (sitemap URL changes), `product_price` (price/currency, defaults to a daily schedule), `list_items` (CSS-selector link list), `json_field` (single value via JSONPath-style query, e.g. `$.data.price`, from a JSON endpoint) — list modes (`site_links`/`list_items`) fetch over plain HTTP only |
 | Alert channels | Email (Resend), Slack webhook, Discord webhook |
 | AI change summaries | Optional plain-language summaries per change (heuristic by default; enable OpenAI-compatible LLM via `LLM_API_BASE` — works with OpenAI or Vercel AI Gateway — and toggle per-workspace via `ai_summaries_enabled`) |
 | AI relevance filter | Optional per-monitor `watch_note` triage — LLM scores each diff vs. watch note; routine noise (cookie banners, ads, counters) is marked `is_noise=true`, held in dashboard (not deleted), excluded from notifications/digests, fails open on LLM error |

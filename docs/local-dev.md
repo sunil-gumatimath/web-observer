@@ -73,7 +73,7 @@ pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-Playwright Chromium is **required** for Visual mode and `js_required` monitors.
+Playwright Chromium is **required** for `js_required` monitors (checks routed to the Playwright browser queue).
 
 ---
 
@@ -88,7 +88,7 @@ Load env from `backend/.env` (or set variables). Working directory: `backend`.
 # 2 — HTTP + notifications
 .\.venv\Scripts\dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2
 
-# 3 — Browser / visual / JS (Playwright) — REQUIRED for visual monitors
+# 3 — Browser / JS-rendered checks (Playwright) — REQUIRED for js_required monitors
 # Windows: always --threads 1 (sync Playwright is not multi-thread safe)
 .\.venv\Scripts\dramatiq app.workers --queues browser_checks --processes 1 --threads 1
 
@@ -156,7 +156,7 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 | DB (Neon or local) | Yes |
 | API (`uvicorn`) | Yes |
 | Worker HTTP + notifications | Yes for checks/alerts |
-| Worker browser (`threads 1`) | Yes for **visual** / `js_required` |
+| Worker browser (`threads 1`) | Yes for `js_required` monitors |
 | Scheduler | Yes for schedules; optional for manual Run now |
 | Frontend | Yes for UI |
 | MinIO / Docker | **No** |

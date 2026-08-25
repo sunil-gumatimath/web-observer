@@ -5,7 +5,7 @@
 | Capability | Implementation |
 |------------|----------------|
 | JS monitors | `monitors.js_required` → `browser_checks` queue |
-| Visual monitors | `mode=visual` → same browser queue + screenshot hash |
+| Opt-in screenshots | `monitors.screenshots_enabled` → full-page screenshot attached to checks/alerts (any mode); no separate visual mode exists |
 | Playwright fetch | `app/services/browser_fetch.py` |
 | Playwright screenshot | `app/services/visual.py` |
 | Isolated jobs | `app/services/playwright_job.py` (subprocess; avoids Windows EBADF) |

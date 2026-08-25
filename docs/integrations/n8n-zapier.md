@@ -23,7 +23,7 @@ POST /api/v1/workspaces/{workspace_id}/monitors
 Authorization: Bearer mtw_...
 Content-Type: application/json
 
-{ "name": "Pricing", "url": "https://example.com", "mode": "whole_page", "schedule_interval_minutes": 60 }
+{ "name": "Pricing", "url": "https://example.com", "mode": "page_content", "schedule_interval_minutes": 60 }
 ```
 
 ## Bulk CSV import
@@ -32,7 +32,7 @@ Content-Type: application/json
 POST /api/v1/workspaces/{id}/monitors/import
 Authorization: Bearer mtw_...
 
-{ "csv_text": "name,url,mode\nDocs,https://example.com/docs,whole_page\n" }
+{ "csv_text": "name,url,mode\nDocs,https://example.com/docs,page_content\n" }
 ```
 
 ## Zapier outline

@@ -12,7 +12,7 @@ Monitors need reliable recurring checks without one OS cron job per monitor, wit
 
 1. **Scheduler**: PostgreSQL-driven. Poll monitors where `next_run_at <= now()`, claim with `FOR UPDATE SKIP LOCKED` or timed lease, set next run (with jitter), enqueue job.  
 2. **Queue**: Redis + Dramatiq.  
-3. **Queues**: `http_checks`, `notifications`, and **`browser_checks`** (Playwright visual/JS; separate worker, `--threads 1` on Windows).  
+3. **Queues**: `http_checks`, `notifications`, and **`browser_checks`** (Playwright JS-rendered; separate worker, `--threads 1` on Windows).  
 4. **Idempotency**: unique key per scheduled execution; one active run per monitor; change event + outbox in one DB transaction.
 
 ## Alternatives considered

@@ -17,7 +17,7 @@ sequenceDiagram
     participant Mail as Resend
 
     User->>Web: Sign in (Clerk)
-    Web->>API: Create monitor (url, mode, selector, schedule)
+    Web->>API: Create monitor (url, mode, css_selector?, schedule)
     API->>DB: Insert monitor + next_run_at
     API-->>Web: Monitor created
 
@@ -65,12 +65,13 @@ Until Clerk + Next.js exist:
 
 - Invalid URL / blocked target → create fails or run fails with clear code  
 - Selector not found → `selector_not_found`; baseline not replaced  
+  (`css_selector` applies to `list_items`, and holds the JSONPath query for `json_field`)  
 - Site timeout / 5xx → retries; after consecutive failures, optional failure notification  
 - Quota exceeded → create or schedule rejected with clear error  
 
 ## Config change rules
 
-Changing URL, mode, or CSS selector:
+Changing URL, mode, or CSS selector (incl. the JSONPath query stored in `css_selector` for `json_field`):
 
 1. Increments `config_version`  
 2. Creates a new baseline on next success  

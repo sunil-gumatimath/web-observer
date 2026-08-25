@@ -2,7 +2,7 @@
 
 ## Phase 0–5
 
-- [x] Architecture, vertical slice, dashboard, Clerk dual-mode, Playwright, structured/visual, AI, digests, Slack/Discord
+- [x] Architecture, vertical slice, dashboard, Clerk dual-mode, Playwright, structured/JS-rendered, AI, digests, Slack/Discord
 
 ## Phase 6 — Bulk & monetization
 

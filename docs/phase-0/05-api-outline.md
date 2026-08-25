@@ -48,7 +48,7 @@ Base path: `/api/v1`
 {
   "name": "Pricing page",
   "url": "https://example.com/pricing",
-  "mode": "css_selector",
+  "mode": "page_content",
   "css_selector": "main .price",
   "schedule_interval_minutes": 60,
   "timezone": "UTC",

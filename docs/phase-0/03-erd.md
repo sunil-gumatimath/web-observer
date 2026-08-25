@@ -55,7 +55,7 @@ erDiagram
 | workspace_id | FK, indexed |
 | name | text |
 | url | text |
-| mode | `whole_page` \| `css_selector` |
+| mode | `page_content` \| `site_links` \| `product_price` \| `list_items` \| `json_field` (updated to reflect shipped MonitorMode enum) |
 | css_selector | nullable |
 | schedule_expression | e.g. interval or cron-like; MVP may use interval minutes |
 | timezone | IANA tz |
