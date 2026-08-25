@@ -128,6 +128,15 @@ class MonitorCreate(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def check_json_field_path(self) -> MonitorCreate:
+        if self.mode == "json_field" and not (self.css_selector or "").strip():
+            raise ValueError(
+                "css_selector is required for json_field monitors "
+                "(a JSON path like $.data.price)"
+            )
+        return self
+
+    @model_validator(mode="after")
     def check_site_links_js(self) -> MonitorCreate:
         # site_links fetches the sitemap over plain HTTP; routing it through
         # the browser worker would snapshot the rendered page instead of the
@@ -193,6 +202,17 @@ class MonitorUpdate(BaseModel):
             self.css_selector is None or not self.css_selector.strip()
         ):
             raise ValueError("css_selector is required for list_items monitors")
+        return self
+
+    @model_validator(mode="after")
+    def check_json_field_path(self) -> MonitorUpdate:
+        if self.mode == "json_field" and (
+            self.css_selector is None or not self.css_selector.strip()
+        ):
+            raise ValueError(
+                "css_selector is required for json_field monitors "
+                "(a JSON path like $.data.price)"
+            )
         return self
 
     @model_validator(mode="after")

@@ -35,12 +35,15 @@ class MonitorMode(enum.StrEnum):
     ``SITE_LINKS``    sitemap URL inventory (+/- URLs); fetched over plain HTTP.
     ``PRODUCT_PRICE`` first price-like token normalized to e.g. ``USD 19.99``.
     ``LIST_ITEMS``    CSS-selector list items as ``[text](href)``; set diff.
+    ``JSON_FIELD``    single value addressed by a JSONPath-style query
+                      (e.g. ``$.data.price``); the URL must return JSON.
     """
 
     PAGE_CONTENT = "page_content"
     SITE_LINKS = "site_links"
     PRODUCT_PRICE = "product_price"
     LIST_ITEMS = "list_items"
+    JSON_FIELD = "json_field"
 
 
 # Single source of truth for valid mode strings. API schemas, bulk import,

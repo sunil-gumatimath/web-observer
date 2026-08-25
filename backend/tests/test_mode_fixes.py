@@ -83,6 +83,7 @@ def test_monitor_modes_derived_from_enum() -> None:
         "site_links",
         "product_price",
         "list_items",
+        "json_field",
     }
 
 

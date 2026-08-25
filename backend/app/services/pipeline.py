@@ -38,6 +38,7 @@ from app.services.storage import StorageError, put_bytes, snapshot_object_key
 from app.services.structured import (
     diff_lists,
     extract_html_list,
+    extract_json_field,
     items_from_normalized,
     list_to_normalized,
 )
@@ -101,6 +102,18 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
             )
         items = extract_html_list(result.text, monitor.css_selector)
         return list_to_normalized(items), items
+
+    if mode == MonitorMode.JSON_FIELD.value:
+        # css_selector doubles as the JSONPath-style field query for this
+        # mode (e.g. "$.data.price") — no extra DB column needed.
+        path = (monitor.css_selector or "").strip()
+        if not path:
+            raise ExtractionError(
+                "extraction_failed",
+                "css_selector is required for json_field monitors "
+                "(a JSON path like $.data.price)",
+            )
+        return extract_json_field(result.text, path), None
 
     # page_content (default): whole page as markdown (readable line-level diff)
     text = extract_markdown(
