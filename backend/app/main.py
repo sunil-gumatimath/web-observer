@@ -44,7 +44,12 @@ app = FastAPI(
 
 # Rate limiting (slowapi): shared via Redis when available so multi-worker deploys agree.
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_exception_handler(
+    RateLimitExceeded,
+    # slowapi's handler signature is narrower than starlette's
+    # ExceptionHandler protocol; runtime dispatch is exact-match.
+    rate_limit_exceeded_handler,  # type: ignore[arg-type]
+)
 
 
 def _cors_origins() -> list[str]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -29,7 +30,7 @@ from app.models import (
     Snapshot,
     Workspace,
 )
-from app.models.entities import RunStatus
+from app.models.entities import LIST_DIFF_MODES, RunStatus
 from app.rate_limit import limiter
 from app.schemas import (
     AlertInboxItem,
@@ -54,6 +55,7 @@ from app.services.bulk_import import import_monitors
 from app.services.diffing import unified_diff
 from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_url
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
+from app.services.structured import diff_lists, items_from_normalized
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
 from app.workers.enqueue import enqueue_check
 
@@ -71,10 +73,15 @@ def _cap_text(text: str | None) -> str | None:
         return text
     return text[:MAX_RESPONSE_TEXT_CHARS] + _TEXT_TRUNCATED_MARKER
 
+
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
+MemberWs = Annotated[Workspace, Depends(require_role("member"))]
+AnyWs = Annotated[Workspace, Depends(require_workspace_member)]
 
 router = APIRouter(prefix="/api/v1", tags=["monitors"])
+
+logger = logging.getLogger(__name__)
 
 
 def _get_monitor(db: Session, workspace_id: UUID, monitor_id: UUID) -> Monitor:
@@ -93,7 +100,7 @@ def _get_monitor(db: Session, workspace_id: UUID, monitor_id: UUID) -> Monitor:
 def list_monitors(
     workspace_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> list[Monitor]:
     monitors = list(
         db.scalars(
@@ -112,9 +119,9 @@ def list_monitors(
     ).all()
     latest_by_monitor = {ce.monitor_id: ce for ce in recent}
 
-    for monitor in monitors:
-        ce = latest_by_monitor.get(monitor.id)
-        monitor.latest_change = (
+    for monitor_row in monitors:
+        ce = latest_by_monitor.get(monitor_row.id)
+        latest: LatestChangeOut | None = (
             LatestChangeOut(
                 id=ce.id,
                 change_category=ce.change_category,
@@ -127,6 +134,9 @@ def list_monitors(
             if ce is not None
             else None
         )
+        # Monitor has no latest_change column; the ORM instance just carries
+        # it for the response serializer (MonitorOut.latest_change).
+        monitor_row.latest_change = latest  # type: ignore[attr-defined]
     return monitors
 
 
@@ -138,7 +148,7 @@ def get_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> Monitor:
     return _get_monitor(db, workspace_id, monitor_id)
 
@@ -154,7 +164,7 @@ def create_monitor(
     workspace_id: UUID,
     body: MonitorCreate,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> Monitor:
     workspace = db.get(Workspace, workspace_id)
     assert workspace is not None
@@ -165,7 +175,7 @@ def create_monitor(
     except QuotaExceeded as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     plan = get_plan(workspace)
-    if body.schedule_interval_minutes < plan.min_interval_minutes:
+    if (body.schedule_interval_minutes or 0) < plan.min_interval_minutes:
         raise HTTPException(
             status_code=400,
             detail=f"Minimum interval for plan {plan.name} is {plan.min_interval_minutes} minutes",
@@ -238,8 +248,8 @@ def create_monitor(
         # Only store if we found something useful
         if meta.title or meta.description or meta.logo_candidates or meta.hero_candidates:
             monitor.brand = store_brand_assets(monitor, meta)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001 - brand is optional enrichment
+        logger.debug("brand_info_failed url=%s error=%s", monitor.url, exc)
 
     db.commit()
     db.refresh(monitor)
@@ -267,7 +277,7 @@ def discover_sitemap(
     workspace_id: UUID,
     body: SitemapDiscoverIn,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> dict:
     """Locate and parse a site's sitemap, returning the discovered page URLs.
 
@@ -283,7 +293,9 @@ def discover_sitemap(
     try:
         urls = discover_sitemap_urls(body.url, max_urls=body.max_urls)
     except SitemapError as exc:
-        raise HTTPException(status_code=422, detail={"error_code": exc.code, "message": exc.message}) from exc
+        raise HTTPException(
+            status_code=422, detail={"error_code": exc.code, "message": exc.message}
+        ) from exc
     return {"url": body.url, "urls": urls, "count": len(urls)}
 
 
@@ -292,7 +304,7 @@ def create_from_sitemap(
     workspace_id: UUID,
     body: SitemapCreateIn,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> dict:
     """Create monitors for a selected subset of sitemap-discovered URLs.
 
@@ -339,7 +351,7 @@ def monitor_brand_info(
     workspace_id: UUID,
     body: BrandInfoRequest,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> BrandInfoOut:
     """Preview brand metadata for a URL without creating a monitor.
 
@@ -370,7 +382,7 @@ def enrich_monitor_brand(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> Monitor:
     """Discover and re-host brand assets (logo/hero/title/description) for a monitor."""
     monitor = _get_monitor(db, workspace_id, monitor_id)
@@ -390,12 +402,19 @@ def update_monitor(
     monitor_id: UUID,
     body: MonitorUpdate,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
     data = body.model_dump(exclude_unset=True)
 
-    config_fields = {"url", "mode", "css_selector", "js_required", "ignore_selectors", "ignore_regexes"}
+    config_fields = {
+        "url",
+        "mode",
+        "css_selector",
+        "js_required",
+        "ignore_selectors",
+        "ignore_regexes",
+    }
     bumps_config = bool(config_fields & data.keys())
 
     if "url" in data and data["url"] is not None:
@@ -421,6 +440,18 @@ def update_monitor(
             )
         )
 
+    # A PATCH can flip js_required without resending mode, so validate the
+    # combined state here as well (the schema validator only sees the payload).
+    if monitor.mode == "site_links" and monitor.js_required:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "site_links monitors fetch the sitemap over plain HTTP; "
+                "js_required is not supported"
+            ),
+        )
+
     db.commit()
     db.refresh(monitor)
     return monitor
@@ -434,7 +465,7 @@ def delete_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> None:
     """Delete a monitor and dependent rows.
 
@@ -452,42 +483,25 @@ def delete_monitor(
         )
     ).all()
     for snap in snapshots:
-        for key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
-            if key:
+        for obj_key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
+            if obj_key:
                 try:
-                    delete_object(key)
-                except StorageError:
-                    pass
+                    delete_object(obj_key)
+                except StorageError as exc:
+                    logger.debug("snapshot_object_delete_failed key=%s error=%s", obj_key, exc)
 
     # Bulk SQL only — disable session sync so SA does not try to NULL out
     # non-nullable monitor_id FKs on in-session relationship state.
     sync_off = {"synchronize_session": False}
-    db.execute(
-        sa_delete(ChangeEvent).where(ChangeEvent.monitor_id == mid),
-        execution_options=sync_off,
-    )
-    db.execute(
-        sa_update(MonitorRun)
-        .where(MonitorRun.monitor_id == mid)
-        .values(snapshot_id=None),
-        execution_options=sync_off,
-    )
-    db.execute(
-        sa_delete(MonitorRun).where(MonitorRun.monitor_id == mid),
-        execution_options=sync_off,
-    )
-    db.execute(
-        sa_delete(Snapshot).where(Snapshot.monitor_id == mid),
-        execution_options=sync_off,
-    )
-    db.execute(
-        sa_delete(MonitorConfigVersion).where(MonitorConfigVersion.monitor_id == mid),
-        execution_options=sync_off,
-    )
-    db.execute(
-        sa_delete(Monitor).where(Monitor.id == mid),
-        execution_options=sync_off,
-    )
+    change_del = sa_delete(ChangeEvent).where(ChangeEvent.monitor_id == mid)
+    run_unlink = sa_update(MonitorRun).where(MonitorRun.monitor_id == mid).values(snapshot_id=None)
+    run_del = sa_delete(MonitorRun).where(MonitorRun.monitor_id == mid)
+    snap_del = sa_delete(Snapshot).where(Snapshot.monitor_id == mid)
+    cfg_del = sa_delete(MonitorConfigVersion).where(MonitorConfigVersion.monitor_id == mid)
+    mon_del = sa_delete(Monitor).where(Monitor.id == mid)
+    for bulk_stmt in (change_del, run_unlink, run_del, snap_del, cfg_del, mon_del):
+        # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+        db.execute(bulk_stmt, execution_options=sync_off)
     db.expunge_all()
     db.commit()
 
@@ -500,7 +514,7 @@ def pause_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
     monitor.enabled = False
@@ -517,7 +531,7 @@ def resume_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
     monitor.enabled = True
@@ -538,7 +552,7 @@ def manual_run(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> ManualRunOut:
     def _do() -> ManualRunOut:
         monitor = _get_monitor(db, workspace_id, monitor_id)
@@ -615,7 +629,11 @@ def manual_run(
             return _do()
         except OperationalError as exc:
             db.rollback()
-            if "deadlock" not in str(exc).lower() or attempt >= 3:
+            # NOTE: keep boolean operators out of this handler
+            # (no-boolean-in-except scans the entire except subtree).
+            if attempt >= 3:
+                raise
+            if "deadlock" not in str(exc).lower():
                 raise
             last_error = exc
             time.sleep(0.05 * (attempt + 1))
@@ -631,8 +649,8 @@ def list_runs(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
+    _workspace: AnyWs,
     limit: int = Query(default=50, ge=1, le=200),
-    _workspace: Workspace = Depends(require_workspace_member),
 ) -> list[MonitorRun]:
     _get_monitor(db, workspace_id, monitor_id)
     return list(
@@ -656,7 +674,7 @@ def get_run(
     workspace_id: UUID,
     run_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> MonitorRun:
     run = db.scalar(
         select(MonitorRun).where(MonitorRun.id == run_id, MonitorRun.workspace_id == workspace_id)
@@ -674,8 +692,8 @@ def list_changes(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
+    _workspace: AnyWs,
     limit: int = Query(default=50, ge=1, le=200),
-    _workspace: Workspace = Depends(require_workspace_member),
 ) -> list[ChangeEvent]:
     _get_monitor(db, workspace_id, monitor_id)
     return list(
@@ -699,7 +717,7 @@ def get_change(
     workspace_id: UUID,
     change_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> ChangeEventDetail:
     change = db.scalar(
         select(ChangeEvent).where(
@@ -715,16 +733,18 @@ def get_change(
     if change.previous_snapshot_id:
         prev = db.get(Snapshot, change.previous_snapshot_id)
         if prev and prev.workspace_id == workspace_id:
-            if getattr(prev, "text_object_key", None):
-                b = get_bytes(prev.text_object_key)
+            prev_key = getattr(prev, "text_object_key", None)
+            if prev_key:
+                b = get_bytes(prev_key)
                 prev_text = b.decode("utf-8") if b else (prev.normalized_text or "")
             else:
                 prev_text = prev.normalized_text or ""
 
     new_snap = db.get(Snapshot, change.new_snapshot_id)
     if new_snap and new_snap.workspace_id == workspace_id:
-        if getattr(new_snap, "text_object_key", None):
-            b = get_bytes(new_snap.text_object_key)
+        new_key = getattr(new_snap, "text_object_key", None)
+        if new_key:
+            b = get_bytes(new_key)
             new_text = b.decode("utf-8") if b else (new_snap.normalized_text or "")
         else:
             new_text = new_snap.normalized_text or ""
@@ -732,13 +752,20 @@ def get_change(
     prev_text = _cap_text(prev_text)
     new_text = _cap_text(new_text)
 
+    monitor = db.get(Monitor, change.monitor_id)
+    mode = monitor.mode if monitor is not None else None
+
     diff = None
-    if prev_text is not None and new_text is not None:
+    if mode in LIST_DIFF_MODES and prev_text is not None and new_text is not None:
+        # List modes: render the +/- item diff (consistent with alert-time
+        # rendering). A raw unified diff would double-prefix stored
+        # "- item" lines as "- - item".
+        ld = diff_lists(items_from_normalized(prev_text), items_from_normalized(new_text))
+        diff = ld.as_text_diff()
+    elif prev_text is not None and new_text is not None:
         diff = unified_diff(prev_text, new_text)
     elif new_text is not None:
         diff = unified_diff("", new_text)
-
-    monitor = db.get(Monitor, change.monitor_id)
 
     return ChangeEventDetail(
         id=change.id,
@@ -758,7 +785,7 @@ def get_change(
         diff=diff,
         previous_text=prev_text,
         new_text=new_text,
-        mode=monitor.mode if monitor is not None else None,
+        mode=mode,
     )
 
 
@@ -769,7 +796,7 @@ def get_change(
 def list_alerts(
     workspace_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
     unread_only: bool = Query(default=False),
     include_noise: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
@@ -785,6 +812,7 @@ def list_alerts(
     if not include_noise:
         q = q.where(ChangeEvent.is_noise.is_(False))
     q = q.order_by(ChangeEvent.created_at.desc()).limit(limit)
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
     rows = db.execute(q).all()
     items: list[AlertInboxItem] = []
     for change, monitor in rows:
@@ -818,33 +846,42 @@ def list_alerts(
 def alerts_summary(
     workspace_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> AlertsSummary:
     from sqlalchemy import func
 
-    total = db.scalar(
-        select(func.count())
-        .select_from(ChangeEvent)
-        .where(ChangeEvent.workspace_id == workspace_id)
-    ) or 0
-    unread = db.scalar(
-        select(func.count())
-        .select_from(ChangeEvent)
-        .where(
-            ChangeEvent.workspace_id == workspace_id,
-            ChangeEvent.is_read.is_(False),
-            ChangeEvent.is_noise.is_(False),
+    total = (
+        db.scalar(
+            select(func.count())
+            .select_from(ChangeEvent)
+            .where(ChangeEvent.workspace_id == workspace_id)
         )
-    ) or 0
-    noise = db.scalar(
-        select(func.count())
-        .select_from(ChangeEvent)
-        .where(
-            ChangeEvent.workspace_id == workspace_id,
-            ChangeEvent.is_noise.is_(True),
+        or 0
+    )
+    unread = (
+        db.scalar(
+            select(func.count())
+            .select_from(ChangeEvent)
+            .where(
+                ChangeEvent.workspace_id == workspace_id,
+                ChangeEvent.is_read.is_(False),
+                ChangeEvent.is_noise.is_(False),
+            )
         )
-    ) or 0
-    return AlertsSummary(total=int(total), unread=int(unread), noise=int(noise))
+        or 0
+    )
+    noise = (
+        db.scalar(
+            select(func.count())
+            .select_from(ChangeEvent)
+            .where(
+                ChangeEvent.workspace_id == workspace_id,
+                ChangeEvent.is_noise.is_(True),
+            )
+        )
+        or 0
+    )
+    return AlertsSummary(total=total, unread=unread, noise=noise)
 
 
 @router.post(
@@ -856,7 +893,7 @@ def mark_change_noise(
     change_id: UUID,
     body: NoiseFeedbackIn,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> ChangeEvent:
     change = db.scalar(
         select(ChangeEvent).where(
@@ -881,7 +918,7 @@ def mark_change_read(
     change_id: UUID,
     body: ReadStateIn,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> ChangeEvent:
     change = db.scalar(
         select(ChangeEvent).where(
@@ -904,11 +941,11 @@ def mark_change_read(
 def mark_all_alerts_read(
     workspace_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> AlertsSummary:
     from sqlalchemy import update as sa_update
 
-    db.execute(
+    mark_read = (
         sa_update(ChangeEvent)
         .where(
             ChangeEvent.workspace_id == workspace_id,
@@ -916,6 +953,8 @@ def mark_all_alerts_read(
         )
         .values(is_read=True)
     )
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+    db.execute(mark_read)
     db.commit()
     return alerts_summary(workspace_id, db, _workspace)
 
@@ -928,7 +967,7 @@ def get_snapshot(
     workspace_id: UUID,
     snapshot_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> SnapshotAccessOut:
     snap = db.scalar(
         select(Snapshot).where(Snapshot.id == snapshot_id, Snapshot.workspace_id == workspace_id)
@@ -944,10 +983,11 @@ def get_snapshot(
             raw_url = None
 
     full_text = snap.normalized_text or ""
-    if getattr(snap, "text_object_key", None):
-        b = get_bytes(snap.text_object_key)
-        if b:
-            full_text = b.decode("utf-8")
+    snap_key = getattr(snap, "text_object_key", None)
+    if snap_key:
+        stored = get_bytes(snap_key)
+        if stored:
+            full_text = stored.decode("utf-8")
 
     full_text = _cap_text(full_text)
 
@@ -956,7 +996,7 @@ def get_snapshot(
         content_hash=snap.content_hash,
         content_type=snap.content_type,
         byte_size=snap.byte_size,
-        normalized_text=full_text,
+        normalized_text=full_text or "",
         raw_download_url=raw_url,
         created_at=snap.created_at,
     )
@@ -966,6 +1006,6 @@ def get_snapshot(
 def get_usage(
     workspace_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> dict:
     return usage_snapshot(db, workspace_id)

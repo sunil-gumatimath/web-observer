@@ -63,8 +63,8 @@ def _key_func(request: Request) -> str:
             if sub:
                 # Prefix to distinguish unverified fallback
                 return f"user_unverified:{sub}"
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - unverified fallback path
+            logger.debug("jwt_subject_fallback_to_ip error=%s", exc)
     return f"ip:{get_remote_address(request)}"
 
 

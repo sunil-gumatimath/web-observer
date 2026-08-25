@@ -28,6 +28,8 @@ from app.security.ssrf import SSRFError, validate_url_for_fetch
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
+MemberWs = Annotated[Workspace, Depends(require_role("member"))]
+AnyWs = Annotated[Workspace, Depends(require_workspace_member)]
 
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
 
@@ -39,7 +41,7 @@ router = APIRouter(prefix="/api/v1", tags=["notifications"])
 def list_notification_channels(
     workspace_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> list[NotificationChannel]:
     return list(
         db.scalars(
@@ -75,7 +77,7 @@ def create_notification_channel(
     workspace_id: UUID,
     body: NotificationChannelCreate,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> NotificationChannel:
     _validate_channel_address(body.type, str(body.address))
     existing = db.scalar(
@@ -112,7 +114,7 @@ def update_notification_channel(
     channel_id: UUID,
     body: NotificationChannelUpdate,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> NotificationChannel:
     channel = db.scalar(
         select(NotificationChannel).where(
@@ -143,7 +145,7 @@ def delete_notification_channel(
     workspace_id: UUID,
     channel_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> None:
     channel = db.scalar(
         select(NotificationChannel).where(
@@ -164,7 +166,7 @@ def test_notification_channel(
     workspace_id: UUID,
     channel_id: UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_role("member")),
+    _workspace: MemberWs,
 ) -> dict:
     """Send a one-off test message to verify a channel works.
 

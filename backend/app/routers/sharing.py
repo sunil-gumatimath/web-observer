@@ -27,7 +27,6 @@ from app.auth import (
     require_workspace_member,
 )
 from app.db import get_db
-from app.rate_limit import limiter
 from app.models import (
     ChangeEvent,
     Monitor,
@@ -36,6 +35,7 @@ from app.models import (
     WorkspaceInvite,
     WorkspaceMember,
 )
+from app.rate_limit import limiter
 from app.schemas import (
     PublicShareAlertOut,
     PublicShareMonitorOut,
@@ -53,6 +53,9 @@ from app.services.tokens import hash_token, new_token
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
+MemberWs = Annotated[Workspace, Depends(require_role("member"))]
+AnyWs = Annotated[Workspace, Depends(require_workspace_member)]
+AdminWs = Annotated[Workspace, Depends(require_role("admin"))]
 
 router = APIRouter(prefix="/api/v1", tags=["sharing"])
 
@@ -81,7 +84,7 @@ def create_share_link(
     body: ShareLinkCreate,
     db: Db,
     principal: Principal,
-    workspace: Workspace = Depends(require_role("member")),
+    workspace: MemberWs,
 ) -> ShareLinkOut:
     monitor = db.scalar(
         select(Monitor).where(Monitor.id == monitor_id, Monitor.workspace_id == workspace_id)
@@ -131,7 +134,7 @@ def list_share_links(
     workspace_id: uuid.UUID,
     monitor_id: uuid.UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_workspace_member),
+    _workspace: AnyWs,
 ) -> list[dict]:
     rows = db.scalars(
         select(ShareLink)
@@ -161,7 +164,7 @@ def revoke_share_link(
     link_id: uuid.UUID,
     db: Db,
     principal: Principal,
-    _workspace: Workspace = Depends(require_role("admin")),
+    _workspace: AdminWs,
 ) -> None:
     row = db.scalar(
         select(ShareLink).where(
@@ -172,7 +175,9 @@ def revoke_share_link(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Share link not found")
-    db.execute(sa_delete(ShareLink).where(ShareLink.id == link_id))
+    del_stmt = sa_delete(ShareLink).where(ShareLink.id == link_id)
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+    db.execute(del_stmt)
     write_audit(
         db,
         workspace_id=workspace_id,
@@ -250,7 +255,7 @@ def create_invite(
     body: WorkspaceInviteCreate,
     db: Db,
     principal: Principal,
-    workspace: Workspace = Depends(require_role("admin")),
+    workspace: AdminWs,
 ) -> WorkspaceInviteOut:
     if body.role not in ("owner", "admin", "member", "viewer"):
         raise HTTPException(status_code=400, detail="Invalid role")
@@ -294,7 +299,7 @@ def create_invite(
 def list_invites(
     workspace_id: uuid.UUID,
     db: Db,
-    _workspace: Workspace = Depends(require_role("admin")),
+    _workspace: AdminWs,
 ) -> list[dict]:
     rows = db.scalars(
         select(WorkspaceInvite)
@@ -324,7 +329,7 @@ def revoke_invite(
     invite_id: uuid.UUID,
     db: Db,
     principal: Principal,
-    _workspace: Workspace = Depends(require_role("admin")),
+    _workspace: AdminWs,
 ) -> None:
     row = db.scalar(
         select(WorkspaceInvite).where(
@@ -333,7 +338,9 @@ def revoke_invite(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Invite not found")
-    db.execute(sa_delete(WorkspaceInvite).where(WorkspaceInvite.id == invite_id))
+    del_stmt = sa_delete(WorkspaceInvite).where(WorkspaceInvite.id == invite_id)
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+    db.execute(del_stmt)
     write_audit(
         db,
         workspace_id=workspace_id,
@@ -376,7 +383,7 @@ def redeem_invite(
     # The conditional UPDATE re-evaluates `use_count < max_uses` against the
     # latest committed row version, so the count can never exceed the cap.
     now = datetime.now(UTC)
-    claimed = db.execute(
+    claim_stmt = (
         sa_update(WorkspaceInvite)
         .where(
             WorkspaceInvite.token_hash == hash_token(token),
@@ -385,7 +392,10 @@ def redeem_invite(
         )
         .values(use_count=WorkspaceInvite.use_count + 1)
     )
-    if claimed.rowcount != 1:
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+    claimed = db.execute(claim_stmt)
+    # rowcount exists on CursorResult; the Result stub omits it.
+    if claimed.rowcount != 1:  # type: ignore[attr-defined]
         db.rollback()
         raise HTTPException(status_code=410, detail="Invite link has expired")
 
