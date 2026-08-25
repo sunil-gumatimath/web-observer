@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -45,7 +46,13 @@ def resolve_json_path(data: Any, path: str) -> Any:
         if cur is None:
             raise ExtractionError("selector_not_found", f"Path not found near '{tok}' in {path}")
         if tok.isdigit():
-            i = int(tok)
+            try:
+                i = int(tok)
+            except ValueError as exc:
+                # isdigit() accepts unicode digit glyphs int() rejects.
+                raise ExtractionError(
+                    "selector_not_found", f"Invalid index '{tok}' in path {path}"
+                ) from exc
             if not isinstance(cur, list) or i >= len(cur):
                 raise ExtractionError("selector_not_found", f"Index {i} missing in path {path}")
             cur = cur[i]
@@ -79,22 +86,11 @@ class ListDiff:
     normalized: str  # stable representation for hashing
 
     def as_text_diff(self) -> str:
-        lines: list[str] = []
-        for item in self.removed:
-            lines.append(f"- {item}")
-        for item in self.added:
-            lines.append(f"+ {item}")
-        for before, after in self.modified:
-            lines.append(f"~ {before} → {after}")
-        return "\n".join(lines) if lines else "(no list changes)"
+        """Render the +/- diff.
 
-    def as_link_diff(self) -> str:
-        """Render the diff with clickable links where available.
-
-        Each list item is formatted as ``[text](url)`` by ``extract_html_list``
-        (and ``extract_json_list`` callers that supply links), so an added item
-        becomes ``+ [text](url)`` and a removed item ``- [text](url)`` — the
-        same readable, link-rich shape webdog-style alerts use.
+        Items already carry their link targets (``extract_html_list`` emits
+        ``[text](url)``), so a single renderer covers both plain and link-rich
+        lists — there is deliberately no separate "link" renderer.
         """
         lines: list[str] = []
         for item in self.removed:
@@ -130,7 +126,9 @@ def extract_html_list(html: str, css_selector: str) -> list[str]:
         node.decompose()
     nodes = tree.css(css_selector)
     if not nodes:
-        raise ExtractionError("selector_not_found", f"List selector matched nothing: {css_selector}")
+        raise ExtractionError(
+            "selector_not_found", f"List selector matched nothing: {css_selector}"
+        )
     items: list[str] = []
     for node in nodes:
         t = normalize_text(node.text(separator=" ", strip=True))
@@ -175,11 +173,41 @@ def list_to_normalized(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 
+def items_from_normalized(text: str) -> list[str]:
+    """Recover list items from a stored normalized representation.
+
+    ``list_to_normalized`` prefixes every item with ``'- '``; this inverts it,
+    dropping blank/partial lines. Used to rebuild the *previous* item set from
+    snapshot text (the previous page itself is never re-fetched).
+    """
+    return [
+        line[2:] if line.startswith("- ") else line
+        for line in (text or "").splitlines()
+        if line.strip()
+    ]
+
+
+def _dedupe_keep_order(items: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
+
+
 def diff_lists(before: list[str], after: list[str]) -> ListDiff:
+    """Set-based list diff that preserves on-page order.
+
+    Added items appear in their ``after`` order and removed items in their
+    ``before`` order — alphabetical sorting used to scramble recency (e.g. new
+    blog posts no longer surfaced first in alerts).
+    """
     before_set = set(before)
     after_set = set(after)
-    added = sorted(after_set - before_set)
-    removed = sorted(before_set - after_set)
+    added = _dedupe_keep_order(x for x in after if x not in before_set)
+    removed = _dedupe_keep_order(x for x in before if x not in after_set)
     summary_parts = []
     if added:
         summary_parts.append(f"+{len(added)} added")

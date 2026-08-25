@@ -163,51 +163,23 @@ def test_diff_lists_unchanged() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 3) as_link_diff (new renderer) with graceful fallback
+# 3) Single consolidated renderer (as_link_diff was removed)
 # --------------------------------------------------------------------------- #
 
-def test_listdiff_as_link_diff_or_fallback() -> None:
-    """Contract target: ``as_link_diff`` renders added items as clickable
-    ``[text](url)`` links and removed items as ``- text``.
-
-    Graceful handling for the in-progress implementation:
-      * If ``as_link_diff`` does not exist at all -> fall back to asserting
-        ``as_text_diff()`` carries the URL text.
-      * If it exists but is still a stub mirroring ``as_text_diff`` (no
-        markdown links) -> skip and surface the gap.
-    """
-    before = ["Old Link (https://old.example/page)"]
-    after = ["New Link (https://new.example/page)"]
+def test_listdiff_renderer_carries_link_text() -> None:
+    """Items embed their link targets ([text](url)), so the single
+    as_text_diff renderer surfaces URLs for added AND removed items."""
+    before = ["[Old Link](https://old.example/page)"]
+    after = ["[New Link](https://new.example/page)"]
     d = diff_lists(before, after)
 
-    if not hasattr(ListDiff, "as_link_diff"):
-        # Fallback per contract: the URL text must be present in the text diff.
-        text = d.as_text_diff()
-        assert "https://old.example/page" in text
-        assert "https://new.example/page" in text
-        return
-
-    rendered = d.as_link_diff()
-    # A *proper* implementation renders added items as markdown links.
-    renders_links = "](" in rendered and "[" in rendered
-    if not renders_links:
-        pytest.skip(
-            "GAP: as_link_diff() exists but currently mirrors as_text_diff() "
-            "(no [text](url) markdown links yet). Main agent must implement the "
-            "link rendering for added items."
-        )
-    # Proper implementation: added -> [text](url), removed -> '- text'.
-    assert "https://new.example/page" in rendered
+    rendered = d.as_text_diff()
     assert "https://old.example/page" in rendered
-    assert "](" in rendered  # markdown link syntax for added items
-    assert "- Old Link" in rendered  # removed item prefixed '- '
+    assert "https://new.example/page" in rendered
+    assert "- [Old Link](https://old.example/page)" in rendered
+    assert "+ [New Link](https://new.example/page)" in rendered
 
 
-def test_listdiff_as_link_diff_renderer_signature() -> None:
-    """Smoke check that, if present, ``as_link_diff`` is a no-arg method
-    returning a string (helps the main agent keep the signature stable)."""
-    if not hasattr(ListDiff, "as_link_diff"):
-        pytest.skip("as_link_diff not implemented yet — gap reported to main agent.")
+def test_listdiff_renderer_is_stable_no_arg_method() -> None:
     d = diff_lists(["a"], ["b"])
-    rendered = d.as_link_diff()
-    assert isinstance(rendered, str)
+    assert isinstance(d.as_text_diff(), str)
