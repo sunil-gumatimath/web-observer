@@ -103,6 +103,7 @@ def _check_robots(url: str, user_agent: str, client: httpx.Client) -> None:
         rp.parse(resp.text.splitlines())
         if not rp.can_fetch(user_agent, url):
             raise FetchError("robots_disallowed", f"robots.txt disallows fetch of {url}")
+    # pi-lens-ignore: unreachable-except - sibling exceptions
     except FetchError:
         raise
     except SSRFError:
@@ -144,7 +145,7 @@ def fetch_binary(
     so a first-hop redirect to ``169.254.169.254`` / ``127.0.0.1`` is blocked.
     """
     current = validate_url_for_fetch(url, resolve_dns=True).url
-    timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, float(timeout_seconds)))
+    timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, timeout_seconds))
     headers = {"User-Agent": get_settings().http_user_agent}
 
     import time
@@ -207,7 +208,7 @@ def fetch_binary(
                 content=b"".join(chunks),
                 text="",
                 content_type=response.headers.get("content-type", ""),
-                latency_ms=int((time.perf_counter() - started) * 1000),
+                latency_ms=round((time.perf_counter() - started) * 1000),
             )
 
 
@@ -222,7 +223,7 @@ def fetch_url(
     user_agent = settings.http_user_agent
     current = validate_url_for_fetch(url, resolve_dns=True).url
 
-    timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, float(timeout_seconds)))
+    timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, timeout_seconds))
     headers = {"User-Agent": user_agent}
 
     if respect_robots:
@@ -231,9 +232,9 @@ def fetch_url(
         try:
             with _pinned_client(current, timeout=timeout, headers=headers) as robots_client:
                 _check_robots(current, user_agent, robots_client)
-        except SSRFError:
+        except SSRFError as exc:
             # If robots host is blocked somehow, skip robots (do not open SSRF).
-            pass
+            logger.debug("robots_check_skipped_ssrf error=%s", exc)
 
     import time
 
@@ -317,7 +318,7 @@ def fetch_url(
             except (LookupError, TypeError):
                 text = content.decode("utf-8", errors="replace")
 
-            latency_ms = int((time.perf_counter() - started) * 1000)
+            latency_ms = round((time.perf_counter() - started) * 1000)
             challenge = detect_bot_challenge(
                 status_code=response.status_code,
                 headers=dict(response.headers),

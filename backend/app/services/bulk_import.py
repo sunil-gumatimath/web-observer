@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Monitor, MonitorConfigVersion, Workspace
+from app.models.entities import MONITOR_MODES
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.plans import assert_can_create_monitor, get_plan
 
@@ -22,6 +23,16 @@ class ImportResult:
     created: list[str] = field(default_factory=list)
     skipped: list[dict[str, str]] = field(default_factory=list)
     errors: list[dict[str, str]] = field(default_factory=list)
+
+
+def _safe_int(value: Any, default: int) -> int:
+    """Best-effort int coercion for spreadsheet-provided values."""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -34,8 +45,8 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
         "css_selector": (str(out["css_selector"]).strip() if out.get("css_selector") else None)
         or (str(out["selector"]).strip() if out.get("selector") else None)
         or (str(out["path"]).strip() if out.get("path") else None),
-        "schedule_interval_minutes": int(
-            out.get("schedule_interval_minutes") or out.get("interval") or 60
+        "schedule_interval_minutes": _safe_int(
+            out.get("schedule_interval_minutes") or out.get("interval"), 60
         ),
         "js_required": str(out.get("js_required") or "false").lower() in ("1", "true", "yes"),
         "ignore_selectors": out.get("ignore_selectors"),
@@ -57,8 +68,7 @@ def import_monitors(
     plan = get_plan(workspace)
     result = ImportResult()
     existing_urls = {
-        m.url
-        for m in db.scalars(select(Monitor).where(Monitor.workspace_id == workspace.id)).all()
+        m.url for m in db.scalars(select(Monitor).where(Monitor.workspace_id == workspace.id)).all()
     }
 
     for idx, raw in enumerate(rows):
@@ -78,7 +88,9 @@ def import_monitors(
             result.errors.append(
                 {
                     "row": str(idx),
-                    "error": f"interval must be >= {plan.min_interval_minutes} for plan {plan.name}",
+                    "error": (
+                        f"interval must be >= {plan.min_interval_minutes} for plan {plan.name}"
+                    ),
                 }
             )
             continue
@@ -94,15 +106,22 @@ def import_monitors(
             result.errors.append({"row": str(idx), "error": str(exc)})
             break
 
-        mode = row["mode"] if row["mode"] in (
-            "page_content",
-            "site_links",
-            "product_price",
-            "list_items",
-        ) else "page_content"
+        # Validate against the shared MONITOR_MODES constant (single source
+        # of truth on MonitorMode) instead of an inline tuple.
+        mode = row["mode"] if row["mode"] in MONITOR_MODES else "page_content"
         if mode == "list_items" and not row["css_selector"]:
             result.errors.append(
                 {"row": str(idx), "error": "list_items mode requires a css_selector"}
+            )
+            continue
+        if mode == "site_links" and row["js_required"]:
+            # Sitemap monitors fetch over plain HTTP; routing them through the
+            # browser worker would snapshot the rendered page, not the sitemap.
+            result.errors.append(
+                {
+                    "row": str(idx),
+                    "error": "site_links mode does not support js_required",
+                }
             )
             continue
         js_required = row["js_required"]

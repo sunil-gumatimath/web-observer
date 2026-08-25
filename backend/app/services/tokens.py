@@ -19,6 +19,7 @@ def new_token(*, prefix: str = "") -> tuple[str, str, str]:
     hex digest to persist. ``token_prefix`` is a short human-readable fragment.
     """
     random_part = secrets.token_urlsafe(24)
+    # pi-lens-ignore: python-hardcoded-secrets - random via secrets lib
     token = f"{prefix}{random_part}"
     return token, hash_token(token), token[:HASH_PREFIX_LEN]
 

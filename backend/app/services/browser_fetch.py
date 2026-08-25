@@ -60,7 +60,15 @@ def _fetch_url_browser_inline(
                 browser = p.chromium.launch(headless=True, args=_LAUNCH_ARGS)
             except Exception as launch_exc:  # noqa: BLE001
                 msg = str(launch_exc)
-                if "Executable doesn't exist" in msg or "playwright install" in msg.lower():
+                # NOTE: no boolean operators in this handler
+                # (no-boolean-in-except scans the entire except subtree).
+                if "Executable doesn't exist" in msg:
+                    raise FetchError(
+                        "internal_error",
+                        "Playwright browsers missing/outdated. "
+                        "Run: python -m playwright install chromium",
+                    ) from launch_exc
+                if "playwright install" in msg.lower():
                     raise FetchError(
                         "internal_error",
                         "Playwright browsers missing/outdated. "
@@ -125,21 +133,30 @@ def _fetch_url_browser_inline(
                 if context is not None:
                     try:
                         context.close()
-                    except Exception:  # noqa: BLE001
-                        pass
+                    except Exception as close_exc:  # noqa: BLE001
+                        logger.debug("context_close_failed error=%s", close_exc)
                 try:
                     browser.close()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as close_exc:  # noqa: BLE001
+                    logger.debug("browser_close_failed error=%s", close_exc)
+    # pi-lens-ignore: unreachable-except - sibling exceptions
     except PlaywrightTimeout as exc:
         raise FetchError("read_timeout", f"Browser timeout: {exc}") from exc
+    # pi-lens-ignore: unreachable-except - sibling exceptions
     except SSRFError as exc:
         raise FetchError(exc.code, str(exc)) from exc
     except FetchError:
         raise
     except Exception as exc:  # noqa: BLE001
         err = str(exc)
-        if "Bad file descriptor" in err or "errno 9" in err.lower():
+        # NOTE: no boolean operators in this handler (no-boolean-in-except).
+        if "Bad file descriptor" in err:
+            raise FetchError(
+                "internal_error",
+                "Browser fetch failed (Playwright process error). "
+                "Restart the browser worker with --threads 1.",
+            ) from exc
+        if "errno 9" in err.lower():
             raise FetchError(
                 "internal_error",
                 "Browser fetch failed (Playwright process error). "
@@ -159,7 +176,7 @@ def _fetch_url_browser_inline(
     except SSRFError as exc:
         raise FetchError(exc.code, f"Final navigation URL blocked: {exc}") from exc
 
-    latency_ms = int((time.perf_counter() - started) * 1000)
+    latency_ms = round((time.perf_counter() - started) * 1000)
     return FetchResult(
         final_url=final_url,
         status_code=status,
@@ -206,9 +223,7 @@ def _fetch_url_browser_subprocess(
         env["WEB_OBSERVER_PLAYWRIGHT_CHILD"] = "1"
         backend_root = str(Path(__file__).resolve().parents[2])
         prev_pp = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = (
-            backend_root if not prev_pp else f"{backend_root}{os.pathsep}{prev_pp}"
-        )
+        env["PYTHONPATH"] = backend_root if not prev_pp else f"{backend_root}{os.pathsep}{prev_pp}"
 
         try:
             proc = subprocess.run(
@@ -246,10 +261,19 @@ def _fetch_url_browser_subprocess(
         if not Path(out_path).is_file() or not Path(meta_path).is_file():
             raise FetchError("internal_error", "Browser fetch subprocess produced no output")
 
-        content = Path(out_path).read_bytes()
-        meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
-        html = content.decode("utf-8", errors="replace")
-        latency_ms = int(meta.get("latency_ms") or int((time.perf_counter() - started) * 1000))
+        try:
+            content = Path(out_path).read_bytes()
+            meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
+            html = content.decode("utf-8", errors="replace")
+            latency_ms = int(
+                meta.get("latency_ms") or round((time.perf_counter() - started) * 1000)
+            )
+            status_code = int(meta.get("status_code") or 200)
+        except (OSError, ValueError) as exc:
+            # json.JSONDecodeError subclasses ValueError; OSError covers reads.
+            raise FetchError(
+                "internal_error", f"Invalid browser fetch subprocess metadata: {exc}"
+            ) from exc
         final_url = str(meta.get("final_url") or url)
         try:
             validate_url_for_fetch(final_url, resolve_dns=True)
@@ -257,7 +281,7 @@ def _fetch_url_browser_subprocess(
             raise FetchError(exc.code, f"Final navigation URL blocked: {exc}") from exc
         return FetchResult(
             final_url=final_url,
-            status_code=int(meta.get("status_code") or 200),
+            status_code=status_code,
             content=content,
             text=html,
             content_type=str(meta.get("content_type") or "text/html; charset=utf-8"),

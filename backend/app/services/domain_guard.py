@@ -35,21 +35,29 @@ class DomainBlocked(Exception):
         super().__init__(f"{domain}: {reason}")
 
 
+def _to_int(value: object, default: int = 0) -> int:
+    """Best-effort int coercion for redis replies (bytes/str/int/None)."""
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return default
+
+
 def assert_domain_allowed(url: str) -> str:
     """Raise DomainBlocked if rate-limited or circuit is open. Returns domain."""
     settings = get_settings()
     domain = domain_from_url(url)
     r = _redis()
-    now = int(time.time())
+    now = round(time.time())
 
     # Circuit open?
     open_until = r.get(f"circuit:open:{domain}")
-    if open_until and int(open_until) > now:
+    if open_until and _to_int(open_until) > now:
         raise DomainBlocked(domain, f"circuit open until {open_until}")
 
     # Sliding window rate (simple fixed window per minute)
     minute_key = f"rate:{domain}:{now // 60}"
-    count = r.incr(minute_key)
+    count = _to_int(r.incr(minute_key))
     if count == 1:
         r.expire(minute_key, 120)
     if count > settings.per_domain_rate_per_minute:
@@ -67,7 +75,7 @@ def acquire_domain_slot(domain: str, *, ttl_seconds: int = 120) -> None:
     settings = get_settings()
     r = _redis()
     key = f"conc:{domain}"
-    limit = int(settings.per_domain_concurrency)
+    limit = _to_int(settings.per_domain_concurrency)
     # Atomic Lua: incr, set expire if first, check limit, rollback if over
     lua = """
     local cur = redis.call('INCR', KEYS[1])
@@ -79,17 +87,17 @@ def acquire_domain_slot(domain: str, *, ttl_seconds: int = 120) -> None:
     return cur
     """
     try:
-        current = r.eval(lua, 1, key, str(ttl_seconds), str(limit))
+        current = _to_int(r.eval(lua, 1, key, str(ttl_seconds), str(limit)))
     except Exception:
         # Fallback for fakeredis / non-Lua envs (tests)
-        current = r.incr(key)
+        current = _to_int(r.incr(key))
         if current == 1:
             r.expire(key, ttl_seconds)
         if current > limit:
             r.decr(key)
             raise DomainBlocked(domain, "domain concurrency limit") from None
         return
-    if int(current) > limit:
+    if _to_int(current) > limit:
         raise DomainBlocked(domain, "domain concurrency limit") from None
 
 
@@ -101,10 +109,10 @@ def release_domain_slot(domain: str) -> None:
         # Clamp at 0: never let the concurrency counter persist as a negative
         # value (an extra/erroneous release would otherwise poison the slot
         # accounting for this domain).  Deleting the key resets it to 0.
-        if val is None or int(val) <= 0:
+        if val is None or _to_int(val) <= 0:
             r.delete(key)
-    except redis.RedisError:
-        pass
+    except redis.RedisError as exc:
+        logger.debug("domain_slot_release_failed error=%s", exc)
 
 
 def record_domain_failure(domain: str) -> None:
@@ -113,8 +121,8 @@ def record_domain_failure(domain: str) -> None:
     key = f"circuit:fail:{domain}"
     fails = r.incr(key)
     r.expire(key, settings.circuit_window_seconds)
-    if int(fails) >= settings.circuit_failure_threshold:
-        open_until = int(time.time()) + settings.circuit_open_seconds
+    if _to_int(fails) >= settings.circuit_failure_threshold:
+        open_until = round(time.time()) + settings.circuit_open_seconds
         r.setex(f"circuit:open:{domain}", settings.circuit_open_seconds, str(open_until))
         r.delete(key)
         logger.warning("circuit_opened domain=%s until=%s", domain, open_until)

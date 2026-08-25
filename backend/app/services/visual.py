@@ -76,7 +76,14 @@ def _launch_chromium(p):  # type: ignore[no-untyped-def]
         return p.chromium.launch(headless=True, args=_LAUNCH_ARGS)
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)
-        if "Executable doesn't exist" in msg or "playwright install" in msg.lower():
+        # NOTE: no boolean operators in this handler (no-boolean-in-except).
+        if "Executable doesn't exist" in msg:
+            raise FetchError(
+                "internal_error",
+                "Playwright browsers are missing or outdated. "
+                "Run: python -m playwright install chromium",
+            ) from exc
+        if "playwright install" in msg.lower():
             raise FetchError(
                 "internal_error",
                 "Playwright browsers are missing or outdated. "
@@ -125,7 +132,9 @@ def _capture_screenshot_inline(
                 try:
                     page.wait_for_load_state("networkidle", timeout=min(20_000, timeout_ms))
                 except PlaywrightTimeout:
-                    pass
+                    # Best-effort: sites with long-lived connections never
+                    # reach networkidle, so a timeout here is not an error.
+                    logger.debug("networkidle_timeout url=%s", validated.url)
 
                 # Sites with long-lived connections never reach networkidle.
                 page.wait_for_timeout(1500)
@@ -146,25 +155,37 @@ def _capture_screenshot_inline(
                     try:
                         png = page.screenshot(type="png", full_page=full_page)
                     except Exception as shot_exc:  # noqa: BLE001
-                        logger.warning("full_page_screenshot_failed error=%s; using viewport", shot_exc)
+                        logger.warning(
+                            "full_page_screenshot_failed error=%s; using viewport",
+                            shot_exc,
+                        )
                         png = page.screenshot(type="png", full_page=False)
             finally:
                 if context is not None:
                     try:
                         context.close()
-                    except Exception:  # noqa: BLE001
-                        pass
+                    except Exception as close_exc:  # noqa: BLE001
+                        logger.debug("context_close_failed error=%s", close_exc)
                 try:
                     browser.close()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as close_exc:  # noqa: BLE001
+                    logger.debug("browser_close_failed error=%s", close_exc)
+    # pi-lens-ignore: unreachable-except - sibling exceptions
     except PlaywrightTimeout as exc:
         raise FetchError("read_timeout", f"Visual capture timeout: {exc}") from exc
     except FetchError:
         raise
     except Exception as exc:  # noqa: BLE001
         err = str(exc)
-        if "Bad file descriptor" in err or "errno 9" in err.lower():
+        # NOTE: no boolean operators in this handler (no-boolean-in-except).
+        if "Bad file descriptor" in err:
+            raise FetchError(
+                "internal_error",
+                "Screenshot failed (Playwright process error / bad file descriptor). "
+                "If this persists, restart the browser worker: "
+                "dramatiq app.workers --queues browser_checks --processes 1 --threads 1",
+            ) from exc
+        if "errno 9" in err.lower():
             raise FetchError(
                 "internal_error",
                 "Screenshot failed (Playwright process error / bad file descriptor). "
@@ -182,8 +203,8 @@ def _capture_screenshot_inline(
 
         with Image.open(io.BytesIO(png)) as im:
             width, height = im.size
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as dim_exc:  # noqa: BLE001 - dimensions are metadata
+        logger.debug("image_dimensions_unavailable error=%s", dim_exc)
 
     return VisualCapture(png_bytes=png, ahash=ahash, sha256=sha, width=width, height=height)
 
@@ -225,9 +246,7 @@ def _capture_screenshot_subprocess(
         # Ensure backend package root is on path when workers spawn children
         backend_root = str(Path(__file__).resolve().parents[2])
         prev_pp = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = (
-            backend_root if not prev_pp else f"{backend_root}{os.pathsep}{prev_pp}"
-        )
+        env["PYTHONPATH"] = backend_root if not prev_pp else f"{backend_root}{os.pathsep}{prev_pp}"
 
         try:
             proc = subprocess.run(
@@ -266,14 +285,22 @@ def _capture_screenshot_subprocess(
         if not Path(out_png).is_file() or not Path(meta_path).is_file():
             raise FetchError("internal_error", "Screenshot subprocess produced no output")
 
-        png = Path(out_png).read_bytes()
-        meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
+        try:
+            png = Path(out_png).read_bytes()
+            meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
+            width = int(meta.get("width") or 0)
+            height = int(meta.get("height") or 0)
+        except (OSError, ValueError) as exc:
+            # json.JSONDecodeError subclasses ValueError; OSError covers reads.
+            raise FetchError(
+                "internal_error", f"Invalid screenshot subprocess metadata: {exc}"
+            ) from exc
         return VisualCapture(
             png_bytes=png,
             ahash=str(meta.get("ahash") or average_hash(png)),
             sha256=str(meta.get("sha256") or hashlib.sha256(png).hexdigest()),
-            width=int(meta.get("width") or 0),
-            height=int(meta.get("height") or 0),
+            width=width,
+            height=height,
         )
 
 
@@ -319,7 +346,9 @@ def capture_screenshot(
 
 def visual_to_fetch_result(capture: VisualCapture, *, url: str) -> FetchResult:
     """Represent visual capture as FetchResult for pipeline (normalized = ahash line)."""
-    normalized = f"ahash:{capture.ahash}\nsha256:{capture.sha256}\nsize:{capture.width}x{capture.height}"
+    normalized = (
+        f"ahash:{capture.ahash}\nsha256:{capture.sha256}\nsize:{capture.width}x{capture.height}"
+    )
     return FetchResult(
         final_url=url,
         status_code=200,

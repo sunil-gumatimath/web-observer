@@ -6,11 +6,13 @@ P0: single LLM call (category+summary+noise), JSON mode, smart truncation, retri
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -57,23 +59,51 @@ class AIEnrichment:
     tokens_used: int = 0
 
 
+# Precompiled at module level: static patterns (no ReDoS surface) and no
+# per-call re-compilation cost.
+_HEURISTIC_RULES = [
+    (
+        "pricing",
+        re.compile(
+            r"\b(price|pricing|cost|\$|€|£|usd|subscription|discount|sale)\b",
+            re.I,
+        ),
+    ),
+    (
+        "availability",
+        re.compile(
+            r"\b(in stock|out of stock|sold out|available|unavailable|back in stock)\b",
+            re.I,
+        ),
+    ),
+    (
+        "legal",
+        re.compile(
+            r"\b(privacy|terms|policy|gdpr|cookie|legal|compliance|licen[sc]e)\b",
+            re.I,
+        ),
+    ),
+    (
+        "security",
+        re.compile(
+            r"\b(security|vulnerability|cve|breach|auth|password|2fa|login|incident)\b",
+            re.I,
+        ),
+    ),
+    ("design", re.compile(r"\b(css|layout|color|font|ahash|visual|screenshot|hero|logo)\b", re.I)),
+    ("api", re.compile(r"\b(api|endpoint|json|schema|webhook|status code|deprecated)\b", re.I)),
+    ("content", re.compile(r"\b(blog|article|headline|paragraph|news|update|release)\b", re.I)),
+]
+
+
 def classify_heuristic(diff_text: str, mode: str | None = None) -> str:
     text = (diff_text or "").lower()
     if mode == "product_price":
         return "pricing"
     if mode == "site_links":
         return "content"
-    rules = [
-        ("pricing", r"\b(price|pricing|cost|\$|€|£|usd|subscription|discount|sale)\b"),
-        ("availability", r"\b(in stock|out of stock|sold out|available|unavailable|back in stock)\b"),
-        ("legal", r"\b(privacy|terms|policy|gdpr|cookie|legal|compliance|licen[sc]e)\b"),
-        ("security", r"\b(security|vulnerability|cve|breach|auth|password|2fa|login|incident)\b"),
-        ("design", r"\b(css|layout|color|font|ahash|visual|screenshot|hero|logo)\b"),
-        ("api", r"\b(api|endpoint|json|schema|webhook|status code|deprecated)\b"),
-        ("content", r"\b(blog|article|headline|paragraph|news|update|release)\b"),
-    ]
-    for cat, pattern in rules:
-        if re.search(pattern, text, re.I):
+    for cat, rx in _HEURISTIC_RULES:
+        if rx.search(text):
             return cat
     return "other"
 
@@ -108,8 +138,6 @@ def _format_brand(brand: dict | None) -> str:
 
 
 # Dedup cache: diff_hash -> (AIEnrichment, expiry)
-import hashlib
-from datetime import UTC, datetime, timedelta
 
 _DEDUP_CACHE: dict[str, tuple[AIEnrichment, datetime]] = {}
 
@@ -181,10 +209,23 @@ def _system_prompt(*, mode: str, has_watch: bool) -> str:
     base += "} No markdown, no extra keys."
 
     mode_hints = {
-        "product_price": " Mode=product_price: diff is a normalized price string (e.g. USD 19.99). Summarize price direction and magnitude.",
-        "list_items": " Mode=list_items: diff is a link-rich list (+ [title](url)). Summarize how many added/removed, highlight notable titles, keep links out of summary.",
-        "site_links": " Mode=site_links: diff is sitemap URLs added/removed. Summarize scope (e.g. new section, paginated growth).",
-        "page_content": " Mode=page_content: diff is unified markdown text diff. Summarize substantive content change, ignore nav/boilerplate.",
+        "product_price": (
+            " Mode=product_price: diff is a normalized price string "
+            "(e.g. USD 19.99). Summarize price direction and magnitude."
+        ),
+        "list_items": (
+            " Mode=list_items: diff is a link-rich list (+ [title](url)). "
+            "Summarize how many added/removed, highlight notable titles, "
+            "keep links out of summary."
+        ),
+        "site_links": (
+            " Mode=site_links: diff is sitemap URLs added/removed. "
+            "Summarize scope (e.g. new section, paginated growth)."
+        ),
+        "page_content": (
+            " Mode=page_content: diff is unified markdown text diff. "
+            "Summarize substantive content change, ignore nav/boilerplate."
+        ),
     }
     base += mode_hints.get(mode, "")
     return base
@@ -232,7 +273,7 @@ def _smart_truncate(diff_text: str, max_chars: int) -> str:
     tail = keep - head
     # try to cut at newline boundaries
     head_cut = diff_text.rfind("\n", 0, head)
-    if head_cut == -1 or head_cut < int(head * 0.7):
+    if head_cut == -1 or head_cut < head * 7 // 10:
         head_cut = head
     tail_start = len(diff_text) - tail
     nl = diff_text.find("\n", tail_start)
@@ -253,8 +294,8 @@ def _extract_usage(data: dict) -> int:
         comp = int(usage.get("completion_tokens") or 0)
         if prompt or comp:
             return prompt + comp
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("ai_token_usage_parse_failed error=%s", exc)
     return 0
 
 
@@ -279,8 +320,8 @@ def _post_with_retries(
                         ra = resp.headers.get("retry-after")
                         if ra and ra.isdigit():
                             wait = max(wait, int(ra))
-                    except Exception:
-                        pass
+                    except Exception as ra_exc:  # noqa: BLE001
+                        logger.debug("retry_after_header_parse_failed error=%s", ra_exc)
                     time.sleep(wait)
                     continue
             resp.raise_for_status()
@@ -342,7 +383,8 @@ def _parse_llm_content(
                     if isinstance(val, bool):
                         is_noise = val
                     elif isinstance(val, str):
-                        is_noise = val.strip().lower().startswith("y") or val.strip().lower() == "true"
+                        lowered = val.strip().lower()
+                        is_noise = lowered.startswith("y") or lowered == "true"
                     elif isinstance(val, int):
                         is_noise = bool(val)
                     break
@@ -350,8 +392,8 @@ def _parse_llm_content(
             if noise_reason is not None:
                 noise_reason = str(noise_reason).strip() or None
             return cat, summary, is_noise, noise_reason
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("llm_combined_json_parse_failed error=%s", exc)
 
     # fallback line-based parsing
     cat = suggested_category
