@@ -19,7 +19,12 @@ from app.models import (
     Snapshot,
     Workspace,
 )
-from app.models.entities import OutboxStatus, RunStatus
+from app.models.entities import (
+    LIST_DIFF_MODES,
+    MonitorMode,
+    OutboxStatus,
+    RunStatus,
+)
 from app.services.ai_summary import AIEnrichment, enrich_change
 from app.services.diffing import short_summary, unified_diff
 from app.services.extract import (
@@ -31,14 +36,25 @@ from app.services.extract import (
 from app.services.fetcher import FetchResult
 from app.services.storage import StorageError, put_bytes, snapshot_object_key
 from app.services.structured import (
-    ListDiff,
     diff_lists,
     extract_html_list,
+    items_from_normalized,
     list_to_normalized,
 )
 from app.services.usage import add_storage_bytes, increment_ai_tokens, increment_checks
 
 logger = logging.getLogger(__name__)
+
+MODE_PRODUCT_PRICE = MonitorMode.PRODUCT_PRICE.value
+
+# Synthetic normalized text recorded when a product_price monitor's page no
+# longer contains any price. Treated as content ("price removed") rather than
+# a failed run, provided a baseline already exists.
+PRICE_REMOVED_MARKER = "(price removed)"
+
+# Length cap applied to the Snapshot.normalized_text DB preview (full text goes
+# to object storage). A preview at/above this length may be truncated.
+SNAPSHOT_DB_PREVIEW_CHARS = 500
 
 
 @dataclass
@@ -53,20 +69,29 @@ class PipelineResult:
     unchanged: bool = False
 
 
-def extract_normalized(
-    monitor: Monitor, result: FetchResult
-) -> tuple[str, str | None, ListDiff | None]:
-    """Return (normalized_text, structured_diff_text_or_none, list_diff_or_none)."""
+def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list[str] | None]:
+    """Return ``(normalized_text, parsed_list_items_or_none)``.
+
+    For ``site_links``/``list_items`` modes *items* carries the parsed item
+    list so change detection never has to re-parse the freshly fetched page.
+    """
     mode = monitor.mode
     ignore_selectors = [str(s) for s in (monitor.ignore_selectors or [])]
     ignore_regexes = [str(s) for s in (monitor.ignore_regexes or [])]
 
-    if mode == "product_price":
-        return extract_price(result.text), None, None
+    if mode == MODE_PRODUCT_PRICE:
+        return (
+            extract_price(
+                result.text,
+                css_selector=monitor.css_selector,
+                ignore_selectors=ignore_selectors,
+            ),
+            None,
+        )
 
     if mode == "site_links":
         urls = [u.strip() for u in result.text.splitlines() if u.strip()]
-        return list_to_normalized(urls), None, None
+        return list_to_normalized(urls), urls
 
     if mode == "list_items":
         if not monitor.css_selector:
@@ -75,9 +100,7 @@ def extract_normalized(
                 "css_selector is required for list_items monitors",
             )
         items = extract_html_list(result.text, monitor.css_selector)
-        norm = list_to_normalized(items)
-        ld = diff_lists([], items)  # baseline shape; real diff computed in _detect_change
-        return norm, ld.as_link_diff(), ld
+        return list_to_normalized(items), items
 
     # page_content (default): whole page as markdown (readable line-level diff)
     text = extract_markdown(
@@ -85,7 +108,7 @@ def extract_normalized(
         ignore_selectors=ignore_selectors,
         ignore_regexes=ignore_regexes,
     )
-    return text, None, None
+    return text, None
 
 
 @dataclass
@@ -98,12 +121,41 @@ class _ChangeContext:
     prev_text: str = ""
     summary: str = ""
     diff_text: str = ""
-    enrichment: object | None = None  # EnrichResult from ai_summary
+    enrichment: AIEnrichment | None = None  # Enrichment from ai_summary
 
 
 # ---------------------------------------------------------------------------
 # Step 1 – extract content, store raw snapshot, create Snapshot row
 # ---------------------------------------------------------------------------
+
+
+def _has_previous_success(db: Session, monitor: Monitor) -> bool:
+    """True when this monitor/config_version already has a succeeded run."""
+    return (
+        db.scalar(
+            select(MonitorRun.id)
+            .where(
+                MonitorRun.monitor_id == monitor.id,
+                MonitorRun.status == RunStatus.SUCCEEDED.value,
+                MonitorRun.config_version == monitor.config_version,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _is_price_removal(db: Session, monitor: Monitor, error_code: str) -> bool:
+    """A vanished price counts as a content change once a baseline exists.
+
+    Kept boolean-operator-free so the ``no-boolean-in-except`` lint rule does
+    not fire on callers that use it from inside an ``except`` clause.
+    """
+    if error_code != "price_not_found":
+        return False
+    if monitor.mode != MODE_PRODUCT_PRICE:
+        return False
+    return _has_previous_success(db, monitor)
 
 
 def _extract_and_store_snapshot(
@@ -112,11 +164,11 @@ def _extract_and_store_snapshot(
     run: MonitorRun,
     result: FetchResult,
     store_raw: bool,
-) -> tuple[Snapshot | None, str, str, PipelineResult | None]:
+) -> tuple[Snapshot | None, str, str, list[str] | None, PipelineResult | None]:
     """Extract text, hash it, persist raw bytes and Snapshot row.
 
-    Returns ``(snapshot, normalized_text, content_hash, error_or_none)``.
-    When the fourth element is not *None* the caller should return it
+    Returns ``(snapshot, normalized_text, content_hash, list_items, error)``.
+    When the fifth element is not *None* the caller should return it
     immediately (extraction failed or HTTP error).
     """
     if result.status_code >= 400:
@@ -127,25 +179,47 @@ def _extract_and_store_snapshot(
         run.error_message = f"HTTP {result.status_code}"
         run.finished_at = datetime.now(UTC)
         db.commit()
-        return None, "", "", PipelineResult(
-            status=run.status,
-            error_code=run.error_code,
-            error_message=run.error_message,
+        return (
+            None,
+            "",
+            "",
+            None,
+            PipelineResult(
+                status=run.status,
+                error_code=run.error_code,
+                error_message=run.error_message,
+            ),
         )
 
     try:
-        normalized, _, _ = extract_normalized(monitor, result)
+        normalized, items = extract_normalized(monitor, result)
     except ExtractionError as exc:
-        run.status = RunStatus.FAILED.value
-        run.http_status = result.status_code
-        run.latency_ms = result.latency_ms
-        run.error_code = exc.code
-        run.error_message = str(exc)
-        run.finished_at = datetime.now(UTC)
-        db.commit()
-        return None, "", "", PipelineResult(
-            status=run.status, error_code=exc.code, error_message=str(exc),
-        )
+        # A vanished price is a *change* ("price removed"), not a broken check
+        # — but only once a baseline exists to differ from; otherwise there is
+        # nothing established to monitor yet and the run stays failed.
+        # NOTE: keep boolean operators out of this handler (no-boolean-in-except).
+        if _is_price_removal(db, monitor, exc.code):
+            normalized = PRICE_REMOVED_MARKER
+            items = None
+        else:
+            run.status = RunStatus.FAILED.value
+            run.http_status = result.status_code
+            run.latency_ms = result.latency_ms
+            run.error_code = exc.code
+            run.error_message = str(exc)
+            run.finished_at = datetime.now(UTC)
+            db.commit()
+            return (
+                None,
+                "",
+                "",
+                None,
+                PipelineResult(
+                    status=run.status,
+                    error_code=exc.code,
+                    error_message=str(exc),
+                ),
+            )
 
     if not normalized:
         run.status = RunStatus.FAILED.value
@@ -155,10 +229,16 @@ def _extract_and_store_snapshot(
         run.error_message = "Extracted content was empty"
         run.finished_at = datetime.now(UTC)
         db.commit()
-        return None, "", "", PipelineResult(
-            status=run.status,
-            error_code=run.error_code,
-            error_message=run.error_message,
+        return (
+            None,
+            "",
+            "",
+            None,
+            PipelineResult(
+                status=run.status,
+                error_code=run.error_code,
+                error_message=run.error_message,
+            ),
         )
 
     digest = content_hash(normalized)
@@ -187,11 +267,16 @@ def _extract_and_store_snapshot(
 
         # Store full normalized text in object storage
         try:
-            text_key = object_key + ".norm.txt" if object_key else snapshot_object_key(
-                workspace_id=monitor.workspace_id,
-                monitor_id=monitor.id,
-                run_id=run.id,
-            ) + ".norm.txt"
+            text_key = (
+                object_key + ".norm.txt"
+                if object_key
+                else snapshot_object_key(
+                    workspace_id=monitor.workspace_id,
+                    monitor_id=monitor.id,
+                    run_id=run.id,
+                )
+                + ".norm.txt"
+            )
             put_bytes(
                 key=text_key,
                 data=normalized.encode("utf-8"),
@@ -218,7 +303,7 @@ def _extract_and_store_snapshot(
     db.add(snapshot)
     db.flush()
 
-    return snapshot, normalized, digest, None
+    return snapshot, normalized, digest, items, None
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +319,7 @@ def _detect_change(
     normalized: str,
     digest: str,
     result: FetchResult,
+    items: list[str] | None,
     ctx: _ChangeContext,
 ) -> PipelineResult | None:
     """Compare against the previous successful run with the same config version.
@@ -303,33 +389,39 @@ def _detect_change(
                 )
     ctx.prev_text = prev_text
 
-    if monitor.mode in ("site_links", "list_items"):
-        if prev.content_hash == digest:
-            from app.services.adaptive import note_check_outcome
+    # Unchanged fast-path (shared by every mode): identical hash means no
+    # change regardless of how the mode extracts content.
+    if prev.content_hash == digest:
+        from app.services.adaptive import note_check_outcome
 
-            note_check_outcome(monitor, changed=False, succeeded=True)
-            db.commit()
-            return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
-        before_items = [
-            line[2:] if line.startswith("- ") else line
-            for line in (prev_text or "").splitlines()
-            if line.strip()
-        ]
-        after_items = [
-            line[2:] if line.startswith("- ") else line
-            for line in normalized.splitlines()
-            if line.strip()
-        ]
-        ld = diff_lists(before_items, after_items)
-        ctx.summary = ld.summary
-        ctx.diff_text = ld.as_link_diff() if monitor.mode == "list_items" else ld.as_text_diff()
+        note_check_outcome(monitor, changed=False, succeeded=True)
+        db.commit()
+        return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
+
+    if monitor.mode in LIST_DIFF_MODES:
+        # When the previous snapshot's full text is missing (storage miss) and
+        # only the truncated DB preview survives, reconstructing items from a
+        # cut-off line would fabricate added/removed entries. Emit an honest
+        # coarse summary instead of a lying item-level diff.
+        preview_truncated = (
+            not (prev_snapshot and prev_snapshot.text_object_key)
+            and len(prev_text) >= SNAPSHOT_DB_PREVIEW_CHARS
+        )
+        if preview_truncated:
+            logger.warning(
+                "list_diff_degraded_to_summary monitor_id=%s snapshot_id=%s",
+                monitor.id,
+                prev_snapshot.id if prev_snapshot else None,
+            )
+            ctx.summary = "List changed (previous full list unavailable)"
+            ctx.diff_text = "(item-level diff skipped: previous text truncated)"
+        else:
+            # *items* was parsed once during extraction; only the PREVIOUS
+            # page's items need recovering from stored text (never re-fetched).
+            ld = diff_lists(items_from_normalized(prev_text), items or [])
+            ctx.summary = ld.summary
+            ctx.diff_text = ld.as_text_diff()
     else:
-        if prev.content_hash == digest:
-            from app.services.adaptive import note_check_outcome
-
-            note_check_outcome(monitor, changed=False, succeeded=True)
-            db.commit()
-            return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
         ctx.diff_text = unified_diff(prev_text, normalized)
         ctx.summary = short_summary(prev_text, normalized)
 
@@ -459,7 +551,7 @@ def _create_change_event(
         display_reason = triage_reason or getattr(enrichment, "noise_reason", None)
         if display_reason:
             enrichment = AIEnrichment(
-                summary=f"[AI triage] {display_reason} (watched: {watch_note[:200]})",
+                summary=f"[AI triage] {display_reason} (watched: {(watch_note or '')[:200]})",
                 category=enrichment.category,
                 provider=enrichment.provider,
                 model=enrichment.model,
@@ -579,8 +671,8 @@ def _queue_notifications(
             "monitor_name": monitor.name,
             "url": monitor.url,
             "summary": ctx.summary,
-            "ai_summary": enrichment.summary,
-            "category": enrichment.category,
+            "ai_summary": enrichment.summary if enrichment else None,
+            "category": enrichment.category if enrichment else None,
             "mode": monitor.mode,
             "screenshot_path": screenshot_path,
         },
@@ -607,15 +699,23 @@ def apply_fetch_result(
     increment_checks(db, monitor.workspace_id)
 
     # Step 1 – extract & store snapshot
-    snapshot, normalized, digest, error = _extract_and_store_snapshot(
-        db, monitor, run, result, store_raw,
+    snapshot, normalized, digest, items, error = _extract_and_store_snapshot(
+        db,
+        monitor,
+        run,
+        result,
+        store_raw,
     )
-    if error:
-        return error
+    if error or snapshot is None:
+        return error or PipelineResult(
+            status=RunStatus.FAILED.value,
+            error_code="internal_error",
+            error_message="Snapshot missing after extraction",
+        )
 
     # Step 2 – detect change vs. baseline / unchanged
     ctx = _ChangeContext()
-    early = _detect_change(db, monitor, run, snapshot, normalized, digest, result, ctx)
+    early = _detect_change(db, monitor, run, snapshot, normalized, digest, result, items, ctx)
     if early:
         return early
 

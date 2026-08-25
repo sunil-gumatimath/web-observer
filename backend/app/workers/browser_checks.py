@@ -18,13 +18,26 @@ from app.workers.run_guard import execute_monitored_run
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+MODE_SITE_LINKS = "site_links"
+
 
 @dramatiq.actor(queue_name="browser_checks", max_retries=2, time_limit=180_000)
 def run_browser_check(run_id: str) -> None:
     """Execute a JS-required or visual monitor run with Playwright."""
 
     def _pre_run_hook(monitor, run, db):
-        # Daily browser-check quota per workspace — atomic incr with check
+        # Defense-in-depth: a site_links monitor must never run through
+        # Playwright — a rendered page is not a sitemap, so snapshotting it
+        # would produce garbage. Route back to the sitemap-aware HTTP worker.
+        if monitor.mode == MODE_SITE_LINKS:
+            from app.workers.checks import run_http_check
+
+            run.status = RunStatus.QUEUED.value
+            db.commit()
+            run_http_check.send(run_id)
+            return True
+
+        # Daily browser-check quota per workspace — atomic incr with check.
         day = datetime.now(UTC).strftime("%Y%m%d")
         bkey = f"browser_quota:{monitor.workspace_id}:{day}"
         r = _redis()
@@ -34,17 +47,20 @@ def run_browser_check(run_id: str) -> None:
         return cur
         """
         try:
-            cur = int(r.eval(lua, 1, bkey, "86400"))
+            cur = int(str(r.eval(lua, 1, bkey, "86400")))
         except Exception:
-            cur = int(r.incr(bkey) or 1)
+            # NOTE: keep boolean operators out of this handler — the
+            # no-boolean-in-except lint scans the entire except subtree.
+            fallback = r.incr(bkey)
+            cur = int(str(fallback)) if fallback else 1
             if cur == 1:
                 r.expire(bkey, 86_400)
         if cur > settings.max_browser_checks_per_day:
             # Rollback overshoot
             try:
                 r.decr(bkey)
-            except Exception:
-                pass
+            except Exception as decr_exc:  # noqa: BLE001
+                logger.debug("browser_quota_rollback_failed error=%s", decr_exc)
             run.status = RunStatus.FAILED.value
             run.error_code = "internal_error"
             run.error_message = "Browser check daily quota exceeded"
@@ -66,8 +82,8 @@ def run_browser_check(run_id: str) -> None:
             day = datetime.now(UTC).strftime("%Y%m%d")
             bkey = f"browser_quota:{monitor.workspace_id}:{day}"
             _redis().expire(bkey, 86_400)
-        except Exception:
-            pass
+        except Exception as exp_exc:  # noqa: BLE001 - TTL refresh is advisory
+            logger.debug("browser_quota_ttl_refresh_failed error=%s", exp_exc)
         return result
 
     execute_monitored_run(

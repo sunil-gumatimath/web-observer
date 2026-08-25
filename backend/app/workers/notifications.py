@@ -58,7 +58,10 @@ def deliver_outbox_message(outbox_id: str) -> None:
         ]
         if payload.get("watch_note"):
             body_lines.append(f"*Watching:* {payload.get('watch_note')}")
-        body_lines.append(f"*Summary:* {payload.get('ai_summary') or payload.get('summary') or 'Content changed'}")
+        summary_text = (
+            payload.get('ai_summary') or payload.get('summary') or 'Content changed'
+        )
+        body_lines.append(f"*Summary:* {summary_text}")
         # list_items diffs are link-rich ("+ [title](url)") — render them as
         # plain mrkdwn so Slack/Discord turn them into clickable links, mirroring
         # webdog's readable added/removed list. Code-fenced diffs are kept for

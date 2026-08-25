@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
 
 import dramatiq
 from sqlalchemy import select
@@ -18,6 +17,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import ChangeEvent, Monitor, Snapshot, Workspace
+from app.models.entities import LIST_DIFF_MODES
 from app.services.crypto import decrypt_secret
 from app.workers.broker import redis_broker  # noqa: F401
 
@@ -30,7 +30,7 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
     from app.services.ai_summary import enrich_change
     from app.services.diffing import unified_diff
     from app.services.storage import get_bytes
-    from app.services.structured import diff_lists
+    from app.services.structured import diff_lists, items_from_normalized
     from app.services.usage import increment_ai_tokens
 
     settings = get_settings()
@@ -63,29 +63,47 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
                 new_text = ""
                 if change.previous_snapshot_id:
                     prev_snap = db.get(Snapshot, change.previous_snapshot_id)
-                    if prev_snap:
-                        if getattr(prev_snap, "text_object_key", None):
-                            b = get_bytes(prev_snap.text_object_key)
-                            prev_text = b.decode("utf-8") if b else (prev_snap.normalized_text or "")
+                    prev_key = (
+                        getattr(prev_snap, "text_object_key", None)
+                        if prev_snap is not None
+                        else None
+                    )
+                    if prev_snap is not None:
+                        if prev_key:
+                            b = get_bytes(prev_key)
+                            prev_text = (
+                                b.decode("utf-8") if b else (prev_snap.normalized_text or "")
+                            )
                         else:
                             prev_text = prev_snap.normalized_text or ""
                 new_snap = db.get(Snapshot, change.new_snapshot_id)
-                if new_snap:
-                    if getattr(new_snap, "text_object_key", None):
-                        b = get_bytes(new_snap.text_object_key)
+                new_key = (
+                    getattr(new_snap, "text_object_key", None) if new_snap is not None else None
+                )
+                if new_snap is not None:
+                    if new_key:
+                        b = get_bytes(new_key)
                         new_text = b.decode("utf-8") if b else (new_snap.normalized_text or "")
                     else:
                         new_text = new_snap.normalized_text or ""
-                if monitor.mode in ("site_links", "list_items"):
-                    before_items = [l[2:] if l.startswith("- ") else l for l in (prev_text or "").splitlines() if l.strip()]
-                    after_items = [l[2:] if l.startswith("- ") else l for l in (new_text or "").splitlines() if l.strip()]
-                    ld = diff_lists(before_items, after_items)
-                    diff_text = ld.as_link_diff() if monitor.mode == "list_items" else ld.as_text_diff()
+                if monitor.mode in LIST_DIFF_MODES:
+                    ld = diff_lists(
+                        items_from_normalized(prev_text),
+                        items_from_normalized(new_text),
+                    )
+                    diff_text = ld.as_text_diff()
                 else:
                     diff_text = unified_diff(prev_text, new_text)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("ai_enrich_diff_reconstruct_failed change_id=%s error=%s", change_event_id, exc)
-                diff_text = change.diff_summary or ""
+                logger.warning(
+                    "ai_enrich_diff_reconstruct_failed change_id=%s error=%s",
+                    change_event_id,
+                    exc,
+                )
+                # NOTE: no boolean operators here — this except clause is
+                # matched by a lint rule that forbids them inside handlers.
+                fallback_summary = change.diff_summary
+                diff_text = fallback_summary if fallback_summary else ""
 
         llm_cfg = None
         if workspace.llm_api_key or workspace.llm_api_base or workspace.llm_model:
@@ -110,11 +128,18 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
         # Update ChangeEvent
         change.ai_summary = enrichment.summary
         change.change_category = enrichment.category
-        prev_noise = bool(change.is_noise)
         change.is_noise = bool(enrichment.is_noise)
-        if enrichment.is_noise and enrichment.noise_reason and "AI triage" not in enrichment.summary:
+        noise_surfaced = (
+            enrichment.is_noise
+            and enrichment.noise_reason
+            and "AI triage" not in enrichment.summary
+        )
+        if noise_surfaced:
             # Ensure noise reason is surfaced
-            change.ai_summary = f"[AI triage] {enrichment.noise_reason} (watched: {(monitor.watch_note or '')[:200]})"
+            change.ai_summary = (
+                f"[AI triage] {enrichment.noise_reason} "
+                f"(watched: {(monitor.watch_note or '')[:200]})"
+            )
 
         # Token accounting
         try:

@@ -113,6 +113,7 @@ def execute_monitored_run(
         # one worker transitions QUEUED/SCHEDULED -> RUNNING; the loser sees
         # rowcount 0 and exits.  Terminal runs are simply not claimable, so a
         # redelivered finished run can never be re-processed.
+        # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
         claimed = db.execute(
             sa_update(MonitorRun)
             .where(
@@ -127,7 +128,8 @@ def execute_monitored_run(
             )
         )
         db.commit()
-        if claimed.rowcount != 1:
+        # rowcount exists on CursorResult; the Result stub omits it.
+        if claimed.rowcount != 1:  # type: ignore[attr-defined]
             logger.info("run_not_claimable run_id=%s", run_id)
             return
 
