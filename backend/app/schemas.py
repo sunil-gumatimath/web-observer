@@ -3,11 +3,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.config import get_settings
-
-MONITOR_MODES = ("page_content", "site_links", "product_price", "list_items")
+from app.models.entities import MONITOR_MODES
 
 
 class HealthResponse(BaseModel):
@@ -29,7 +35,7 @@ class WorkspaceOut(BaseModel):
     plan_status: str = "active"
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkspaceUpdate(BaseModel):
@@ -72,7 +78,7 @@ class LatestChangeOut(BaseModel):
     is_noise: bool = False
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MonitorCreate(BaseModel):
@@ -122,13 +128,24 @@ class MonitorCreate(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def check_site_links_js(self) -> MonitorCreate:
+        # site_links fetches the sitemap over plain HTTP; routing it through
+        # the browser worker would snapshot the rendered page instead of the
+        # sitemap, producing garbage snapshots and phantom diffs.
+        if self.mode == "site_links" and self.js_required:
+            raise ValueError(
+                "site_links monitors fetch the sitemap over plain HTTP; "
+                "js_required is not supported"
+            )
+        return self
+
+    @model_validator(mode="after")
     def apply_mode_interval_default(self) -> MonitorCreate:
         if self.schedule_interval_minutes is None:
             # Product price checks default to daily; everything else is hourly.
-            self.schedule_interval_minutes = (
-                1440 if self.mode == "product_price" else 60
-            )
+            self.schedule_interval_minutes = 1440 if self.mode == "product_price" else 60
         return self
+
 
 class MonitorUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
@@ -178,6 +195,15 @@ class MonitorUpdate(BaseModel):
             raise ValueError("css_selector is required for list_items monitors")
         return self
 
+    @model_validator(mode="after")
+    def check_site_links_js(self) -> MonitorUpdate:
+        if self.mode == "site_links" and self.js_required:
+            raise ValueError(
+                "site_links monitors fetch the sitemap over plain HTTP; "
+                "js_required is not supported"
+            )
+        return self
+
 
 class MonitorOut(BaseModel):
     id: uuid.UUID
@@ -201,7 +227,7 @@ class MonitorOut(BaseModel):
     created_at: datetime
     latest_change: LatestChangeOut | None = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MonitorRunOut(BaseModel):
@@ -223,7 +249,7 @@ class MonitorRunOut(BaseModel):
     error_message: str | None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChangeEventOut(BaseModel):
@@ -242,7 +268,7 @@ class ChangeEventOut(BaseModel):
     is_read: bool = False
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChangeEventDetail(ChangeEventOut):
@@ -342,7 +368,7 @@ class NotificationChannelOut(BaseModel):
     enabled: bool
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------------------------------------------------------

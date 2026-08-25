@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+# pi-lens-ignore: python-hallucinated-import - valid SQLAlchemy imports; rule NAME regex misfires
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -27,14 +28,30 @@ def _uuid() -> uuid.UUID:
     return uuid.uuid4()
 
 
-class MonitorMode(str, enum.Enum):
+class MonitorMode(enum.StrEnum):
+    """What a monitor extracts from its URL on every check.
+
+    ``PAGE_CONTENT``  whole page rendered to markdown; line-level unified diff.
+    ``SITE_LINKS``    sitemap URL inventory (+/- URLs); fetched over plain HTTP.
+    ``PRODUCT_PRICE`` first price-like token normalized to e.g. ``USD 19.99``.
+    ``LIST_ITEMS``    CSS-selector list items as ``[text](href)``; set diff.
+    """
+
     PAGE_CONTENT = "page_content"
     SITE_LINKS = "site_links"
     PRODUCT_PRICE = "product_price"
     LIST_ITEMS = "list_items"
 
 
-class RunStatus(str, enum.Enum):
+# Single source of truth for valid mode strings. API schemas, bulk import,
+# and the pipeline all validate against this — never inline a local tuple.
+MONITOR_MODES: tuple[str, ...] = tuple(m.value for m in MonitorMode)
+LIST_DIFF_MODES: frozenset[str] = frozenset(
+    (MonitorMode.SITE_LINKS.value, MonitorMode.LIST_ITEMS.value)
+)
+
+
+class RunStatus(enum.StrEnum):
     SCHEDULED = "scheduled"
     QUEUED = "queued"
     RUNNING = "running"
@@ -44,7 +61,7 @@ class RunStatus(str, enum.Enum):
     SKIPPED = "skipped"
 
 
-class OutboxStatus(str, enum.Enum):
+class OutboxStatus(enum.StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
     SENT = "sent"
@@ -119,15 +136,26 @@ class Monitor(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
-    mode: Mapped[str] = mapped_column(String(32), nullable=False, default=MonitorMode.PAGE_CONTENT.value)
+    mode: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MonitorMode.PAGE_CONTENT.value,
+    )
     css_selector: Mapped[str | None] = mapped_column(Text, nullable=True)
     schedule_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
-    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    next_run_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     config_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
@@ -145,7 +173,10 @@ class Monitor(Base):
     consecutive_unchanged: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     base_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -161,7 +192,10 @@ class MonitorConfigVersion(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     monitor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("monitors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
@@ -189,7 +223,10 @@ class MonitorRun(Base):
         UUID(as_uuid=True), ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False
     )
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     config_version: Mapped[int] = mapped_column(Integer, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -197,7 +234,11 @@ class MonitorRun(Base):
     queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default=RunStatus.SCHEDULED.value)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=RunStatus.SCHEDULED.value,
+    )
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -217,10 +258,16 @@ class Snapshot(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     monitor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("monitors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     content_hash: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -241,7 +288,10 @@ class ChangeEvent(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     monitor_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False
@@ -270,7 +320,10 @@ class NotificationChannel(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     type: Mapped[str] = mapped_column(String(32), nullable=False, default="email")
     address: Mapped[str] = mapped_column(Text, nullable=False)  # email or webhook URL
@@ -293,12 +346,21 @@ class NotificationOutbox(Base):
         UUID(as_uuid=True), ForeignKey("change_events.id", ondelete="SET NULL"), nullable=True
     )
     channel_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("notification_channels.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("notification_channels.id", ondelete="CASCADE"),
+        nullable=False,
     )
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default=OutboxStatus.PENDING.value)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=OutboxStatus.PENDING.value,
+    )
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
-    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -315,7 +377,9 @@ class NotificationDelivery(Base):
         UUID(as_uuid=True), ForeignKey("notification_outbox.id", ondelete="CASCADE"), nullable=False
     )
     channel_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("notification_channels.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("notification_channels.id", ondelete="CASCADE"),
+        nullable=False,
     )
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -344,7 +408,10 @@ class ApiKey(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
@@ -384,10 +451,16 @@ class ShareLink(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     monitor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("monitors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     token_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -407,7 +480,10 @@ class WorkspaceInvite(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     token_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -424,7 +500,10 @@ class WebhookEndpoint(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     url: Mapped[str] = mapped_column(Text, nullable=False)
     secret: Mapped[str] = mapped_column(String(128), nullable=False)
