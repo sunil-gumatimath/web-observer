@@ -1,21 +1,76 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180" fill="none">
   <defs>
-    <linearGradient id="g-apple" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#6366f1"/>
+    <linearGradient id="ap-bg" x1="0" y1="0" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#0b1329" />
+    </linearGradient>
+    <linearGradient id="ap-shine" x1="90" y1="0" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="ap-border" x1="0" y1="0" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.6" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.6" />
+    </linearGradient>
+    <linearGradient id="ap-bezel" x1="0" y1="20" x2="0" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="ap-screen" x1="30" y1="30" x2="150" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#030712" />
+      <stop offset="50%" stop-color="#0b1329" />
+      <stop offset="100%" stop-color="#080e1e" />
+    </linearGradient>
+    <linearGradient id="ap-wave" x1="30" y1="70" x2="150" y2="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="40%" stop-color="#38bdf8" />
+      <stop offset="70%" stop-color="#818cf8" />
+      <stop offset="100%" stop-color="#c084fc" />
+    </linearGradient>
+    <linearGradient id="ap-wave-area" x1="90" y1="45" x2="90" y2="95" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="ap-stand" x1="0" y1="120" x2="0" y2="155" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#64748b" />
+      <stop offset="100%" stop-color="#334155" />
     </linearGradient>
   </defs>
-  <rect width="180" height="180" rx="42" fill="url(#g-apple)"/>
-  <!-- eye scaled 5.6x from 32px base (16*5.6=89.6 center) -->
-  <g transform="translate(14,14) scale(5.625)">
-    <path d="M6.2 16C6.2 16 9.9 8.4 16 8.4C22.1 8.4 25.8 16 25.8 16C25.8 16 22.1 23.6 16 23.6C9.9 23.6 6.2 16 6.2 16Z" fill="white" fill-opacity="0.97"/>
-    <circle cx="16" cy="16" r="5.4" fill="#0ea5e9" stroke="white" stroke-width="1.05"/>
-    <circle cx="16" cy="16" r="3.9" fill="none" stroke="white" stroke-opacity="0.35" stroke-width="0.6"/>
-    <circle cx="16" cy="16" r="2.35" fill="#0f172a"/>
-    <circle cx="17.6" cy="14.25" r="1" fill="white"/>
-    <g>
-      <circle cx="25.5" cy="6.8" r="2.1" fill="#22d3ee" stroke="white" stroke-width="1.15"/>
-      <circle cx="25.5" cy="6.8" r="0.7" fill="white" opacity="0.95"/>
-    </g>
-  </g>
+
+  <rect width="180" height="180" rx="42" fill="url(#ap-bg)" />
+  <rect width="180" height="180" rx="42" fill="url(#ap-shine)" />
+  <rect x="1.5" y="1.5" width="177" height="177" rx="40.5" stroke="url(#ap-border)" stroke-width="2.5" />
+
+  <rect x="22" y="24" width="136" height="96" rx="16" fill="url(#ap-bezel)" stroke="url(#ap-border)" stroke-width="3" />
+  
+  <rect x="30" y="32" width="120" height="74" rx="10" fill="url(#ap-screen)" stroke="#1e293b" stroke-width="2" />
+
+  <circle cx="44" cy="44" r="3.8" fill="#f43f5e" />
+  <circle cx="54" cy="44" r="3.8" fill="#fbbf24" />
+  <circle cx="64" cy="44" r="3.8" fill="#34d399" />
+
+  <circle cx="90" cy="70" r="26" stroke="#38bdf8" stroke-opacity="0.18" stroke-width="2.5" stroke-dasharray="6 4" />
+  <line x1="36" y1="70" x2="144" y2="70" stroke="#38bdf8" stroke-opacity="0.12" stroke-width="2" />
+
+  <!-- Waveform Area -->
+  <path d="M 36 70 L 64 70 L 76 52 L 87 88 L 100 58 L 110 70 L 144 70 L 144 95 L 36 95 Z"
+        fill="url(#ap-wave-area)" />
+
+  <!-- Waveform Line -->
+  <path d="M 36 70 L 64 70 L 76 52 L 87 88 L 100 58 L 110 70 L 144 70"
+        stroke="url(#ap-wave)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Active Signal Beacon on Waveform Peak -->
+  <circle cx="100" cy="58" r="11" fill="#22d3ee" fill-opacity="0.25" />
+  <circle cx="100" cy="58" r="5.5" fill="#22d3ee" stroke="#ffffff" stroke-width="2.5" />
+  <circle cx="100" cy="58" r="2.2" fill="#ffffff" />
+
+  <!-- Stand Neck -->
+  <path d="M 82 120 L 98 120 L 102 144 L 78 144 Z" fill="url(#ap-stand)" stroke="#475569" stroke-width="2" />
+
+  <!-- Stand Base -->
+  <rect x="56" y="144" width="68" height="11" rx="5.5" fill="url(#ap-stand)" stroke="#64748b" stroke-width="2.5" />
+  <line x1="66" y1="147" x2="114" y2="147" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" />
 </svg>

@@ -44,7 +44,7 @@ function HeaderLogo({ compact = false }: { compact?: boolean }) {
 	return (
 		<Link
 			href="/dashboard"
-			className="group flex items-center gap-2.5 font-semibold tracking-tight text-slate-900 dark:text-white"
+			className="flex items-center gap-2.5 font-semibold tracking-tight text-slate-900 dark:text-white"
 		>
 			<Logo compact={compact} iconSize={36} />
 		</Link>
