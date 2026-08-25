@@ -463,6 +463,7 @@ export function ModeBadge({ mode }: { mode: string }) {
 		site_links: "Site links",
 		product_price: "Product price",
 		list_items: "List items",
+		json_field: "JSON field",
 	};
 	return <Badge tone="info">{labels[mode] ?? mode}</Badge>;
 }

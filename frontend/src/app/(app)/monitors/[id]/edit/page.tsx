@@ -107,8 +107,13 @@ export default function EditMonitorPage() {
 			setError(intervalProblem);
 			return;
 		}
-		if (mode === "list_items" && !cssSelector?.trim()) {
-			setError("List items mode requires a CSS selector.");
+		const needsPath = mode === "list_items" || mode === "json_field";
+		if (needsPath && !cssSelector?.trim()) {
+			setError(
+				mode === "list_items"
+					? "List items mode requires a CSS selector."
+					: "JSON field mode requires a JSON path.",
+			);
 			return;
 		}
 		setSaving(true);
@@ -192,7 +197,10 @@ export default function EditMonitorPage() {
 							<option value="list_items">
 								List items (e.g. blog/changelog entries)
 							</option>
-						</Select>
+							<option value="json_field">
+								JSON field (API / JSON responses)
+							</option>
+							</Select>
 					</div>
 					<div>
 						<Label htmlFor="interval">
@@ -247,18 +255,33 @@ export default function EditMonitorPage() {
 							placeholder="e.g. Only care about pricing plan changes"
 						/>
 					</div>
-{mode === "list_items" ? (
+{mode === "list_items" || mode === "json_field" ? (
 					<div>
-						<Label htmlFor="listSelector">List CSS selector (required for List items)</Label>
+						<Label htmlFor="listSelector">
+							{mode === "json_field"
+								? "JSON path (required for JSON field)"
+								: "List CSS selector (required for List items)"}
+						</Label>
 						<Input
 							id="listSelector"
 							required
 							value={cssSelector ?? ""}
 							onChange={(e) => setCssSelector(e.target.value || null)}
-							placeholder="article h2 a, .post-title a"
+							placeholder={
+								mode === "json_field" ? "$.data.price" : "article h2 a, .post-title a"
+							}
 						/>
 						<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-							Select the links to track, e.g. <code>.post-list li a</code>.
+							{mode === "json_field" ? (
+								<>
+									Path to the value to watch, e.g. <code>$.data.price</code> or{" "}
+									<code>$.results[0].status</code>.
+								</>
+							) : (
+								<>
+									Select the links to track, e.g. <code>.post-list li a</code>.
+								</>
+							)}
 						</p>
 					</div>
 				) : null}

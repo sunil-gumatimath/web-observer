@@ -393,7 +393,12 @@ Links,https://example.com/blog,list_items,60`}
               <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">product_price</code>
               ,{" "}
               <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">list_items</code>{" "}
-              (requires <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>).
+              (requires <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>
+              ), and{" "}
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">json_field</code>{" "}
+              (requires a JSON path in{" "}
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>, e.g.{" "}
+              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">$.data.price</code>).
             </p>
           </DocSection>
 

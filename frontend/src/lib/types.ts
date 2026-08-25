@@ -2,7 +2,8 @@ export type MonitorMode =
   | "page_content"
   | "site_links"
   | "product_price"
-  | "list_items";
+  | "list_items"
+  | "json_field";
 
 export type Monitor = {
   id: string;
