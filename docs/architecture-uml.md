@@ -120,7 +120,7 @@ classDiagram
         +UUID id
         +UUID workspace_id
         +String url
-        +String mode  page_content|site_links|product_price|list_items
+        +String mode  page_content|site_links|product_price|list_items|json_field
         +int schedule_interval_minutes
         +bool enabled
         +int config_version
@@ -301,7 +301,7 @@ sequenceDiagram
 flowchart TD
     A[FetchResult] --> B{status >= 400?}
     B -->|yes| F1[Run FAILED\nhttp_client/server_error]
-    B -->|no| C[extract_normalized by mode\npage_content / site_links / product_price / list_items]
+    B -->|no| C[extract_normalized by mode\npage_content / site_links / product_price / list_items / json_field]
     C --> D{extraction OK\nand non-empty?}
     D -->|no| F2[Run FAILED\nextraction_failed]
     D -->|yes| E[content_hash + store raw + Snapshot]
@@ -309,7 +309,7 @@ flowchart TD
     G -->|none| H[(BASELINE\nset, no alert)]
     G -->|exists| I{hash equal\nor ahash similar?}
     I -->|yes| J[(UNCHANGED\nno alert)]
-    I -->|no| K[compute diff / list diff / visual diff]
+    I -->|no| K[compute diff / list diff / value diff]
     K --> L[enrich_change -> AI summary\ninsert ChangeEvent]
     L --> M[queue NotificationOutbox\nper enabled channel]
     M --> N[enqueue WebhookDelivery\nper enabled endpoint]
@@ -319,7 +319,7 @@ flowchart TD
 ## Notes
 
 * **Auth modes** (`auth.py`): Clerk JWT (`Authorization: Bearer`), workspace API keys (`mtw_...`), and internal token (`X-Internal-Token`) for dev/smoke tests. RBAC via `require_workspace_member` / `require_role(min_role)`.
-* **Mode routing** (`workers/enqueue.py`): `visual` mode or `js_required` flag routes to the `browser_checks` queue (Playwright); everything else goes to `http_checks`.
+* **Mode routing** (`workers/enqueue.py`): monitors with the `js_required` flag route to the `browser_checks` queue (Playwright); everything else goes to `http_checks`. (`site_links` rejects `js_required` at the schema layer since sitemaps are fetched over plain HTTP.)
 * **Outbox pattern**: change detection writes `NotificationOutbox` + `WebhookDelivery` rows, then workers fan out. This decouples detection from delivery and gives at-least-once send with retry (`max_retries=5`).
 * **SSRF guard** (`security/ssrf.py`): blocks private/loopback/link-local/metadata IPs and credentialed URLs before any fetch; redirects are re-validated in the fetcher.
 * **Quotas/plans** (`services/usage.py`, `services/plans.py`): daily check/notification/storage counters per workspace, gated by plan.
