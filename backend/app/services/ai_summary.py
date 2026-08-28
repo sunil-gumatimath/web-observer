@@ -310,7 +310,15 @@ def _post_with_retries(
     last_exc: Exception | None = None
     for attempt in range(max_attempts):
         try:
-            resp = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+            from app.security.ssl_context import get_ssl_context
+
+            resp = httpx.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=timeout,
+                verify=get_ssl_context(),
+            )
             # retry on 429 and 5xx
             if resp.status_code == 429 or 500 <= resp.status_code < 600:
                 if attempt < max_attempts - 1:
@@ -716,3 +724,64 @@ def _call_llm(
         llm=llm,
     )
     return summary, cat
+
+
+def summarize_snapshot_text(
+    text: str,
+    *,
+    url: str = "",
+    watch_note: str | None = None,
+    brand: dict | None = None,
+    llm: dict | None = None,
+) -> str:
+    """Summarize captured page content in 1-2 clear, informative sentences."""
+    if not text or not text.strip():
+        return "No text content available to summarize."
+    clean = re.sub(r"\s+", " ", text[:4000]).strip()
+    effective = _effective_llm(llm)
+    api_key = effective.get("api_key")
+    if not api_key:
+        word_count = len(text.split())
+        title_hint = f" ({brand.get('title')})" if brand and brand.get("title") else ""
+        return f"Baseline snapshot captured{title_hint} with {word_count:,} words. AI change monitoring is active."
+
+    from app.security.ssl_context import get_ssl_context
+
+    system = (
+        "You are a web monitoring assistant. Summarize the main topics, purpose, and key content "
+        "of this webpage snapshot in 1-2 clear, actionable sentences."
+    )
+    user_prompt = f"URL: {url}\n"
+    if brand and brand.get("title"):
+        user_prompt += f"Title: {brand.get('title')}\n"
+    if watch_note:
+        user_prompt += f"User Watch Note: {watch_note}\n"
+    user_prompt += f"\nPage Content:\n{clean}"
+
+    try:
+        api_base = (effective.get("api_base") or "https://api.openai.com/v1").rstrip("/")
+        model = effective.get("model") or "gpt-4o-mini"
+        with httpx.Client(timeout=12.0, verify=get_ssl_context()) as client:
+            resp = client.post(
+                f"{api_base}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "max_tokens": 160,
+                    "temperature": 0.2,
+                },
+            )
+            if resp.is_success:
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"].strip()
+                if content:
+                    return content
+    except Exception as e:
+        logger.debug("summarize_snapshot_text LLM call failed: %s", e)
+
+    word_count = len(text.split())
+    return f"Baseline snapshot captured with {word_count:,} words. AI change monitoring is active."

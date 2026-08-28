@@ -118,7 +118,7 @@ def update_workspace(
                 continue
             setattr(workspace, key, encrypt_secret(str(value)))
             continue
-        if key in ("llm_api_base", "email_from"):
+        if key in ("llm_api_base", "llm_model", "email_from"):
             if isinstance(value, str) and value.strip() == "":
                 setattr(workspace, key, None)
                 continue

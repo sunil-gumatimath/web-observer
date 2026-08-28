@@ -1002,6 +1002,44 @@ def get_snapshot(
     )
 
 
+@router.post(
+    "/workspaces/{workspace_id}/snapshots/{snapshot_id}/ai-summary",
+    response_model=dict,
+)
+def get_snapshot_ai_summary(
+    workspace_id: UUID,
+    snapshot_id: UUID,
+    db: Db,
+    _workspace: AnyWs,
+) -> dict:
+    snap = db.scalar(
+        select(Snapshot).where(Snapshot.id == snapshot_id, Snapshot.workspace_id == workspace_id)
+    )
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+
+    full_text = snap.normalized_text or ""
+    snap_key = getattr(snap, "text_object_key", None)
+    if snap_key:
+        stored = get_bytes(snap_key)
+        if stored:
+            full_text = stored.decode("utf-8")
+
+    from app.services.ai_summary import summarize_snapshot_text
+
+    monitor = None
+    if snap.monitor_id:
+        monitor = db.get(Monitor, snap.monitor_id)
+
+    summary = summarize_snapshot_text(
+        full_text,
+        url=monitor.url if monitor else "",
+        watch_note=monitor.watch_note if monitor else None,
+        brand=monitor.brand if monitor else None,
+    )
+    return {"summary": summary}
+
+
 @router.get("/workspaces/{workspace_id}/usage")
 def get_usage(
     workspace_id: UUID,
