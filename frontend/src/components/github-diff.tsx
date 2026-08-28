@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { cn, SegmentedControl } from "@/components/ui";
+import { resolveImageUrl, splitLineSegments } from "@/lib/image-md";
 
 /**
  * GitHub-style before/after diff.
@@ -119,6 +120,45 @@ function Gutter({ no }: { no?: number }) {
 	);
 }
 
+/**
+ * Render a diff line, showing markdown images as small inline chips so
+ * captured visuals (logos, screenshots of sections) are visible in alerts.
+ * Unresolvable image tokens degrade to their alt text.
+ */
+function DiffLineText({ text }: { text: string }) {
+	const segs = useMemo(() => splitLineSegments(text || ""), [text]);
+	if (segs.length === 0) return null;
+	return (
+		<>
+			{segs.map((s, i) =>
+				s.type === "image" ? (
+					(() => {
+						const url = resolveImageUrl(s.src);
+						return url ? (
+							// eslint-disable-next-line @next/next/no-img-element
+							<img
+								key={i}
+								src={url}
+								alt={s.alt}
+								title={s.alt}
+								loading="lazy"
+								referrerPolicy="no-referrer"
+								className="mx-0.5 inline-block max-h-8 max-w-[16rem] rounded border border-[var(--border)] align-middle"
+							/>
+						) : (
+							<span key={i} className="italic opacity-70">
+								[{s.alt || "image"}]
+							</span>
+						);
+					})()
+				) : (
+					<span key={i}>{s.value}</span>
+				),
+			)}
+		</>
+	);
+}
+
 function SplitCell({
 	text,
 	no,
@@ -153,7 +193,7 @@ function SplitCell({
 				)}
 			>
 				{sign}
-				{text ?? ""}
+				<DiffLineText text={text ?? ""} />
 			</span>
 		</div>
 	);
@@ -180,7 +220,7 @@ function UnifiedLine({
 			<span className="min-w-0 flex-1 overflow-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]">
 				{srPrefix ? <span className="sr-only">{srPrefix}</span> : null}
 				<span aria-hidden="true">{sign}</span>
-				{text}
+				<DiffLineText text={text} />
 			</span>
 		</div>
 	);
