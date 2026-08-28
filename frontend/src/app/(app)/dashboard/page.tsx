@@ -14,7 +14,7 @@ import {
   Spinner,
   StatCard,
 } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, brandAssetUrl } from "@/lib/api";
 import type { AlertsSummary, Monitor, Usage } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -167,10 +167,18 @@ export default function DashboardPage() {
             <Link key={m.id} href={`/monitors/${m.id}`} className="block">
               <Card hover className="flex items-center justify-between gap-4 !py-4">
                 <div className="flex min-w-0 items-start gap-3">
-                  <span
-                    className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${changeDotClass(m.latest_change?.change_category ?? null)}`}
-                    aria-hidden
-                  />
+                  {brandAssetUrl(m.brand?.logo_path) ? (
+                    <img
+                      src={brandAssetUrl(m.brand?.logo_path) ?? undefined}
+                      alt=""
+                      className="mt-1 h-7 w-7 shrink-0 rounded-lg border border-[var(--border)] bg-white object-contain p-0.5 dark:bg-slate-900"
+                    />
+                  ) : (
+                    <span
+                      className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${changeDotClass(m.latest_change?.change_category ?? null)}`}
+                      aria-hidden
+                    />
+                  )}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="truncate font-medium text-slate-900 dark:text-slate-100">{m.name}</p>

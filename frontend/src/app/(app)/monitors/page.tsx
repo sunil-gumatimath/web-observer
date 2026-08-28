@@ -137,9 +137,18 @@ export default function MonitorsPage() {
 							<Link key={m.id} href={`/monitors/${m.id}`} className="block">
 								<div className="glass-card !p-4 transition hover:border-sky-500/40 dark:hover:border-sky-500/25">
 									<div className="flex items-start justify-between gap-2">
-										<p className="font-medium text-slate-900 dark:text-slate-100">
-											{m.name}
-										</p>
+										<div className="flex items-center gap-2.5 min-w-0">
+											{brandAssetUrl(m.brand?.logo_path) ? (
+												<img
+													src={brandAssetUrl(m.brand?.logo_path) ?? undefined}
+													alt=""
+													className="h-6 w-6 shrink-0 rounded object-contain"
+												/>
+											) : null}
+											<p className="truncate font-medium text-slate-900 dark:text-slate-100">
+												{m.name}
+											</p>
+										</div>
 										<Badge tone={m.enabled ? "success" : "warn"}>
 											{m.enabled ? "active" : "paused"}
 										</Badge>

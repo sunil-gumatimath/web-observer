@@ -25,7 +25,7 @@ import { usePageTitle } from "@/lib/use-page-title";
 export default function SettingsPage() {
   usePageTitle("Settings");
 
-  const [workspaceId, setWorkspaceId] = useState(() => getStoredWorkspaceId() ?? "");
+  const [workspaceId, setWorkspaceId] = useState("");
   const [me, setMe] = useState<MeResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

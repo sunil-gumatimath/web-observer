@@ -16,7 +16,7 @@ import {
 } from "@/components/ui";
 import { ConfirmButton } from "@/components/confirm-dialog";
 import { ReadableContent } from "@/components/readable-content";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, brandAssetUrl } from "@/lib/api";
 import type { ChangeEvent, Monitor, MonitorRun } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -63,6 +63,9 @@ function MonitorDetailInner() {
 	const [previewText, setPreviewText] = useState<string | null>(null);
 	const [previewLoading, setPreviewLoading] = useState(false);
 	const [showFreshBanner, setShowFreshBanner] = useState(isFresh);
+	const [brandRefreshing, setBrandRefreshing] = useState(false);
+	const [snapshotAiSummary, setSnapshotAiSummary] = useState<string | null>(null);
+	const [aiSummarizing, setAiSummarizing] = useState(false);
 
 	const pollStartedAt = useRef<number | null>(null);
 	const latestSnapshotId = useRef<string | null>(null);
@@ -266,6 +269,34 @@ function MonitorDetailInner() {
 		);
 	}
 
+	async function handleRefreshBrand() {
+		if (!workspaceId || !monitor) return;
+		setBrandRefreshing(true);
+		setError(null);
+		try {
+			const updated = await api.enrichBrand(workspaceId, monitor.id);
+			setMonitor(updated);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Failed to refresh website thumbnail");
+		} finally {
+			setBrandRefreshing(false);
+		}
+	}
+
+	async function handleGenerateAiSummary() {
+		if (!workspaceId || !latestTerminal?.snapshot_id) return;
+		setAiSummarizing(true);
+		setError(null);
+		try {
+			const res = await api.getSnapshotAiSummary(workspaceId, latestTerminal.snapshot_id);
+			setSnapshotAiSummary(res.summary);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Failed to generate AI summary");
+		} finally {
+			setAiSummarizing(false);
+		}
+	}
+
 	if (loading) return <Spinner />;
 	if (!monitor) {
 		return <ErrorBox message={error ?? "Monitor not found"} />;
@@ -273,85 +304,161 @@ function MonitorDetailInner() {
 
 	const latestRun = runs[0] ?? null;
 	const latestTerminal = runs.find((r) => TERMINAL.has(r.status)) ?? null;
+	const latestChange = changes[0] ?? null;
 	const hasSuccessfulSnapshot = runs.some(
 		(r) => r.status === "succeeded" && r.snapshot_id,
 	);
 	// Full result panel: after create (?fresh=1), or while any check is in flight.
 	const showResultCard =
 		showFreshBanner || polling || Boolean(latestRun && isActiveRun(latestRun));
+	const logo = brandAssetUrl(monitor.brand?.logo_path) || monitor.brand?.logo_url;
+	const hero = brandAssetUrl(monitor.brand?.hero_path) || monitor.brand?.hero_url;
 
 	return (
 		<div>
-			<PageHeader
-				title={monitor.name}
-				description={<span className="block break-all">{monitor.url}</span>}
-				actions={
-					<>
-						<Link href={`/monitors/${monitor.id}/edit`}>
-							<Button type="button" variant="secondary">
-								Edit
+			{/* Webdog Hero Header Banner */}
+			<div className="mb-8 overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm dark:bg-slate-950/60">
+				{/* Top Cover Hero Banner */}
+				<div className="relative h-36 bg-slate-100 sm:h-44 dark:bg-slate-900">
+					{hero ? (
+						<img
+							src={hero}
+							alt=""
+							className="absolute inset-0 size-full object-cover object-top"
+						/>
+					) : (
+						<div className="absolute inset-0 bg-gradient-to-br from-sky-500/15 via-indigo-500/10 to-slate-200/50 dark:from-sky-950/50 dark:via-indigo-950/30 dark:to-slate-900" />
+					)}
+					<div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-white via-white/50 to-transparent dark:from-slate-950 dark:via-slate-950/50 dark:to-transparent" />
+				</div>
+
+				{/* Floating Header Content */}
+				<div className="relative px-5 pb-5 sm:px-6 sm:pb-6">
+					<div className="-mt-10 flex flex-wrap items-end justify-between gap-4">
+						<div className="flex size-18 sm:size-20 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border)] bg-white p-2 shadow-md dark:bg-slate-900">
+							{logo ? (
+								<img src={logo} alt="" className="size-12 object-contain" />
+							) : (
+								<span className="font-mono text-2xl font-bold text-sky-600 dark:text-sky-400">
+									{monitor.name?.[0]?.toUpperCase() ?? "W"}
+								</span>
+							)}
+						</div>
+						<div className="flex flex-wrap items-center gap-2">
+							<a
+								href={monitor.url}
+								target="_blank"
+								rel="noreferrer"
+								className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs font-medium text-[var(--text)] shadow-sm hover:bg-[var(--surface-bg)] transition dark:border-white/10 dark:hover:bg-white/5"
+							>
+								Visit site ↗
+							</a>
+							<Link href={`/monitors/${monitor.id}/edit`}>
+								<Button type="button" variant="secondary" size="sm">
+									Edit
+								</Button>
+							</Link>
+							<Button
+								size="sm"
+								disabled={busy || polling}
+								onClick={() =>
+									withAction(async () => {
+										try {
+											await api.runMonitor(workspaceId!, monitor.id);
+										} catch (e) {
+											if (!(e instanceof ApiError && e.status === 409)) throw e;
+										}
+									})
+								}
+							>
+								Run now
 							</Button>
-						</Link>
-						<Button
-							disabled={busy || polling}
-							onClick={() =>
-								withAction(async () => {
-									try {
-										await api.runMonitor(workspaceId!, monitor.id);
-									} catch (e) {
-										// Already-active run: just continue polling.
-										if (!(e instanceof ApiError && e.status === 409)) throw e;
+							{monitor.enabled ? (
+								<Button
+									size="sm"
+									variant="secondary"
+									disabled={busy}
+									onClick={() =>
+										withAction(async () => {
+											await api.pauseMonitor(workspaceId!, monitor.id);
+										})
 									}
-								})
-							}
-						>
-							Run now
-						</Button>
-						{monitor.enabled ? (
+								>
+									Pause
+								</Button>
+							) : (
+								<Button
+									size="sm"
+									variant="secondary"
+									disabled={busy}
+									onClick={() =>
+										withAction(async () => {
+											await api.resumeMonitor(workspaceId!, monitor.id);
+										})
+									}
+								>
+									Resume
+								</Button>
+							)}
 							<Button
+								size="sm"
 								variant="secondary"
-								disabled={busy}
-								onClick={() =>
-									withAction(async () => {
-										await api.pauseMonitor(workspaceId!, monitor.id);
-									})
-								}
+								disabled={busy || shareBusy}
+								onClick={handleShare}
 							>
-								Pause
+								{shareBusy ? "Creating…" : "Share"}
 							</Button>
-						) : (
 							<Button
-								variant="secondary"
-								disabled={busy}
-								onClick={() =>
-									withAction(async () => {
-										await api.resumeMonitor(workspaceId!, monitor.id);
-									})
-								}
+								type="button"
+								size="sm"
+								variant="ghost"
+								disabled={busy || brandRefreshing}
+								onClick={handleRefreshBrand}
+								title="Refresh website brand and thumbnail preview"
 							>
-								Resume
+								{brandRefreshing ? "Refreshing…" : "Refresh brand"}
 							</Button>
-						)}
-						<Button
-							variant="secondary"
-							disabled={busy || shareBusy}
-							onClick={handleShare}
+							<ConfirmButton
+								variant="danger"
+								size="sm"
+								busy={busy}
+								error={error}
+								onConfirm={handleDelete}
+								title="Delete this monitor?"
+								body="This permanently deletes the monitor and all of its check history and change events."
+							>
+								Delete
+							</ConfirmButton>
+						</div>
+					</div>
+
+					<div className="mt-3.5 min-w-0">
+						<div className="flex flex-wrap items-center gap-2">
+							<h1 className="truncate text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+								{monitor.brand?.title || monitor.name}
+							</h1>
+							<ModeBadge mode={monitor.mode} />
+							<Badge tone={monitor.enabled ? "success" : "warn"}>
+								{monitor.enabled ? "active" : "paused"}
+							</Badge>
+						</div>
+						<a
+							href={monitor.url}
+							target="_blank"
+							rel="noreferrer"
+							className="mt-1 inline-block truncate font-mono text-xs text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400"
 						>
-							{shareBusy ? "Creating…" : "Share"}
-						</Button>
-						<ConfirmButton
-							variant="danger"
-							busy={busy}
-							error={error}
-							onConfirm={handleDelete}
-							title="Delete this monitor?"
-							body="This permanently deletes the monitor and all of its check history and change events."
-						>
-							Delete
-						</ConfirmButton>
-						</>
-						}
-			/>
+							{monitor.url}
+						</a>
+						{monitor.brand?.description ? (
+							<p className="mt-2 max-w-3xl text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+								{monitor.brand.description}
+							</p>
+						) : null}
+					</div>
+				</div>
+			</div>
+
 			{error ? <ErrorBox message={error} /> : null}
 
 			{shareUrl ? (
@@ -540,6 +647,13 @@ function MonitorDetailInner() {
 									text={previewText}
 									maxChars={2500}
 									emptyLabel="No text content in this snapshot."
+									baseUrl={monitor?.url}
+									aiChangeSummary={latestChange?.ai_summary}
+									changeCategory={latestChange?.change_category}
+									isNoise={latestChange?.is_noise}
+									onSummarizeAi={handleGenerateAiSummary}
+									aiSummarizing={aiSummarizing}
+									generatedAiSummary={snapshotAiSummary}
 								/>
 							) : (
 								<p className="text-sm text-slate-500 dark:text-slate-400">
@@ -552,6 +666,88 @@ function MonitorDetailInner() {
 				</Card>
 			) : null}
 
+			{/* AI Change Summaries Section (Webdog parity: plain-language summaries of what changed and why it matters) */}
+			<section className="mb-8">
+				<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+					<div>
+						<h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+							<span className="flex size-5 items-center justify-center rounded-md bg-sky-500/10 text-sky-500 dark:bg-sky-500/20">
+								✨
+							</span>
+							AI Change Summaries
+						</h2>
+						<p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+							Plain-language summaries of what changed on this page and why it matters.
+						</p>
+					</div>
+					{latestChange ? (
+						<Link
+							href={`/changes/${latestChange.id}`}
+							className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
+						>
+							View full diff &amp; history →
+						</Link>
+					) : null}
+				</div>
+
+				{latestChange ? (
+					<div className="overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-50/70 via-white to-indigo-50/30 p-5 shadow-sm dark:border-sky-500/30 dark:from-sky-950/30 dark:via-slate-950 dark:to-indigo-950/20">
+						<div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-500/15 pb-3 dark:border-sky-500/25">
+							<div className="flex flex-wrap items-center gap-2">
+								<CategoryBadge category={latestChange.change_category} />
+								{latestChange.is_noise ? (
+									<Badge tone="warn">noise filter held</Badge>
+								) : (
+									<Badge tone="success">detected change</Badge>
+								)}
+								<span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+									{new Date(latestChange.created_at).toLocaleString()}
+								</span>
+							</div>
+							<Link
+								href={`/changes/${latestChange.id}`}
+								className="rounded-lg border border-[var(--border)] bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5"
+							>
+								Inspect Diff
+							</Link>
+						</div>
+
+						<div className="mt-3.5">
+							<p className="text-sm font-medium leading-relaxed text-slate-900 dark:text-slate-100">
+								{latestChange.ai_summary || latestChange.diff_summary || "Page content changed."}
+							</p>
+							{latestChange.diff_summary && latestChange.ai_summary ? (
+								<p className="mt-2 text-xs font-mono text-slate-600 dark:text-slate-400">
+									{latestChange.diff_summary}
+								</p>
+							) : null}
+						</div>
+					</div>
+				) : (
+					<div className="rounded-2xl border border-[var(--border)] bg-slate-50/60 p-5 shadow-sm dark:bg-slate-900/40">
+						<div className="flex items-start gap-3">
+							<div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-500 dark:bg-sky-500/20">
+								✨
+							</div>
+							<div className="min-w-0 flex-1">
+								<h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+									AI Change Monitoring Active
+								</h3>
+								<p className="mt-1 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+									Baseline snapshot is established. When future checks detect updates, an AI summary explaining <strong className="text-slate-800 dark:text-slate-200">what changed and why it matters</strong> will be automatically generated and displayed here.
+								</p>
+								<div className="mt-3 flex flex-wrap items-center gap-2">
+									<Badge tone="neutral">Mode: {monitor.mode}</Badge>
+									<span className="text-[11px] text-slate-500">
+										Checked every {monitor.schedule_interval_minutes}m
+									</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+			</section>
+
 			{/* Always available readable snapshot (not only right after create) */}
 			{!showResultCard && latestTerminal?.status === "succeeded" ? (
 				<section className="mb-8">
@@ -561,7 +757,17 @@ function MonitorDetailInner() {
 					) : hasSuccessfulSnapshot &&
 						previewText != null &&
 						previewText.length > 0 ? (
-						<ReadableContent text={previewText} maxChars={2500} />
+						<ReadableContent
+							text={previewText}
+							maxChars={2500}
+							baseUrl={monitor?.url}
+							aiChangeSummary={latestChange?.ai_summary}
+							changeCategory={latestChange?.change_category}
+							isNoise={latestChange?.is_noise}
+							onSummarizeAi={handleGenerateAiSummary}
+							aiSummarizing={aiSummarizing}
+							generatedAiSummary={snapshotAiSummary}
+						/>
 					) : (
 						<Card>
 							<p className="text-sm text-slate-500 dark:text-slate-400">

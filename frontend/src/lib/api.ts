@@ -84,7 +84,7 @@ async function authHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-const FETCH_TIMEOUT_MS = 20_000;
+const FETCH_TIMEOUT_MS = 30_000;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = await authHeaders();
@@ -154,6 +154,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  */
 export function brandAssetUrl(path: string | null | undefined): string | null {
   if (!path) return null;
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
   // The object key is a path with slashes; encoding each segment (not the whole
   // string) preserves them so the /api/v1/public/assets/{object_key:path} route
   // resolves correctly.
@@ -285,6 +288,12 @@ export const api = {
 
   getSnapshot: (workspaceId: string, snapshotId: string) =>
     request<SnapshotAccess>(`/api/v1/workspaces/${workspaceId}/snapshots/${snapshotId}`),
+
+  getSnapshotAiSummary: (workspaceId: string, snapshotId: string) =>
+    request<{ summary: string }>(
+      `/api/v1/workspaces/${workspaceId}/snapshots/${snapshotId}/ai-summary`,
+      { method: "POST" },
+    ),
 
   listChanges: (workspaceId: string, monitorId: string) =>
     request<ChangeEvent[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/changes`),

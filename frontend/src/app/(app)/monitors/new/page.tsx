@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
 	Button,
 	Card,
@@ -98,8 +98,45 @@ export default function NewMonitorPage() {
 	const [cssSelector, setCssSelector] = useState<string | null>(null);
 	const [runNow, setRunNow] = useState(true);
 	const [brand, setBrand] = useState<BrandInfo | null>(null);
+	const [brandLoading, setBrandLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
+
+	function normalizeUrl(input: string): string {
+		const trimmed = input.trim();
+		if (!trimmed) return "";
+		if (/^https?:\/\//i.test(trimmed)) return trimmed;
+		return `https://${trimmed}`;
+	}
+
+	const lookupBrand = useCallback(async (rawUrl?: string) => {
+		const candidate = normalizeUrl(rawUrl ?? url);
+		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
+		setBrandLoading(true);
+		try {
+			const ws = await ensureWorkspace();
+			const info = await api.brandInfo(ws, candidate);
+			setBrand(info);
+			if (info.title && !name.trim()) setName(info.title);
+		} catch {
+			setBrand(null);
+		} finally {
+			setBrandLoading(false);
+		}
+	}, [url, name]);
+
+	// Auto-lookup brand on typing with debounce
+	useEffect(() => {
+		const candidate = normalizeUrl(url);
+		if (!candidate || candidate.length < 8 || !candidate.includes(".")) {
+			setBrand(null);
+			return;
+		}
+		const timer = setTimeout(() => {
+			lookupBrand(candidate);
+		}, 600);
+		return () => clearTimeout(timer);
+	}, [url, lookupBrand]);
 
 	async function onSubmit(e: FormEvent) {
 		e.preventDefault();
@@ -107,6 +144,11 @@ export default function NewMonitorPage() {
 		const intervalProblem = intervalError(interval);
 		if (intervalProblem) {
 			setError(intervalProblem);
+			return;
+		}
+		const finalUrl = normalizeUrl(url);
+		if (!finalUrl) {
+			setError("A valid URL is required.");
 			return;
 		}
 		const needsPath = mode === "list_items" || mode === "json_field";
@@ -131,8 +173,8 @@ export default function NewMonitorPage() {
 				.map((s) => s.trim())
 				.filter(Boolean);
 			const monitor = await api.createMonitor(ws, {
-				name,
-				url,
+				name: name.trim() || brand?.title || finalUrl.replace(/^https?:\/\//, ""),
+				url: finalUrl,
 				mode,
 				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
@@ -156,19 +198,6 @@ export default function NewMonitorPage() {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to create monitor");
 			setSaving(false);
-		}
-	}
-
-	async function lookupBrand() {
-		if (!/^https?:\/\//i.test(url.trim())) return;
-		setError(null);
-		try {
-			const ws = await ensureWorkspace();
-			const info = await api.brandInfo(ws, url.trim());
-			setBrand(info);
-			if (info.title && !name.trim()) setName(info.title);
-		} catch {
-			setBrand(null);
 		}
 	}
 
@@ -211,31 +240,77 @@ export default function NewMonitorPage() {
 							/>
 						</div>
 						<div>
-							<Label htmlFor="url">URL</Label>
+							<div className="flex items-center justify-between">
+								<Label htmlFor="url">URL</Label>
+								{brandLoading ? (
+									<span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-sky-600 dark:text-sky-400">
+										<svg className="size-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+											<circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+											<path d="M12 2a10 10 0 0 1 10 10" />
+										</svg>
+										Discovering brand…
+									</span>
+								) : null}
+							</div>
 							<Input
 								id="url"
 								required
-								type="url"
 								value={url}
-								onBlur={lookupBrand}
+								onBlur={() => lookupBrand()}
 								onChange={(e) => setUrl(e.target.value)}
-								placeholder="https://example.com/pricing"
+								placeholder="https://example.com/pricing or example.com"
 							/>
-						</div>{" "}
-						{brand ? (
-							<div className="mb-1 rounded-xl border border-[var(--border)] bg-slate-50/60 px-3.5 py-3 dark:bg-slate-950/40">
-								<div className="flex items-start gap-3">
+						</div>
+
+						{brandLoading ? (
+							<div className="flex items-center gap-2.5 rounded-xl border border-sky-500/20 bg-sky-50/40 px-3.5 py-2.5 text-xs text-sky-700 dark:border-sky-500/30 dark:bg-sky-950/20 dark:text-sky-300">
+								<svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+									<circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+									<path d="M12 2a10 10 0 0 1 10 10" />
+								</svg>
+								<span>Detecting website title, logo, and metadata…</span>
+							</div>
+						) : brand ? (
+							<div className="overflow-hidden rounded-xl border border-sky-500/20 bg-gradient-to-br from-slate-50 via-white to-sky-50/30 shadow-xs dark:border-sky-500/30 dark:from-slate-900/60 dark:via-slate-950 dark:to-sky-950/20">
+								{brand.hero_url ? (
+									<div className="relative h-20 w-full overflow-hidden bg-slate-100 dark:bg-slate-900">
+										<img
+											src={brand.hero_url}
+											alt=""
+											className="size-full object-cover object-top"
+											onError={(e) => {
+												(e.target as HTMLElement).parentElement!.style.display = "none";
+											}}
+										/>
+										<div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+									</div>
+								) : null}
+								<div className="flex items-start gap-3 p-3.5">
 									{brand.logo_url ? (
-										<img src={brand.logo_url} alt="" className="h-9 w-9 rounded-lg object-contain" />
+										<img
+											src={brand.logo_url}
+											alt=""
+											className="h-10 w-10 shrink-0 rounded-xl border border-[var(--border)] bg-white object-contain p-1 shadow-xs dark:bg-slate-900"
+											onError={(e) => {
+												(e.target as HTMLElement).style.display = "none";
+											}}
+										/>
 									) : null}
-									<div className="min-w-0">
-										{brand.title ? (
-											<p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{brand.title}</p>
-										) : null}
+									<div className="min-w-0 flex-1">
+										<div className="flex items-center gap-2">
+											<p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+												{brand.title || "Discovered Brand"}
+											</p>
+											<span className="rounded-full bg-emerald-500/10 px-2 py-0.2 text-[10px] font-semibold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+												Brand Preview
+											</span>
+										</div>
 										{brand.description ? (
-											<p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{brand.description}</p>
+											<p className="mt-0.5 line-clamp-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+												{brand.description}
+											</p>
 										) : (
-											<p className="text-xs text-slate-400">No brand info detected.</p>
+											<p className="mt-0.5 text-xs text-slate-400">Logo and title detected.</p>
 										)}
 									</div>
 								</div>

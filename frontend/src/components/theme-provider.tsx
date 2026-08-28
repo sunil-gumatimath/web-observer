@@ -16,6 +16,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       enableSystem
       disableTransitionOnChange
       storageKey="web-observer-theme"
+      scriptProps={{ async: true }}
     >
       {children}
     </NextThemesProvider>

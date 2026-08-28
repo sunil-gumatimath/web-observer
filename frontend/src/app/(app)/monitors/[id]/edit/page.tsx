@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
 	Button,
 	Card,
@@ -13,8 +13,8 @@ import {
 	Spinner,
 	Textarea,
 } from "@/components/ui";
-import { api } from "@/lib/api";
-import type { Monitor, MonitorMode } from "@/lib/types";
+import { api, brandAssetUrl } from "@/lib/api";
+import type { BrandInfo, Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
@@ -62,6 +62,12 @@ export default function EditMonitorPage() {
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
 	const [cssSelector, setCssSelector] = useState<string | null>(null);
+	const [brand, setBrand] = useState<{
+		title?: string | null;
+		description?: string | null;
+		logo_url?: string | null;
+		hero_url?: string | null;
+	} | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -86,6 +92,14 @@ export default function EditMonitorPage() {
 				setIgnoreSelectors((m.ignore_selectors ?? []).join("\n"));
 				setIgnoreRegexes((m.ignore_regexes ?? []).join("\n"));
 				setCssSelector(m.css_selector ?? null);
+				if (m.brand) {
+					setBrand({
+						title: m.brand.title,
+						description: m.brand.description,
+						logo_url: brandAssetUrl(m.brand.logo_path) || m.brand.logo_url,
+						hero_url: brandAssetUrl(m.brand.hero_path) || m.brand.hero_url,
+					});
+				}
 			} catch (e) {
 				if (!cancelled)
 					setError(e instanceof Error ? e.message : "Failed to load monitor");
@@ -98,6 +112,36 @@ export default function EditMonitorPage() {
 		};
 	}, [monitorId]);
 
+	function normalizeUrl(input: string): string {
+		const trimmed = input.trim();
+		if (!trimmed) return "";
+		if (/^https?:\/\//i.test(trimmed)) return trimmed;
+		return `https://${trimmed}`;
+	}
+
+	const lookupBrand = useCallback(async (rawUrl?: string) => {
+		const candidate = normalizeUrl(rawUrl ?? url);
+		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
+		try {
+			const ws = await ensureWorkspace();
+			const info = await api.brandInfo(ws, candidate);
+			setBrand(info);
+			if (info.title && !name.trim()) setName(info.title);
+		} catch {
+			// keep current brand
+		}
+	}, [url, name]);
+
+	// Auto-lookup brand on URL change with debounce
+	useEffect(() => {
+		const candidate = normalizeUrl(url);
+		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
+		const timer = setTimeout(() => {
+			lookupBrand(candidate);
+		}, 600);
+		return () => clearTimeout(timer);
+	}, [url, lookupBrand]);
+
 	async function onSubmit(e: FormEvent) {
 		e.preventDefault();
 		if (!workspaceId) return;
@@ -105,6 +149,11 @@ export default function EditMonitorPage() {
 		const intervalProblem = intervalError(interval);
 		if (intervalProblem) {
 			setError(intervalProblem);
+			return;
+		}
+		const finalUrl = normalizeUrl(url);
+		if (!finalUrl) {
+			setError("A valid URL is required.");
 			return;
 		}
 		const needsPath = mode === "list_items" || mode === "json_field";
@@ -175,9 +224,46 @@ export default function EditMonitorPage() {
 							required
 							type="url"
 							value={url}
+							onBlur={() => lookupBrand()}
 							onChange={(e) => setUrl(e.target.value)}
 						/>
 					</div>
+					{brand ? (
+						<div className="rounded-xl border border-[var(--border)] bg-slate-50/60 p-3.5 dark:bg-slate-950/40">
+							<div className="flex items-start gap-3">
+								{brand.logo_url ? (
+									<img
+										src={brand.logo_url}
+										alt=""
+										className="h-9 w-9 rounded-lg object-contain border border-[var(--border)] bg-white p-0.5 dark:bg-slate-900"
+									/>
+								) : null}
+								<div className="min-w-0 flex-1">
+									{brand.title ? (
+										<p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+											{brand.title}
+										</p>
+									) : null}
+									{brand.description ? (
+										<p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
+											{brand.description}
+										</p>
+									) : (
+										<p className="text-xs text-slate-400">No brand description detected.</p>
+									)}
+								</div>
+							</div>
+							{brand.hero_url ? (
+								<div className="mt-3 overflow-hidden rounded-lg border border-[var(--border)]">
+									<img
+										src={brand.hero_url}
+										alt="Website thumbnail preview"
+										className="max-h-48 w-full object-cover object-top"
+									/>
+								</div>
+							) : null}
+						</div>
+					) : null}
 					<div>
 						<Label htmlFor="mode">Mode</Label>
 						<Select
