@@ -21,9 +21,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_BLOCKED_RESOURCE_TYPES = {"image", "media", "font", "stylesheet"}
+_BLOCKED_RESOURCE_TYPES = {"image", "media", "font"}
+
+_DEFAULT_BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
 
 _LAUNCH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
     "--disable-dev-shm-usage",
     "--no-sandbox",
     "--disable-gpu",
@@ -77,12 +83,22 @@ def _fetch_url_browser_inline(
                 raise
             context = None
             try:
+                ua = (
+                    settings.http_user_agent
+                    if "bot" not in settings.http_user_agent.lower()
+                    else _DEFAULT_BROWSER_UA
+                )
                 context = browser.new_context(
-                    user_agent=settings.http_user_agent,
+                    user_agent=ua,
                     java_script_enabled=True,
                     ignore_https_errors=False,
+                    viewport={"width": 1920, "height": 1080},
                 )
                 page = context.new_page()
+                page.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                    window.navigator.chrome = { runtime: {} };
+                """)
 
                 def _route_handler(route, request):  # type: ignore[no-untyped-def]
                     if request.resource_type in _BLOCKED_RESOURCE_TYPES:

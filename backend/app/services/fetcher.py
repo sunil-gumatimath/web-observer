@@ -24,11 +24,11 @@ MAX_REDIRECTS = 5
 # Markers that are effectively unique to Cloudflare's bot-protection pages.
 _STRONG_CF_MARKERS = (
     "cf_chl_opt",
-    "challenge-platform",
     "cf-chl-widget",
     "cf-turnstile",
     "cf-please-wait",
     "cf-challenge-running",
+    "orchestrate/jsch/v1",
 )
 
 # Phrases that appear on Cloudflare challenge pages but could also occur on

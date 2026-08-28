@@ -61,7 +61,13 @@ class VisualCapture:
     height: int
 
 
+_DEFAULT_BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
 _LAUNCH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
     "--disable-dev-shm-usage",
     "--no-sandbox",
     "--disable-gpu",
@@ -115,10 +121,15 @@ def _capture_screenshot_inline(
             context = None
             try:
                 context = browser.new_context(
+                    user_agent=_DEFAULT_BROWSER_UA,
                     viewport={"width": 1280, "height": 720},
                     ignore_https_errors=False,
                 )
                 page = context.new_page()
+                page.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                    window.navigator.chrome = { runtime: {} };
+                """)
 
                 def _route_handler(route, request):  # type: ignore[no-untyped-def]
                     try:
