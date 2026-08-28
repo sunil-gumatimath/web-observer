@@ -154,6 +154,10 @@ class PinnedIPTransport(httpx.HTTPTransport):
     def __init__(self, *, pinned_ip: str, server_hostname: str, **kwargs) -> None:
         self._pinned_ip = pinned_ip
         self._server_hostname = server_hostname
+        if "verify" not in kwargs:
+            from app.security.ssl_context import get_ssl_context
+
+            kwargs["verify"] = get_ssl_context()
         super().__init__(**kwargs)
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:

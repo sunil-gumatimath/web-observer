@@ -56,7 +56,13 @@ def _get_jwks_client(settings: Settings) -> PyJWKClient:
     global _jwks_client, _jwks_client_url
     assert settings.clerk_jwks_url
     if _jwks_client is None or _jwks_client_url != settings.clerk_jwks_url:
-        _jwks_client = PyJWKClient(settings.clerk_jwks_url, cache_keys=True)
+        from app.security.ssl_context import get_ssl_context
+
+        _jwks_client = PyJWKClient(
+            settings.clerk_jwks_url,
+            ssl_context=get_ssl_context(),
+            cache_keys=True,
+        )
         _jwks_client_url = settings.clerk_jwks_url
     return _jwks_client
 
@@ -271,10 +277,13 @@ def fetch_clerk_user_email(clerk_user_id: str, settings: Settings) -> str | None
     if not settings.clerk_secret_key:
         return None
     try:
+        from app.security.ssl_context import get_ssl_context
+
         resp = httpx.get(
             f"https://api.clerk.com/v1/users/{clerk_user_id}",
             headers={"Authorization": f"Bearer {settings.clerk_secret_key}"},
             timeout=10.0,
+            verify=get_ssl_context(),
         )
         if resp.status_code != 200:
             return None
