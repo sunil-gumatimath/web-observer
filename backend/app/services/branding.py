@@ -96,8 +96,10 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
         logo_candidates = list(meta.hero_candidates)
     meta.logo_candidates = logo_candidates
     return meta
-def fetch_brand_info(url: str, *, timeout_seconds: int = 30) -> BrandMeta:
+def fetch_brand_info(url: str, *, timeout_seconds: int = 5) -> BrandMeta:
     """Fetch a page and parse its brand metadata."""
+    from urllib.parse import urlparse
+
     try:
         result: FetchResult = fetch_url(
             url, timeout_seconds=timeout_seconds, max_response_bytes=2_000_000
@@ -107,14 +109,25 @@ def fetch_brand_info(url: str, *, timeout_seconds: int = 30) -> BrandMeta:
         return BrandMeta()
     if result.status_code >= 400:
         return BrandMeta()
-    return parse_brand_meta(result.text or "", result.final_url or url)
+    
+    # Always resolve relative image URLs against the public hostname URL
+    meta = parse_brand_meta(result.text or "", url)
+
+    # Fallback to Google favicon service / domain favicon if no logo was discovered
+    if not meta.logo_candidates:
+        parsed = urlparse(url)
+        if parsed.netloc:
+            domain = parsed.netloc.split(":")[0]
+            meta.logo_candidates.append(f"https://www.google.com/s2/favicons?domain={domain}&sz=128")
+
+    return meta
 
 
 def _download_image(url: str, *, max_bytes: int = MAX_IMAGE_BYTES) -> bytes | None:
     try:
         result = fetch_binary(
             url,
-            timeout_seconds=15,
+            timeout_seconds=3,
             max_response_bytes=max_bytes,
         )
         if result.status_code >= 400 or not result.content:
@@ -132,20 +145,21 @@ def _brand_object_key(monitor_id: uuid.UUID, kind: str) -> str:
 def store_brand_assets(monitor, meta: BrandMeta) -> dict:
     """Re-host logo/hero bytes into storage; return the brand dict for the Monitor.
 
-    Returns a serializable dict: {title, description, logo_path, hero_path}.
+    Returns a serializable dict: {title, description, logo_path, hero_path, logo_url, hero_url}.
     Nothing here should raise — brand enrichment is fully optional and must
     never fail a monitor create or check.
     """
+    logo_src = next((c for c in meta.logo_candidates), None)
+    hero_src = next((c for c in meta.hero_candidates), None)
+
     brand: dict = {
         "title": meta.title,
         "description": meta.description,
         "logo_path": None,
         "hero_path": None,
-        "logo_url": None,
-        "hero_url": None,
+        "logo_url": logo_src,
+        "hero_url": hero_src,
     }
-    logo_src = next((c for c in meta.logo_candidates), None)
-    hero_src = next((c for c in meta.hero_candidates), None)
 
     if logo_src:
         data = _download_image(logo_src)
@@ -169,7 +183,9 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
 
 
 def brand_asset_allowed(object_key: str | None) -> bool:
-    if not object_key or not object_key.startswith("brand-assets/"):
+    if not object_key or not (
+        object_key.startswith("brand-assets/") or object_key.startswith("screenshots/")
+    ):
         return False
     # Belt-and-braces alongside the storage-layer containment check: reject
     # anything that could escape the object namespace (traversal / absolute).
