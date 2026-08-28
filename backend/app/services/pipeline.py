@@ -30,6 +30,7 @@ from app.services.diffing import short_summary, unified_diff
 from app.services.extract import (
     ExtractionError,
     content_hash,
+    extract_main_markdown,
     extract_markdown,
     extract_price,
 )
@@ -45,6 +46,10 @@ from app.services.structured import (
 from app.services.usage import add_storage_bytes, increment_ai_tokens, increment_checks
 
 logger = logging.getLogger(__name__)
+
+# Bumped whenever extraction behavior changes; logged per-run so a stale worker
+# process serving old code is immediately visible in logs.
+EXTRACT_CODE_VERSION = "2026-08-25.2-maincontent"
 
 MODE_PRODUCT_PRICE = MonitorMode.PRODUCT_PRICE.value
 
@@ -115,11 +120,31 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
             )
         return extract_json_field(result.text, path), None
 
-    # page_content (default): whole page as markdown (readable line-level diff)
+    # page_content (default): main content as markdown when detectable
+    # (webdog `useMainContentOnly` parity — strips nav/boilerplate), falling
+    # back to whole-body markdown for pages where detection fails.
+    main = extract_main_markdown(
+        result.text,
+        base_url=result.final_url,
+        ignore_selectors=ignore_selectors,
+        ignore_regexes=ignore_regexes,
+    )
+    if main is not None:
+        logger.info(
+            "page_content_extract path=main code=%s len=%s",
+            EXTRACT_CODE_VERSION,
+            len(main),
+        )
+        return main, None
     text = extract_markdown(
         result.text,
         ignore_selectors=ignore_selectors,
         ignore_regexes=ignore_regexes,
+    )
+    logger.info(
+        "page_content_extract path=fallback code=%s len=%s",
+        EXTRACT_CODE_VERSION,
+        len(text),
     )
     return text, None
 

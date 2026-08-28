@@ -1,6 +1,10 @@
+import pytest
+
 from app.services.extract import (
     ExtractionError,
     content_hash,
+    extract_main_markdown,
+    extract_markdown,
     extract_price,
     extract_text,
     normalize_text,
@@ -104,3 +108,80 @@ def test_content_hash_stable() -> None:
     assert content_hash("hello") == content_hash("hello")
     assert content_hash("hello") != content_hash("world")
     assert len(content_hash("hello")) == 64
+
+
+# ---------------------------------------------------------------------------
+# page_content markdown: images survive extraction
+# ---------------------------------------------------------------------------
+
+
+def test_markdown_keeps_top_level_images() -> None:
+    pytest.importorskip("markdownify")
+    html = '<html><body><p>intro</p><img src="https://x.test/a.png" alt="A"></body></html>'
+    md = extract_markdown(html)
+    assert "![A](https://x.test/a.png)" in md
+
+
+def test_markdown_keeps_images_inside_links_and_spans() -> None:
+    """markdownify drops <img> nested in inline elements unless
+    keep_inline_images_in includes those parents (linked logos/thumbnails)."""
+    pytest.importorskip("markdownify")
+    html = (
+        "<html><body>"
+        '<a href="/home"><img src="/logo.png" alt="Logo"></a>'
+        "<span><img src='/icon.svg' alt='Icon'></span>"
+        "</body></html>"
+    )
+    md = extract_markdown(html)
+    assert "![Logo](/logo.png)" in md
+    assert "![Icon](/icon.svg)" in md
+
+
+# ---------------------------------------------------------------------------
+# page_content main-content extraction (webdog useMainContentOnly parity)
+# ---------------------------------------------------------------------------
+
+_NAV_ARTICLE_HTML = """
+<html><body>
+  <nav>
+    <a href="/">Home</a> | <a href="/about">About</a> | <a href="/login">Login</a>
+  </nav>
+  <header><img src="/logo.png" alt="Site logo"></header>
+  <article>
+    <h1>Why the moon is made of cheese</h1>
+    <p>Astronomers have long suspected it. Recent lunar missions confirmed a
+    high dairy content across every regolith sample collected since 1969,
+    with brie dominating the southern craters and a hard aged cheddar
+    near the north pole.</p>
+    <p>The implications for pizza supply chains are profound. Scientists
+    now believe mozzarella deposits may exist beneath the Tycho crater,
+    though melting temperatures on the sunlit side remain a challenge.</p>
+    <img src="/moon.jpg" alt="The moon">
+  </article>
+  <footer>© 2026 Example Corp · Privacy · Terms · Cookie preferences</footer>
+</body></html>
+"""
+
+
+def test_main_markdown_strips_nav_and_boilerplate() -> None:
+    trafilatura = pytest.importorskip("trafilatura")
+    md = extract_main_markdown(_NAV_ARTICLE_HTML, base_url="https://example.test/")
+    assert md is not None
+    assert "cheese" in md.lower()
+    # boilerplate gone
+    assert "Privacy" not in md
+    assert "Login" not in md
+
+
+def test_main_markdown_keeps_article_images_and_resolves_relative_urls() -> None:
+    pytest.importorskip("trafilatura")
+    md = extract_main_markdown(_NAV_ARTICLE_HTML, base_url="https://example.test/a")
+    assert md is not None
+    assert "](https://example.test/moon.jpg)" in md
+
+
+def test_main_markdown_falls_back_to_none_on_shell_page() -> None:
+    """A page with no detectable article returns None so callers fall back."""
+    trafilatura = pytest.importorskip("trafilatura")
+    shell = "<html><body><div>hi</div><span>loading…</span></body></html>"
+    assert extract_main_markdown(shell) is None

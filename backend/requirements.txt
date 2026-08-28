@@ -8,6 +8,7 @@ pydantic-settings>=2.6.0,<3
 httpx>=0.28.0,<1
 selectolax>=0.3.27
 markdownify>=1.1.0
+trafilatura>=2.0
 dramatiq[redis]>=1.17.0,<2
 redis>=5.2.0,<6
 boto3>=1.35.0,<2

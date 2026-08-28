@@ -16,6 +16,11 @@ try:
 except ImportError:  # pragma: no cover - fallback when the optional dep is missing
     markdownify = None
 
+try:
+    import trafilatura
+except ImportError:  # pragma: no cover - fallback when the optional dep is missing
+    trafilatura = None
+
 
 class ExtractionError(Exception):
     def __init__(self, code: str, message: str) -> None:
@@ -130,6 +135,19 @@ def extract_markdown(
             "blockquote",
             "table",
         ],
+        # Without this, markdownify silently drops any <img> whose direct
+        # parent is an inline element (<a><img></a>, <span>, <p> wrappers...)
+        # and keeps only its alt text — losing most linked logos/thumbnails.
+        keep_inline_images_in=[
+            "a",
+            "p",
+            "div",
+            "td",
+            "th",
+            "li",
+            "span",
+            "figure",
+        ],
     )
     text = normalize_text(md_text)
     return apply_ignore_regexes(text, ignore_regexes or [])
@@ -142,6 +160,69 @@ def normalize_text(text: str) -> str:
     text = "\n".join(line for line in lines if line != "")
     text = _BLANK_RE.sub("\n\n", text)
     return text.strip()
+
+
+# Minimum readable size for a main-content extraction to be trusted. Below this
+# the detector most likely missed the real content (or the page is a shell), so
+# we fall back to whole-body markdown.
+_MIN_MAIN_CONTENT_CHARS = 200
+
+
+def extract_main_markdown(
+    html: str,
+    *,
+    base_url: str | None = None,
+    ignore_selectors: list[str] | None = None,
+    ignore_regexes: list[str] | None = None,
+) -> str | None:
+    """Extract the *main content* of a page as markdown (webdog parity).
+
+    Uses trafilatura's readability engine — the self-hosted equivalent of
+    Context.dev's ``useMainContentOnly`` scrape — so navigation bars, headers,
+    footers, cookie banners and ads are stripped before conversion. Returns
+    ``None`` when no main content could be detected or the result is too small;
+    callers should fall back to :func:`extract_markdown` (whole body).
+    """
+    if trafilatura is None:
+        return None
+
+    # Pre-clean with the same noise hooks as extract_text/extract_markdown so
+    # user-configured ignore selectors still apply before detection.
+    tree = HTMLParser(html)
+    for node in tree.css("script, style, noscript, template"):
+        node.decompose()
+    for selector in ignore_selectors or []:
+        if not selector or not str(selector).strip():
+            continue
+        try:
+            for node in tree.css(str(selector).strip()):
+                node.decompose()
+        except Exception as exc:  # noqa: BLE001
+            raise ExtractionError(
+                "extraction_failed", f"Invalid ignore selector: {selector}"
+            ) from exc
+    cleaned = tree.html or html
+
+    try:
+        md = trafilatura.extract(
+            cleaned,
+            url=base_url or None,
+            output_format="markdown",
+            include_images=True,
+            include_links=True,
+            include_tables=True,
+            include_formatting=True,
+            favor_recall=True,
+        )
+    except Exception:  # noqa: BLE001 - extraction must never crash a check
+        logger.exception("trafilatura main-content extraction failed; falling back")
+        return None
+
+    if not md or len(md.strip()) < _MIN_MAIN_CONTENT_CHARS:
+        return None
+
+    text = normalize_text(md)
+    return apply_ignore_regexes(text, ignore_regexes or [])
 
 
 def content_hash(normalized_text: str) -> str:
