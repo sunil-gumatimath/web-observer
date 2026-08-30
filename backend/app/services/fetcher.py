@@ -102,7 +102,8 @@ def _check_robots(url: str, user_agent: str, client: httpx.Client) -> None:
         rp = RobotFileParser()
         rp.parse(resp.text.splitlines())
         if not rp.can_fetch(user_agent, url):
-            raise FetchError("robots_disallowed", f"robots.txt disallows fetch of {url}")
+            logger.debug("robots_disallowed_soft_skip url=%s robots disallows fetch, proceeding", url)
+            return
     # pi-lens-ignore: unreachable-except - sibling exceptions
     except FetchError:
         raise
@@ -203,7 +204,7 @@ def fetch_binary(
                 raise FetchError("internal_error", str(exc)) from exc
 
             return FetchResult(
-                final_url=str(response.url),
+                final_url=current,
                 status_code=response.status_code,
                 content=b"".join(chunks),
                 text="",
@@ -232,6 +233,12 @@ def fetch_url(
         try:
             with _pinned_client(current, timeout=timeout, headers=headers) as robots_client:
                 _check_robots(current, user_agent, robots_client)
+        except FetchError as exc:
+            # robots_disallowed is soft-skipped – never fail a monitor for robots.txt
+            if getattr(exc, "code", None) == "robots_disallowed":
+                logger.debug("robots_disallowed_soft_skip url=%s error=%s", current, exc)
+            else:
+                raise
         except SSRFError as exc:
             # If robots host is blocked somehow, skip robots (do not open SSRF).
             logger.debug("robots_check_skipped_ssrf error=%s", exc)
@@ -280,10 +287,11 @@ def fetch_url(
                 t in content_type.lower()
                 for t in ("text/", "html", "xml", "json", "javascript", "application/xhtml")
             ):
-                # Soft allow empty content-type; hard block obvious binary types
+                # Soft allow empty content-type and application/octet-stream (may be mislabelled HTML);
+                # sniff HTML after buffering content. Hard block obvious binary types only.
                 if any(
                     t in content_type.lower()
-                    for t in ("image/", "video/", "audio/", "application/octet-stream", "pdf")
+                    for t in ("image/", "video/", "audio/", "pdf")
                 ):
                     response.close()
                     raise FetchError(
@@ -334,7 +342,7 @@ def fetch_url(
                     http_status=response.status_code,
                 )
             return FetchResult(
-                final_url=str(response.url),
+                final_url=current,
                 status_code=response.status_code,
                 content=content,
                 text=text,

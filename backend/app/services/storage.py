@@ -31,7 +31,11 @@ def _use_local() -> bool:
 
 def _local_root() -> Path:
     settings = get_settings()
-    root = Path(getattr(settings, "local_storage_path", None) or "./data/snapshots")
+    raw = getattr(settings, "local_storage_path", None) or "./data/snapshots"
+    root = Path(raw)
+    if not root.is_absolute():
+        backend_dir = Path(__file__).resolve().parent.parent.parent
+        root = (backend_dir / root).resolve()
     root.mkdir(parents=True, exist_ok=True)
     return root
 

@@ -207,14 +207,21 @@ def execute_monitored_run(
             db.commit()
             for oid in outbox_extra:
                 deliver_outbox_message.send(str(oid))
-            if exc.code in ("read_timeout", "connection_timeout"):
-                raise
         except Exception as exc:  # noqa: BLE001
             logger.exception("%s_failed run_id=%s", worker_label, run_id)
             if domain:
                 record_domain_failure(domain)
             fail_run(db, run, "internal_error", str(exc)[:2000])
-            raise
+            outbox_extra = record_run_outcome(
+                db,
+                monitor=monitor,
+                succeeded=False,
+                error_code="internal_error",
+                error_message=str(exc)[:2000],
+            )
+            db.commit()
+            for oid in outbox_extra:
+                deliver_outbox_message.send(str(oid))
         finally:
             # Only release a slot we actually acquired.  If assert_domain_allowed
             # or acquire_domain_slot raised (e.g. DomainBlocked), slot_acquired

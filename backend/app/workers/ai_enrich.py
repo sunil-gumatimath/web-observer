@@ -42,13 +42,6 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
         if change is None:
             logger.warning("ai_enrich_missing change_id=%s", change_event_id)
             return
-        # Already enriched by LLM?
-        if change.ai_summary and "heuristic" not in (change.ai_summary or ""):
-            # Heuristic placeholder still contains template text with monitor name;
-            # we allow re-enrichment only once. Check provider via flag in summary?
-            # Simpler: if we already have a non-heuristic and tokens counted, skip
-            pass
-
         monitor = db.get(Monitor, change.monitor_id)
         if monitor is None:
             return
@@ -56,6 +49,16 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
         if workspace is None:
             return
 
+        # Idempotency check: skip if already enriched by LLM
+        is_heuristic_placeholder = (
+            "likely" in (change.ai_summary or "")
+            or "heuristic" in (change.ai_summary or "")
+            or "[Pending" in (change.ai_summary or "")
+            or change.ai_summary == (change.diff_summary or "")
+        )
+        if change.ai_summary and not is_heuristic_placeholder:
+            logger.info("ai_enrich_already_done change_id=%s", change_event_id)
+            return
         # Reconstruct diff_text if not supplied (fallback)
         if diff_text is None:
             try:

@@ -263,8 +263,23 @@ def _extract_and_store_snapshot(
         run.status = RunStatus.FAILED.value
         run.http_status = result.status_code
         run.latency_ms = result.latency_ms
-        run.error_code = "extraction_failed"
-        run.error_message = "Extracted content was empty"
+        # SPA hint: page has substantial HTML with script but extraction produced nothing
+        # and monitor is not using JS rendering – suggest enabling js_required.
+        html_text = result.text or ""
+        is_spa_hint = (
+            "<script" in html_text.lower()
+            and len(html_text) > 500
+            and not getattr(monitor, "js_required", False)
+        )
+        if is_spa_hint:
+            run.error_code = "js_required_hint"
+            run.error_message = (
+                "Extracted content was empty — page appears to require JavaScript rendering; "
+                "try enabling 'JavaScript rendering required' on this monitor."
+            )
+        else:
+            run.error_code = "extraction_failed"
+            run.error_message = "Extracted content was empty"
         run.finished_at = datetime.now(UTC)
         db.commit()
         return (
@@ -401,6 +416,7 @@ def _detect_change(
     # Visual: compare perceptual distance, not only exact hash
     prev_snapshot = db.get(Snapshot, prev.snapshot_id) if prev.snapshot_id else None
     prev_text = ""
+    storage_miss = False
     if prev_snapshot:
         if prev_snapshot.text_object_key:
             from app.services.storage import get_bytes
@@ -416,8 +432,10 @@ def _detect_change(
                     prev_snapshot.id,
                 )
                 prev_text = prev_snapshot.normalized_text or ""
+                storage_miss = True
         else:
             prev_text = prev_snapshot.normalized_text or ""
+            storage_miss = True
             if prev_text and len(prev_text) >= 500:
                 logger.info(
                     "snapshot_text_db_preview_only snapshot_id=%s len=%d "
@@ -436,15 +454,13 @@ def _detect_change(
         db.commit()
         return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
 
+    # Detect preview truncation: no text_object_key or storage miss, and DB preview indicates truncation
+    preview_truncated = storage_miss and len(prev_text) >= SNAPSHOT_DB_PREVIEW_CHARS
     if monitor.mode in LIST_DIFF_MODES:
         # When the previous snapshot's full text is missing (storage miss) and
         # only the truncated DB preview survives, reconstructing items from a
         # cut-off line would fabricate added/removed entries. Emit an honest
         # coarse summary instead of a lying item-level diff.
-        preview_truncated = (
-            not (prev_snapshot and prev_snapshot.text_object_key)
-            and len(prev_text) >= SNAPSHOT_DB_PREVIEW_CHARS
-        )
         if preview_truncated:
             logger.warning(
                 "list_diff_degraded_to_summary monitor_id=%s snapshot_id=%s",
@@ -460,8 +476,17 @@ def _detect_change(
             ctx.summary = ld.summary
             ctx.diff_text = ld.as_text_diff()
     else:
-        ctx.diff_text = unified_diff(prev_text, normalized)
-        ctx.summary = short_summary(prev_text, normalized)
+        if preview_truncated:
+            logger.warning(
+                "page_content_diff_degraded monitor_id=%s snapshot_id=%s",
+                monitor.id,
+                prev_snapshot.id if prev_snapshot else None,
+            )
+            ctx.summary = "Content changed (previous full content unavailable – diff limited to preview)"
+            ctx.diff_text = unified_diff(prev_text, normalized) + "\n\n[note: previous content was truncated to preview; diff may be incomplete]"
+        else:
+            ctx.diff_text = unified_diff(prev_text, normalized)
+            ctx.summary = short_summary(prev_text, normalized)
 
     from app.services.adaptive import note_check_outcome
 
@@ -501,8 +526,9 @@ def _create_change_event(
     from app.config import get_settings as _get_settings
 
     _settings = _get_settings()
+    effective_key = (llm_cfg.get("api_key") if llm_cfg else None) or _settings.llm_api_key
     # P3: async path — heuristic placeholder now, LLM in background
-    if _settings.ai_async_enrichment and llm_cfg and llm_cfg.get("api_key") and ai_enabled:
+    if _settings.ai_async_enrichment and effective_key and ai_enabled:
         enrichment = enrich_change(
             monitor_name=monitor.name,
             url=monitor.url,
@@ -663,38 +689,58 @@ def _queue_notifications(
         )
     ).all()
 
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
     outbox_ids: list[uuid.UUID] = []
     for channel in channels:
-        outbox = NotificationOutbox(
-            workspace_id=monitor.workspace_id,
-            change_event_id=change.id,
-            channel_id=channel.id,
-            payload={
-                "kind": "change",
-                "monitor_id": str(monitor.id),
-                "monitor_name": monitor.name,
-                "url": monitor.url,
-                "summary": ctx.summary,
-                "ai_summary": enrichment.summary if enrichment else None,
-                "category": enrichment.category if enrichment else None,
-                "diff": (ctx.diff_text or "")[:50_000],
-                "mode": monitor.mode,
-                "watch_note": getattr(monitor, "watch_note", None),
-                "screenshot_path": screenshot_path,
-                "change_event_id": str(change.id),
-                "channel_type": channel.type,
-                "to": channel.address,
-            },
-            status=OutboxStatus.PENDING.value,
-            # Key on the run id (stable across Dramatiq retries of the same run)
-            # rather than only change.id (freshly generated each attempt), so a
-            # run that is ever processed twice cannot enqueue duplicate
-            # notifications for the same change on the same channel.
-            idempotency_key=f"run:{change.run_id}:change:channel:{channel.id}",
+        # ON CONFLICT DO NOTHING: the idempotency key makes a duplicate insert
+        # a *normal* outcome rather than an error. A bare add()+flush() raised
+        # IntegrityError whenever the same run reached this step twice (e.g. a
+        # Dramatiq redelivery landing after a partial commit); that surfaced in
+        # run_guard as an unhandled failure, which marked a healthy check as
+        # failed and then re-raised so every retry failed identically — a poison
+        # pill. Swallowing the conflict keeps the run green and the outbox
+        # single-shot per (run, channel).
+        stmt = (
+            pg_insert(NotificationOutbox)
+            .values(
+                id=uuid.uuid4(),
+                workspace_id=monitor.workspace_id,
+                change_event_id=change.id,
+                channel_id=channel.id,
+                payload={
+                    "kind": "change",
+                    "monitor_id": str(monitor.id),
+                    "monitor_name": monitor.name,
+                    "url": monitor.url,
+                    "summary": ctx.summary,
+                    "ai_summary": enrichment.summary if enrichment else None,
+                    "category": enrichment.category if enrichment else None,
+                    "diff": (ctx.diff_text or "")[:50_000],
+                    "mode": monitor.mode,
+                    "watch_note": getattr(monitor, "watch_note", None),
+                    "screenshot_path": screenshot_path,
+                    "change_event_id": str(change.id),
+                    "channel_type": channel.type,
+                    "to": channel.address,
+                },
+                status=OutboxStatus.PENDING.value,
+                # Key on the run id (stable across Dramatiq retries of the same
+                # run) rather than only change.id (freshly generated each
+                # attempt), so a run that is ever processed twice cannot enqueue
+                # duplicate notifications for the same change on the same
+                # channel.
+                idempotency_key=f"run:{change.run_id}:change:channel:{channel.id}",
+            )
+            .on_conflict_do_nothing(index_elements=["idempotency_key"])
+            .returning(NotificationOutbox.id)
         )
-        db.add(outbox)
-        db.flush()
-        outbox_ids.append(outbox.id)
+        # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+        inserted_id = db.execute(stmt).scalar_one_or_none()
+        if inserted_id is None:
+            logger.info("outbox_already_queued run_id=%s channel_id=%s", change.run_id, channel.id)
+            continue
+        outbox_ids.append(inserted_id)
 
     # Outbound product webhooks (signed)
     from app.services.webhooks import enqueue_change_webhooks
