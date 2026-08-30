@@ -272,7 +272,14 @@ class Snapshot(Base):
         nullable=False,
         index=True,
     )
-    run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        # use_alter: monitor_runs.snapshot_id already points back at
+        # snapshots.id, so the two tables are mutually dependent and the
+        # constraint has to be added with ALTER TABLE after both exist.
+        ForeignKey("monitor_runs.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+    )
     content_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     normalized_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -435,7 +442,9 @@ class AuditLog(Base):
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
     )
-    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     actor_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -467,7 +476,9 @@ class ShareLink(Base):
     )
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     token_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
-    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -490,7 +501,9 @@ class WorkspaceInvite(Base):
     )
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     token_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
-    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     role: Mapped[str] = mapped_column(String(32), nullable=False, default="member")
     max_uses: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     use_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -521,7 +534,12 @@ class WebhookDelivery(Base):
     endpoint_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("webhook_endpoints.id", ondelete="CASCADE"), nullable=False
     )
-    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
