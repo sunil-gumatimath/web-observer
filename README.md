@@ -10,7 +10,7 @@ Web change-detection and alerting platform.
 
 ## Status
 
-**Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `006_alerts` (post-roadmap work added a storage optimization, the alerts inbox, and monitor watch notes). Billing is optional (solo use: skip Stripe).
+**Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `010_add_missing_foreign_keys` (post-roadmap work added a storage optimization, the alerts inbox, monitor watch notes, brand/workspace-key columns, and referential-integrity fixes). Billing is optional (solo use: skip Stripe).
 
 Verified end-to-end: backend unit tests pass, the frontend type-checks, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
@@ -100,10 +100,20 @@ sequenceDiagram
 **`backend/.env`:**
 
 ```env
+# development | test | production
+# Not optional: development mode is opt-in. An unset APP_ENV is treated as a
+# non-development environment so the production guards stay active.
+APP_ENV=development
+
 DATABASE_URL=postgresql+psycopg://USER:PASS@HOST/neondb?sslmode=require
 REDIS_URL=redis://localhost:6379/0
 STORAGE_BACKEND=local
 INTERNAL_API_TOKEN=dev-internal-token
+
+# Derives both the encryption key for workspace BYO secrets and the API-key
+# HMAC. Pin a stable value in production — restart with a random value makes
+# stored workspace keys unreadable and invalidates every mtw_ API key.
+SECRET_KEY=change-me-in-production
 
 CLERK_JWKS_URL=https://YOUR-INSTANCE.clerk.accounts.dev/.well-known/jwks.json
 CLERK_ISSUER=https://YOUR-INSTANCE.clerk.accounts.dev
@@ -111,6 +121,18 @@ CLERK_SECRET_KEY=sk_test_...
 ```
 
 Use `postgresql+psycopg://` (not plain `postgresql://`).
+
+**Production:** set `APP_ENV=production` and pin `SECRET_KEY` / `INTERNAL_API_TOKEN`
+to real values. Outside development the API refuses to start if either is
+missing or still holds a placeholder — and `Base.metadata.create_all()` is
+skipped, so schema changes come only from Alembic.
+
+Apply schema changes with Alembic (the single source of truth):
+
+```powershell
+cd backend
+alembic upgrade head
+```
 
 **`frontend/.env.local`:**
 
@@ -248,4 +270,8 @@ These extend the platform beyond the original roadmap:
 - **Teams** — **Settings → Team** generates expiring multi-use invite links with role/max-uses. Switch workspaces via `GET /me` and `localStorage` (`web_observer_workspace_id`).
 - **Opt-in screenshots** — `screenshots_enabled` off by default; when enabled, every check captures a fresh Playwright screenshot (`screenshots/{monitor_id}/{run_id}.png`) with aHash history.
 
-> Database: the columns/tables for these features are applied by `backend/scripts/apply_007.py` (idempotent; run with `PYTHONPATH=.` from `backend/`). New tables are also auto-created by `Base.metadata.create_all` at API startup.
+> Database: apply schema changes with `alembic upgrade head` from `backend/`.
+> Alembic is the single source of truth — ad-hoc `apply_*.py` scripts have been
+> removed so there is only one schema-application path. In development the API
+> also runs `Base.metadata.create_all()` at startup; in production it does not,
+> so migrations are never silently bypassed.
