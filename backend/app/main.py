@@ -59,12 +59,24 @@ def _cors_origins() -> list[str]:
     return [o.strip() for o in raw.split(",") if o.strip()]
 
 
+# Enumerated instead of "*": the wildcard is broader than the API needs, and it
+# is combined with allow_credentials=True. The origin list above is the real
+# security boundary; these lists just keep preflight responses honest.
+# X-Internal-Token is the dev/no-Clerk auth header sent by the frontend client.
+_ALLOWED_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+_ALLOWED_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "X-Internal-Token",
+    "Accept",
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_ALLOWED_METHODS,
+    allow_headers=_ALLOWED_HEADERS,
 )
 
 from app.routers.enterprise import router as enterprise_router  # noqa: E402

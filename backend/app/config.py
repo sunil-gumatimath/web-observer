@@ -1,8 +1,15 @@
+import logging
 import secrets
 from functools import lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+# Values of APP_ENV that opt into relaxed development behaviour.
+# Development mode is strictly opt-in: see ``Settings.is_development``.
+_DEV_ENV_NAMES = frozenset({"development", "dev", "local", "test", "testing"})
 
 
 class Settings(BaseSettings):
@@ -88,19 +95,71 @@ class Settings(BaseSettings):
 
     @property
     def is_development(self) -> bool:
-        return self.app_env == "development"
+        """True only when APP_ENV was *explicitly* set to a development value.
+
+        ``model_fields_set`` contains fields supplied by a real source (process
+        env, ``.env``, or constructor kwargs) and excludes ones filled by
+        ``default_factory``. Requiring an explicit ``APP_ENV`` means an unset
+        variable is treated as production rather than development.
+
+        This matters because every production guard below is skipped in
+        development. Previously ``app_env`` defaulted to ``"development"``, so a
+        production deploy that forgot to set ``APP_ENV`` silently disabled all
+        of them and additionally ran ``Base.metadata.create_all()`` at startup.
+        Failing closed means the mistake surfaces as a startup error naming the
+        variable to set, instead of as silent schema drift months later.
+        """
+        if "app_env" not in self.model_fields_set:
+            return False
+        return self.app_env.strip().lower() in _DEV_ENV_NAMES
+
+    @property
+    def secret_is_ephemeral(self) -> bool:
+        """True when SECRET_KEY fell back to the random per-process default."""
+        return "secret_key" not in self.model_fields_set
+
+    @property
+    def internal_token_is_ephemeral(self) -> bool:
+        """True when INTERNAL_API_TOKEN fell back to the random per-process default."""
+        return "internal_api_token" not in self.model_fields_set
 
 
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    if not settings.is_development:
-        if settings.internal_api_token == "dev-internal-token":
-            raise RuntimeError(
-                "INTERNAL_API_TOKEN must be set to a non-default value outside development"
-            )
-        if settings.secret_key == "change-me-in-production":
-            raise RuntimeError(
-                "SECRET_KEY must be set to a non-default value outside development"
-            )
+
+    if "app_env" not in settings.model_fields_set:
+        # Not fatal on its own - every guard below still applies - but this is
+        # the single most likely cause of a confusing production failure, so
+        # make it loud.
+        logger.warning(
+            "APP_ENV is not set; assuming a non-development environment. "
+            "Set APP_ENV=development for local/CI runs, or APP_ENV=production "
+            "for deployed environments."
+        )
+
+    if settings.is_development:
+        return settings
+
+    if settings.secret_is_ephemeral:
+        raise RuntimeError(
+            "SECRET_KEY is not set. It must be pinned to a stable value outside "
+            "development: it derives both the encryption key for workspace BYO "
+            "secrets and the API-key HMAC, so a random per-process value makes "
+            "every stored workspace key unreadable and invalidates every mtw_ "
+            "API key on restart. Set SECRET_KEY in the environment."
+        )
+    if settings.secret_key == "change-me-in-production":
+        raise RuntimeError("SECRET_KEY must be set to a non-default value outside development")
+    if settings.internal_token_is_ephemeral:
+        raise RuntimeError(
+            "INTERNAL_API_TOKEN is not set. It grants owner-equivalent access to "
+            "every workspace (including /internal/seed), so a random per-process "
+            "value is not acceptable outside development. "
+            "Set INTERNAL_API_TOKEN in the environment."
+        )
+    if settings.internal_api_token == "dev-internal-token":
+        raise RuntimeError(
+            "INTERNAL_API_TOKEN must be set to a non-default value outside development"
+        )
     return settings

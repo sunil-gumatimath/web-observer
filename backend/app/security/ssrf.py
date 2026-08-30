@@ -175,4 +175,7 @@ class PinnedIPTransport(httpx.HTTPTransport):
         request.extensions.setdefault("sni_hostname", self._server_hostname)
         # Pin the actual TCP target to the validated IP.
         request.url = original.copy_with(host=self._pinned_ip)
-        return super().handle_request(request)
+        try:
+            return super().handle_request(request)
+        finally:
+            request.url = original
