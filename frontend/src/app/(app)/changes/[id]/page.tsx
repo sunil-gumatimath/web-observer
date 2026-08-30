@@ -17,6 +17,7 @@ import { GithubDiff } from "@/components/github-diff";
 import { api } from "@/lib/api";
 import type {
 	ChangeEventDetail,
+	Monitor,
 	MonitorRun,
 	SnapshotAccess,
 } from "@/lib/types";
@@ -35,6 +36,7 @@ export default function ChangeDetailPage() {
 	const [prevSnap, setPrevSnap] = useState<SnapshotAccess | null>(null);
 	const [newSnap, setNewSnap] = useState<SnapshotAccess | null>(null);
 	const [run, setRun] = useState<MonitorRun | null>(null);
+	const [monitor, setMonitor] = useState<Monitor | null>(null);
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
@@ -60,6 +62,16 @@ export default function ChangeDetailPage() {
 			cancelled = true;
 		};
 	}, [params.id]);
+
+	// Load monitor for baseUrl image resolution.
+	useEffect(() => {
+		if (!workspaceId || !change) return;
+		let cancelled = false;
+		api.getMonitor(workspaceId, change.monitor_id)
+			.then((m) => { if (!cancelled) setMonitor(m); })
+			.catch(() => {});
+		return () => { cancelled = true; };
+	}, [workspaceId, change]);
 
 	// Load snapshot metadata (timestamps) and run status.
 	useEffect(() => {
@@ -151,12 +163,17 @@ export default function ChangeDetailPage() {
 			</div>
 
 			{change.ai_summary ? (
-				<Card className="mb-4">
-					<p className="section-label">AI summary</p>
-					<p className="mt-2.5 text-sm leading-relaxed text-slate-800 dark:text-slate-200">
+				<div className="mb-5 overflow-hidden rounded-xl border border-sky-500/20 bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent p-4 shadow-sm dark:border-sky-500/30 dark:from-sky-950/40 dark:via-indigo-950/20">
+					<div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-400">
+						<svg className="h-4 w-4 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
+							<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/>
+						</svg>
+						<span>AI Change Summary</span>
+					</div>
+					<p className="mt-2 text-sm leading-relaxed font-medium text-slate-900 dark:text-slate-100">
 						{change.ai_summary}
 					</p>
-				</Card>
+				</div>
 			) : null}
 
 			<div className="mb-4 grid gap-3 sm:grid-cols-2">
@@ -212,6 +229,7 @@ export default function ChangeDetailPage() {
 						before={change.previous_text}
 						after={change.new_text}
 						unifiedDiff={change.diff}
+						baseUrl={monitor?.url}
 					/>
 				</div>
 			)}

@@ -125,7 +125,7 @@ function Gutter({ no }: { no?: number }) {
  * captured visuals (logos, screenshots of sections) are visible in alerts.
  * Unresolvable image tokens degrade to their alt text.
  */
-function DiffLineText({ text }: { text: string }) {
+function DiffLineText({ text, baseUrl }: { text: string; baseUrl?: string }) {
 	const segs = useMemo(() => splitLineSegments(text || ""), [text]);
 	if (segs.length === 0) return null;
 	return (
@@ -133,7 +133,7 @@ function DiffLineText({ text }: { text: string }) {
 			{segs.map((s, i) =>
 				s.type === "image" ? (
 					(() => {
-						const url = resolveImageUrl(s.src);
+						const url = resolveImageUrl(s.src, baseUrl);
 						return url ? (
 							// eslint-disable-next-line @next/next/no-img-element
 							<img
@@ -163,10 +163,12 @@ function SplitCell({
 	text,
 	no,
 	variant,
+	baseUrl,
 }: {
 	text?: string;
 	no?: number;
 	variant: "equal" | "del" | "add" | "empty";
+	baseUrl?: string;
 }) {
 	const bg =
 		variant === "del"
@@ -193,7 +195,7 @@ function SplitCell({
 				)}
 			>
 				{sign}
-				<DiffLineText text={text ?? ""} />
+				<DiffLineText text={text ?? ""} baseUrl={baseUrl} />
 			</span>
 		</div>
 	);
@@ -202,9 +204,11 @@ function SplitCell({
 function UnifiedLine({
 	text,
 	variant,
+	baseUrl,
 }: {
 	text: string;
 	variant: "equal" | "del" | "add";
+	baseUrl?: string;
 }) {
 	const cls =
 		variant === "del"
@@ -220,7 +224,7 @@ function UnifiedLine({
 			<span className="min-w-0 flex-1 overflow-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]">
 				{srPrefix ? <span className="sr-only">{srPrefix}</span> : null}
 				<span aria-hidden="true">{sign}</span>
-				<DiffLineText text={text} />
+				<DiffLineText text={text} baseUrl={baseUrl} />
 			</span>
 		</div>
 	);
@@ -244,10 +248,12 @@ export function GithubDiff({
 	before,
 	after,
 	unifiedDiff,
+	baseUrl,
 }: {
 	before: string | null;
 	after: string | null;
 	unifiedDiff?: string | null;
+	baseUrl?: string;
 }) {
 	const [view, setView] = useState<"split" | "unified">("split");
 
@@ -352,20 +358,20 @@ export function GithubDiff({
 						{rows.map((r, i) => {
 							if (r.kind === "equal")
 								return (
-									<UnifiedLine key={i} text={r.left ?? ""} variant="equal" />
+									<UnifiedLine key={i} text={r.left ?? ""} variant="equal" baseUrl={baseUrl} />
 								);
 							if (r.kind === "del")
 								return (
-									<UnifiedLine key={i} text={r.left ?? ""} variant="del" />
+									<UnifiedLine key={i} text={r.left ?? ""} variant="del" baseUrl={baseUrl} />
 								);
 							if (r.kind === "add")
 								return (
-									<UnifiedLine key={i} text={r.right ?? ""} variant="add" />
+									<UnifiedLine key={i} text={r.right ?? ""} variant="add" baseUrl={baseUrl} />
 								);
 							return (
 								<div key={i}>
-									<UnifiedLine text={r.left ?? ""} variant="del" />
-									<UnifiedLine text={r.right ?? ""} variant="add" />
+									<UnifiedLine text={r.left ?? ""} variant="del" baseUrl={baseUrl} />
+									<UnifiedLine text={r.right ?? ""} variant="add" baseUrl={baseUrl} />
 								</div>
 							);
 						})}
@@ -391,23 +397,23 @@ export function GithubDiff({
 							<div key={i} className="grid w-full min-w-0 grid-cols-2">
 								{r.kind === "del" ? (
 									<>
-										<SplitCell text={r.left} no={r.leftNo} variant="del" />
-										<SplitCell variant="empty" />
+										<SplitCell text={r.left} no={r.leftNo} variant="del" baseUrl={baseUrl} />
+										<SplitCell variant="empty" baseUrl={baseUrl} />
 									</>
 								) : r.kind === "add" ? (
 									<>
-										<SplitCell variant="empty" />
-										<SplitCell text={r.right} no={r.rightNo} variant="add" />
+										<SplitCell variant="empty" baseUrl={baseUrl} />
+										<SplitCell text={r.right} no={r.rightNo} variant="add" baseUrl={baseUrl} />
 									</>
 								) : r.kind === "replace" ? (
 									<>
-										<SplitCell text={r.left} no={r.leftNo} variant="del" />
-										<SplitCell text={r.right} no={r.rightNo} variant="add" />
+										<SplitCell text={r.left} no={r.leftNo} variant="del" baseUrl={baseUrl} />
+										<SplitCell text={r.right} no={r.rightNo} variant="add" baseUrl={baseUrl} />
 									</>
 								) : (
 									<>
-										<SplitCell text={r.left} no={r.leftNo} variant="equal" />
-										<SplitCell text={r.right} no={r.rightNo} variant="equal" />
+										<SplitCell text={r.left} no={r.leftNo} variant="equal" baseUrl={baseUrl} />
+										<SplitCell text={r.right} no={r.rightNo} variant="equal" baseUrl={baseUrl} />
 									</>
 								)}
 							</div>

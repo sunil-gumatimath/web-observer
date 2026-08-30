@@ -174,7 +174,15 @@ function MonitorDetailInner() {
 			(r) => r.status === "succeeded" && r.snapshot_id,
 		);
 		const snapId = latestOk?.snapshot_id ?? null;
-		if (!workspaceId || !snapId || snapId === latestSnapshotId.current) {
+		if (!snapId) {
+			if (latestSnapshotId.current !== null) {
+				latestSnapshotId.current = null;
+				setPreviewText(null);
+				setPreviewLoading(false);
+			}
+			return;
+		}
+		if (!workspaceId || snapId === latestSnapshotId.current) {
 			return;
 		}
 		latestSnapshotId.current = snapId;
@@ -185,7 +193,10 @@ function MonitorDetailInner() {
 				const snap = await api.getSnapshot(workspaceId, snapId);
 				if (!cancelled) setPreviewText(snap.normalized_text || "");
 			} catch {
-				if (!cancelled) setPreviewText(null);
+				if (!cancelled) {
+					setPreviewText(null);
+					latestSnapshotId.current = null;
+				}
 			} finally {
 				if (!cancelled) setPreviewLoading(false);
 			}
@@ -284,11 +295,13 @@ function MonitorDetailInner() {
 	}
 
 	async function handleGenerateAiSummary() {
-		if (!workspaceId || !latestTerminal?.snapshot_id) return;
+		if (!workspaceId) return;
+		const latestOk = runs.find((r) => r.status === "succeeded" && r.snapshot_id);
+		if (!latestOk?.snapshot_id) return;
 		setAiSummarizing(true);
 		setError(null);
 		try {
-			const res = await api.getSnapshotAiSummary(workspaceId, latestTerminal.snapshot_id);
+			const res = await api.getSnapshotAiSummary(workspaceId, latestOk.snapshot_id);
 			setSnapshotAiSummary(res.summary);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Failed to generate AI summary");
@@ -633,7 +646,7 @@ function MonitorDetailInner() {
 						) : null}
 					</div>
 
-					{latestTerminal?.status === "succeeded" ? (
+					{hasSuccessfulSnapshot ? (
 						<div className="mt-4 border-t border-[var(--border)] pt-4">
 							{previewLoading ? (
 								<p className="text-sm text-slate-500">
@@ -749,7 +762,7 @@ function MonitorDetailInner() {
 			</section>
 
 			{/* Always available readable snapshot (not only right after create) */}
-			{!showResultCard && latestTerminal?.status === "succeeded" ? (
+			{!showResultCard && hasSuccessfulSnapshot ? (
 				<section className="mb-8">
 					<SectionTitle>Latest captured content</SectionTitle>
 					{previewLoading ? (
