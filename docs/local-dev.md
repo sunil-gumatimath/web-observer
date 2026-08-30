@@ -61,6 +61,8 @@ cd backend
 # DATABASE_URL, REDIS_URL, STORAGE_BACKEND=local, INTERNAL_API_TOKEN, Clerk JWKS
 ```
 
+`APP_ENV` controls schema bootstrap: default `development`; dev values `development`/`dev`/`local`/`test`/`testing` auto-create tables via `create_all` (see `app/main.py` lifespan), `production`/`staging` require `alembic upgrade head`. Set `APP_ENV=production` in prod.
+
 ---
 
 ## 3. Backend venv + deps
@@ -125,8 +127,7 @@ npm run dev
 | http://127.0.0.1:8002/health | API process |
 | http://127.0.0.1:8002/ready | DB connectivity |
 
-Tables are created on API startup (`create_all`). Run Alembic for existing DBs when migrations ship.
-
+Tables are auto-created only when APP_ENV is development/test/testing (see app/main.py lifespan); production schema is managed by Alembic migrations. Set APP_ENV=production in prod and run `alembic upgrade head`.
 ---
 
 ## 5. Frontend env

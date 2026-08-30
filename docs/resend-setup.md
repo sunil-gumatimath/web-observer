@@ -2,7 +2,7 @@
 
 Web Observer sends alert emails through the **notification worker** using the official Resend SDK.
 
-## Configure (root `.env`)
+## Configure (`backend/.env` or root `.env`)
 
 ```env
 RESEND_API_KEY=re_your_real_key_here

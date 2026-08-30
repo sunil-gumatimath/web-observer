@@ -44,4 +44,4 @@ See `docs/integrations/n8n-zapier.md`.
 
 ## Migration
 
-`alembic upgrade head` → **006**
+`alembic upgrade head` (Phase 6–7 schema is introduced in revision `004_phase6_7_enterprise`; project head is `010_add_missing_foreign_keys`).

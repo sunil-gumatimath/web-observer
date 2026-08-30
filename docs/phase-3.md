@@ -46,7 +46,7 @@ Create a monitor with **JavaScript rendering required** or **Visual** mode in th
 ```bash
 cd backend
 alembic upgrade head
-# or rely on create_all for fresh local DBs
+# Alembic is required in production/staging; create_all only runs when APP_ENV in (development, test, testing) — see backend/app/main.py.
 ```
 
 ## Ops notes
