@@ -9,10 +9,10 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.auth import (
     AuthPrincipal,
@@ -57,6 +57,7 @@ from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
 from app.services.structured import diff_lists, items_from_normalized
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
+from app.workers.branding import enrich_monitor_brand as enqueue_brand_enrichment
 from app.workers.enqueue import enqueue_check
 
 # Cap how much snapshot text is decoded and returned / diffed in one response so
@@ -102,25 +103,34 @@ def list_monitors(
     db: Db,
     _workspace: AnyWs,
 ) -> list[Monitor]:
-    monitors = list(
-        db.scalars(
-            select(Monitor).where(Monitor.workspace_id == workspace_id).order_by(Monitor.created_at)
-        ).all()
-    )
-
-    # Latest change per monitor (Postgres DISTINCT ON keeps the first row per
-    # monitor_id, which is the newest thanks to the ordering). Uses the existing
-    # ix_change_events_monitor_created index.
-    recent = db.scalars(
+    # Latest change per monitor via a LATERAL join: the subquery runs once per
+    # monitor, walks ix_change_events_monitor_created and stops at the first
+    # row, so cost scales with the number of monitors (plan-capped) rather than
+    # with how much change history the workspace has accumulated.
+    #
+    # The previous DISTINCT ON form was correct but unbounded — it read and
+    # sorted *every* change event in the workspace on every dashboard load, so
+    # a long-lived workspace paid for its entire history on every request.
+    latest_change = (
         select(ChangeEvent)
-        .where(ChangeEvent.workspace_id == workspace_id)
-        .order_by(ChangeEvent.monitor_id, ChangeEvent.created_at.desc())
-        .distinct(ChangeEvent.monitor_id)
-    ).all()
-    latest_by_monitor = {ce.monitor_id: ce for ce in recent}
+        .where(ChangeEvent.monitor_id == Monitor.id)
+        .order_by(ChangeEvent.created_at.desc())
+        .limit(1)
+        .lateral("latest_change")
+    )
+    latest_ce = aliased(ChangeEvent, latest_change)
 
-    for monitor_row in monitors:
-        ce = latest_by_monitor.get(monitor_row.id)
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+    rows = db.execute(
+        select(Monitor, latest_ce)
+        .select_from(Monitor)
+        .outerjoin(latest_ce, true())
+        .where(Monitor.workspace_id == workspace_id)
+        .order_by(Monitor.created_at)
+    ).all()
+
+    monitors: list[Monitor] = []
+    for monitor_row, ce in rows:
         latest: LatestChangeOut | None = (
             LatestChangeOut(
                 id=ce.id,
@@ -137,6 +147,7 @@ def list_monitors(
         # Monitor has no latest_change column; the ORM instance just carries
         # it for the response serializer (MonitorOut.latest_change).
         monitor_row.latest_change = latest  # type: ignore[attr-defined]
+        monitors.append(monitor_row)
     return monitors
 
 
@@ -240,19 +251,22 @@ def create_monitor(
                 )
             )
 
-    # Brand-aware dashboard: best-effort auto-populate logo/title/description/hero
-    # from the page's HTML meta (og:title, og:description, og:image, favicon).
-    # Must never fail monitor creation — brand is optional enrichment.
-    try:
-        meta = fetch_brand_info(monitor.url)
-        # Only store if we found something useful
-        if meta.title or meta.description or meta.logo_candidates or meta.hero_candidates:
-            monitor.brand = store_brand_assets(monitor, meta)
-    except Exception as exc:  # noqa: BLE001 - brand is optional enrichment
-        logger.debug("brand_info_failed url=%s error=%s", monitor.url, exc)
-
     db.commit()
     db.refresh(monitor)
+
+    # Brand-aware dashboard: best-effort auto-populate logo/title/description/hero
+    # from the page's HTML meta (og:title, og:description, og:image, favicon).
+    # Dispatched to a background worker rather than fetched inline: it is an
+    # outbound request to a user-supplied URL, and doing it here stalled an API
+    # worker thread for the whole fetch on a path where the caller never sees
+    # the brand data before the response returns.
+    try:
+        # Imported under an alias: this module also defines a route handler
+        # named `enrich_monitor_brand`.
+        enqueue_brand_enrichment.send(str(monitor.id))
+    except Exception as exc:  # noqa: BLE001 - brand is optional enrichment
+        logger.warning("brand_enrich_enqueue_failed monitor_id=%s error=%s", monitor.id, exc)
+
     return monitor
 
 
@@ -378,7 +392,13 @@ def monitor_brand_info(
     "/workspaces/{workspace_id}/monitors/{monitor_id}/brand",
     response_model=MonitorOut,
 )
+# Rate-limited because this one still runs inline: it is an explicit
+# user-initiated refresh where the caller is waiting on the result, so it stays
+# synchronous — but each call is an outbound fetch to a user-supplied URL and
+# blocks a worker thread until it resolves.
+@limiter.limit("10/minute")
 def enrich_monitor_brand(
+    request: Request,
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
@@ -405,6 +425,7 @@ def update_monitor(
     _workspace: MemberWs,
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
+    prev_enabled = bool(monitor.enabled)
     data = body.model_dump(exclude_unset=True)
 
     config_fields = {
@@ -451,6 +472,11 @@ def update_monitor(
                 "js_required is not supported"
             ),
         )
+
+    # PATCH re-enabling a paused monitor should schedule next run promptly
+    # (parity with POST /resume which sets next_run_at = now + 5s).
+    if "enabled" in data and data["enabled"] and not prev_enabled:
+        monitor.next_run_at = datetime.now(UTC) + timedelta(seconds=5)
 
     db.commit()
     db.refresh(monitor)
@@ -728,6 +754,9 @@ def get_change(
     if change is None:
         raise HTTPException(status_code=404, detail="Change event not found")
 
+    # Track whether we had to fall back to truncated DB preview due to storage miss
+    prev_truncated = False
+    new_truncated = False
     prev_text = None
     new_text = None
     if change.previous_snapshot_id:
@@ -736,18 +765,44 @@ def get_change(
             prev_key = getattr(prev, "text_object_key", None)
             if prev_key:
                 b = get_bytes(prev_key)
-                prev_text = b.decode("utf-8") if b else (prev.normalized_text or "")
+                if b is not None:
+                    prev_text = b.decode("utf-8")
+                else:
+                    logger.warning(
+                        "snapshot_text_storage_miss key=%s snapshot_id=%s falling_back_to_db_preview_change",
+                        prev_key,
+                        prev.id,
+                    )
+                    prev_text = prev.normalized_text or ""
+                    if prev_text and len(prev_text) >= 500:
+                        prev_truncated = True
+                        prev_text = prev_text + "\n…[preview truncated – full content unavailable]"
             else:
                 prev_text = prev.normalized_text or ""
+                if prev_text and len(prev_text) >= 500:
+                    prev_truncated = True
 
     new_snap = db.get(Snapshot, change.new_snapshot_id)
     if new_snap and new_snap.workspace_id == workspace_id:
         new_key = getattr(new_snap, "text_object_key", None)
         if new_key:
             b = get_bytes(new_key)
-            new_text = b.decode("utf-8") if b else (new_snap.normalized_text or "")
+            if b is not None:
+                new_text = b.decode("utf-8")
+            else:
+                logger.warning(
+                    "snapshot_text_storage_miss key=%s snapshot_id=%s falling_back_to_db_preview_change",
+                    new_key,
+                    new_snap.id,
+                )
+                new_text = new_snap.normalized_text or ""
+                if new_text and len(new_text) >= 500:
+                    new_truncated = True
+                    new_text = new_text + "\n…[preview truncated – full content unavailable]"
         else:
             new_text = new_snap.normalized_text or ""
+            if new_text and len(new_text) >= 500:
+                new_truncated = True
 
     prev_text = _cap_text(prev_text)
     new_text = _cap_text(new_text)
@@ -757,12 +812,21 @@ def get_change(
 
     diff = None
     if mode in LIST_DIFF_MODES and prev_text is not None and new_text is not None:
-        # List modes: render the +/- item diff (consistent with alert-time
-        # rendering). A raw unified diff would double-prefix stored
-        # "- item" lines as "- - item".
-        ld = diff_lists(items_from_normalized(prev_text), items_from_normalized(new_text))
-        diff = ld.as_text_diff()
+        if prev_truncated:
+            # Degraded: previous full list unavailable, avoid fabricating item-level diff
+            diff = "(item-level diff skipped: previous text truncated)"
+        else:
+            # List modes: render the +/- item diff (consistent with alert-time
+            # rendering). A raw unified diff would double-prefix stored
+            # "- item" lines as "- - item".
+            ld = diff_lists(items_from_normalized(prev_text), items_from_normalized(new_text))
+            diff = ld.as_text_diff()
     elif prev_text is not None and new_text is not None:
+        if prev_truncated or new_truncated:
+            logger.warning(
+                "change_diff_degraded_truncated change_id=%s prev_truncated=%s new_truncated=%s",
+                change.id, prev_truncated, new_truncated,
+            )
         diff = unified_diff(prev_text, new_text)
     elif new_text is not None:
         diff = unified_diff("", new_text)
@@ -984,10 +1048,25 @@ def get_snapshot(
 
     full_text = snap.normalized_text or ""
     snap_key = getattr(snap, "text_object_key", None)
+    storage_miss = False
     if snap_key:
         stored = get_bytes(snap_key)
-        if stored:
+        if stored is not None:
             full_text = stored.decode("utf-8")
+        else:
+            logger.warning(
+                "snapshot_text_storage_miss key=%s snapshot_id=%s falling_back_to_db_preview_snapshot",
+                snap_key,
+                snap.id,
+            )
+            # full_text already holds DB preview (500 chars); mark truncated
+            if full_text and len(full_text) >= 500:
+                storage_miss = True
+                full_text = full_text + "\n…[preview truncated – full content unavailable]"
+    else:
+        if full_text and len(full_text) >= 500:
+            storage_miss = True
+            full_text = full_text + "\n…[preview truncated – full content unavailable]"
 
     full_text = _cap_text(full_text)
 
@@ -1026,16 +1105,26 @@ def get_snapshot_ai_summary(
             full_text = stored.decode("utf-8")
 
     from app.services.ai_summary import summarize_snapshot_text
+    from app.services.crypto import decrypt_secret
 
     monitor = None
     if snap.monitor_id:
         monitor = db.get(Monitor, snap.monitor_id)
+
+    llm_cfg = None
+    if _workspace.llm_api_key or _workspace.llm_api_base or _workspace.llm_model:
+        llm_cfg = {
+            "api_key": decrypt_secret(_workspace.llm_api_key),
+            "api_base": _workspace.llm_api_base,
+            "model": _workspace.llm_model,
+        }
 
     summary = summarize_snapshot_text(
         full_text,
         url=monitor.url if monitor else "",
         watch_note=monitor.watch_note if monitor else None,
         brand=monitor.brand if monitor else None,
+        llm=llm_cfg,
     )
     return {"summary": summary}
 
