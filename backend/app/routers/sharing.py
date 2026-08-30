@@ -47,7 +47,7 @@ from app.schemas import (
     WorkspaceInviteRedeemOut,
 )
 from app.services.audit import write_audit
-from app.services.branding import brand_asset_allowed
+from app.services.branding import brand_asset_allowed, sniff_image_type
 from app.services.storage import get_bytes
 from app.services.tokens import hash_token, new_token
 
@@ -441,8 +441,12 @@ def get_public_brand_asset(request: Request, object_key: str) -> Response:
     data = get_bytes(object_key)
     if not data:
         return Response(status_code=404)
+    # Serve the type the bytes actually are. Assets were previously always
+    # labelled image/png, so SVG/ICO logos (Hacker News ships an SVG favicon)
+    # returned 200 but rendered as a broken image in the browser.
+    _ext, media_type = sniff_image_type(data)
     return Response(
         content=data,
-        media_type="image/png",
+        media_type=media_type,
         headers={"Cache-Control": "public, max-age=86400"},
     )
