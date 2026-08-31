@@ -119,5 +119,55 @@ def ready(db: Db) -> HealthResponse:
     return HealthResponse(status="ready", version=__version__)
 
 
+@app.get("/metrics")
+def metrics(db: Db):
+    """Prometheus-compatible metrics (lightweight, no extra deps)."""
+    from sqlalchemy import func as _func
+
+    from app.models import ChangeEvent as _CE
+    from app.models import Monitor as _Mon
+    from app.models import MonitorRun as _Run
+    from app.models import NotificationOutbox as _Outbox
+    from app.models import WebhookDelivery as _WD
+
+    try:
+        from datetime import UTC as _UTC, datetime as _dt, timedelta as _td
+
+        monitors_total = db.scalar(select(_func.count()).select_from(_Mon)) or 0
+        since = _dt.now(_UTC) - _td(hours=24)
+        runs_24h = db.scalar(select(_func.count()).select_from(_Run).where(_Run.created_at >= since)) or 0
+        changes_24h = db.scalar(select(_func.count()).select_from(_CE).where(_CE.created_at >= since)) or 0
+        pending_outbox = (
+            db.scalar(select(_func.count()).select_from(_Outbox).where(_Outbox.status == "pending")) or 0
+        )
+        pending_webhooks = (
+            db.scalar(select(_func.count()).select_from(_WD).where(_WD.status == "pending")) or 0
+        )
+    except Exception as exc:
+        logger.warning("metrics_failed error=%s", exc)
+        monitors_total = runs_24h = changes_24h = pending_outbox = pending_webhooks = 0
+
+    lines = [
+        "# HELP webobserver_monitors_total Total monitors",
+        "# TYPE webobserver_monitors_total gauge",
+        f"webobserver_monitors_total {monitors_total}",
+        "# HELP webobserver_runs_24h Runs in last 24h",
+        "# TYPE webobserver_runs_24h gauge",
+        f"webobserver_runs_24h {runs_24h}",
+        "# HELP webobserver_changes_24h Changes in last 24h",
+        "# TYPE webobserver_changes_24h gauge",
+        f"webobserver_changes_24h {changes_24h}",
+        "# HELP webobserver_outbox_pending Pending notifications",
+        "# TYPE webobserver_outbox_pending gauge",
+        f"webobserver_outbox_pending {pending_outbox}",
+        "# HELP webobserver_webhooks_pending Pending webhooks",
+        "# TYPE webobserver_webhooks_pending gauge",
+        f"webobserver_webhooks_pending {pending_webhooks}",
+    ]
+    from fastapi.responses import PlainTextResponse
+
+    return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+
+
 # Keep import used for type checkers / future bootstrap endpoints
 _ = ensure_default_workspace

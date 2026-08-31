@@ -7,7 +7,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select, true
 from sqlalchemy import update as sa_update
@@ -92,6 +92,128 @@ def _get_monitor(db: Session, workspace_id: UUID, monitor_id: UUID) -> Monitor:
     if monitor is None:
         raise HTTPException(status_code=404, detail="Monitor not found")
     return monitor
+
+
+@router.get("/workspaces/{workspace_id}/monitors/{monitor_id}/events")
+def monitor_events(
+    workspace_id: UUID,
+    monitor_id: UUID,
+    db: Db,
+    _workspace: AnyWs,
+):
+    """SSE stream for monitor run status and change events (polling-backed)."""
+    import asyncio
+    import json
+
+    from fastapi.responses import StreamingResponse
+
+    _get_monitor(db, workspace_id, monitor_id)
+
+    async def gen():
+        from app.db import SessionLocal
+
+        last_run_status: str | None = None
+        last_change_id: str | None = None
+        # Send initial hello
+        yield "event: connected\ndata: {\"ok\": true}\n\n"
+        for _ in range(120):  # ~3 min max (1.5s * 120)
+            await asyncio.sleep(1.5)
+            try:
+                with SessionLocal() as s:
+                    run = s.scalar(
+                        select(MonitorRun)
+                        .where(MonitorRun.monitor_id == monitor_id)
+                        .order_by(MonitorRun.created_at.desc())
+                        .limit(1)
+                    )
+                    change = s.scalar(
+                        select(ChangeEvent)
+                        .where(ChangeEvent.monitor_id == monitor_id)
+                        .order_by(ChangeEvent.created_at.desc())
+                        .limit(1)
+                    )
+                    if run and run.status != last_run_status:
+                        last_run_status = run.status
+                        payload = json.dumps(
+                            {
+                                "type": "run",
+                                "run_id": str(run.id),
+                                "status": run.status,
+                                "http_status": run.http_status,
+                                "latency_ms": run.latency_ms,
+                                "error_code": run.error_code,
+                            }
+                        )
+                        yield f"event: run\ndata: {payload}\n\n"
+                        if run.status in ("succeeded", "failed"):
+                            # also check change after success
+                            pass
+                    if change and str(change.id) != last_change_id:
+                        last_change_id = str(change.id)
+                        payload = json.dumps(
+                            {
+                                "type": "change",
+                                "change_id": str(change.id),
+                                "summary": change.diff_summary,
+                                "ai_summary": change.ai_summary,
+                                "category": change.change_category,
+                                "is_noise": bool(change.is_noise),
+                            }
+                        )
+                        yield f"event: change\ndata: {payload}\n\n"
+                    if run and run.status in ("succeeded", "failed", "cancelled") and run.finished_at:
+                        # finish streaming after terminal state observed twice
+                        pass
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                yield "event: error\ndata: {\"error\": \"stream error\"}\n\n"
+                break
+        yield "event: done\ndata: {}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"})
+
+
+@router.get("/workspaces/{workspace_id}/monitors/{monitor_id}/badge.svg")
+def monitor_badge(
+    workspace_id: UUID,
+    monitor_id: UUID,
+    db: Db,
+):
+    """Public SVG badge for monitor status (no auth, cached)."""
+    from fastapi.responses import Response
+
+    monitor = db.scalar(select(Monitor).where(Monitor.id == monitor_id))
+    if monitor is None or monitor.workspace_id != workspace_id:
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="20"><rect width="120" height="20" fill="#555"/><text x="60" y="14" fill="#fff" text-anchor="middle" font-size="11">not found</text></svg>'
+        return Response(content=svg, media_type="image/svg+xml")
+    last_change = db.scalar(
+        select(ChangeEvent)
+        .where(ChangeEvent.monitor_id == monitor_id)
+        .order_by(ChangeEvent.created_at.desc())
+        .limit(1)
+    )
+    last_run = db.scalar(
+        select(MonitorRun)
+        .where(MonitorRun.monitor_id == monitor_id)
+        .order_by(MonitorRun.created_at.desc())
+        .limit(1)
+    )
+    if last_run and last_run.status == "failed":
+        color = "#e11d48"
+        label = "failing"
+    elif last_change and not last_change.is_noise:
+        color = "#0ea5e9"
+        label = "changed"
+    elif monitor.enabled:
+        color = "#10b981"
+        label = "monitoring"
+    else:
+        color = "#64748b"
+        label = "paused"
+    # Simple badge svg
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="140" height="20"><rect width="70" height="20" fill="#555"/><rect x="70" width="70" height="20" fill="{color}"/><text x="35" y="14" fill="#fff" text-anchor="middle" font-family="Verdana" font-size="11">monitor</text><text x="105" y="14" fill="#fff" text-anchor="middle" font-family="Verdana" font-size="11">{label}</text></svg>'
+    return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=60"})
 
 
 @router.get(
@@ -219,6 +341,7 @@ def create_monitor(
         watch_note=(body.watch_note or None),
         ignore_selectors=body.ignore_selectors,
         ignore_regexes=body.ignore_regexes,
+        alert_config=body.alert_config,
         screenshots_enabled=body.screenshots_enabled,
         base_interval_minutes=body.schedule_interval_minutes,
     )
@@ -437,6 +560,7 @@ def update_monitor(
         "ignore_regexes",
     }
     bumps_config = bool(config_fields & data.keys())
+    # alert_config changes do not bump config_version (thresholds don't affect baseline)
 
     if "url" in data and data["url"] is not None:
         try:
@@ -471,6 +595,12 @@ def update_monitor(
                 "site_links monitors fetch the sitemap over plain HTTP; "
                 "js_required is not supported"
             ),
+        )
+    if monitor.mode == "rss_feed" and monitor.js_required:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="rss_feed monitors fetch RSS over plain HTTP; js_required is not supported",
         )
 
     # PATCH re-enabling a paused monitor should schedule next run promptly
@@ -565,6 +695,73 @@ def resume_monitor(
     db.commit()
     db.refresh(monitor)
     return monitor
+
+
+class BulkActionIn(BaseModel):
+    monitor_ids: list[UUID] = Field(min_length=1, max_length=100)
+    action: str = Field(description="pause | resume | delete")
+
+    @field_validator("action")
+    @classmethod
+    def validate_action(cls, v: str) -> str:
+        if v not in ("pause", "resume", "delete"):
+            raise ValueError("action must be pause, resume, or delete")
+        return v
+
+
+@router.post("/workspaces/{workspace_id}/monitors/bulk")
+def bulk_action(
+    workspace_id: UUID,
+    body: BulkActionIn,
+    db: Db,
+    _workspace: MemberWs,
+) -> dict:
+    monitors = db.scalars(
+        select(Monitor).where(
+            Monitor.workspace_id == workspace_id, Monitor.id.in_(body.monitor_ids)
+        )
+    ).all()
+    found_ids = {m.id for m in monitors}
+    missing = [str(mid) for mid in body.monitor_ids if mid not in found_ids]
+    if body.action == "pause":
+        for m in monitors:
+            m.enabled = False
+        db.commit()
+        return {"updated": len(monitors), "missing": missing}
+    if body.action == "resume":
+        now = datetime.now(UTC) + timedelta(seconds=5)
+        for m in monitors:
+            m.enabled = True
+            m.next_run_at = now
+        db.commit()
+        return {"updated": len(monitors), "missing": missing}
+    # delete
+    for m in monitors:
+        mid = m.id
+        # Reuse bulk delete logic from single delete
+        snapshots = db.scalars(
+            select(Snapshot).where(Snapshot.monitor_id == mid, Snapshot.workspace_id == workspace_id)
+        ).all()
+        for snap in snapshots:
+            for obj_key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
+                if obj_key:
+                    try:
+                        delete_object(obj_key)
+                    except Exception:
+                        pass
+        sync_off = {"synchronize_session": False}
+        for bulk_stmt in (
+            sa_delete(ChangeEvent).where(ChangeEvent.monitor_id == mid),
+            sa_update(MonitorRun).where(MonitorRun.monitor_id == mid).values(snapshot_id=None),
+            sa_delete(MonitorRun).where(MonitorRun.monitor_id == mid),
+            sa_delete(Snapshot).where(Snapshot.monitor_id == mid),
+            sa_delete(MonitorConfigVersion).where(MonitorConfigVersion.monitor_id == mid),
+            sa_delete(Monitor).where(Monitor.id == mid),
+        ):
+            db.execute(bulk_stmt, execution_options=sync_off)
+    db.expunge_all()
+    db.commit()
+    return {"deleted": len(monitors), "missing": missing}
 
 
 @router.post(
@@ -1079,54 +1276,6 @@ def get_snapshot(
         raw_download_url=raw_url,
         created_at=snap.created_at,
     )
-
-
-@router.post(
-    "/workspaces/{workspace_id}/snapshots/{snapshot_id}/ai-summary",
-    response_model=dict,
-)
-def get_snapshot_ai_summary(
-    workspace_id: UUID,
-    snapshot_id: UUID,
-    db: Db,
-    _workspace: AnyWs,
-) -> dict:
-    snap = db.scalar(
-        select(Snapshot).where(Snapshot.id == snapshot_id, Snapshot.workspace_id == workspace_id)
-    )
-    if snap is None:
-        raise HTTPException(status_code=404, detail="Snapshot not found")
-
-    full_text = snap.normalized_text or ""
-    snap_key = getattr(snap, "text_object_key", None)
-    if snap_key:
-        stored = get_bytes(snap_key)
-        if stored:
-            full_text = stored.decode("utf-8")
-
-    from app.services.ai_summary import summarize_snapshot_text
-    from app.services.crypto import decrypt_secret
-
-    monitor = None
-    if snap.monitor_id:
-        monitor = db.get(Monitor, snap.monitor_id)
-
-    llm_cfg = None
-    if _workspace.llm_api_key or _workspace.llm_api_base or _workspace.llm_model:
-        llm_cfg = {
-            "api_key": decrypt_secret(_workspace.llm_api_key),
-            "api_base": _workspace.llm_api_base,
-            "model": _workspace.llm_model,
-        }
-
-    summary = summarize_snapshot_text(
-        full_text,
-        url=monitor.url if monitor else "",
-        watch_note=monitor.watch_note if monitor else None,
-        brand=monitor.brand if monitor else None,
-        llm=llm_cfg,
-    )
-    return {"summary": summary}
 
 
 @router.get("/workspaces/{workspace_id}/usage")
