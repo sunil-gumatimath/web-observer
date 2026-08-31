@@ -11,11 +11,13 @@ import {
   ModeBadge,
   PageHeader,
   SectionTitle,
-  Spinner,
   StatCard,
 } from "@/components/ui";
-import { api, brandAssetUrl } from "@/lib/api";
+import { SkeletonStats, SkeletonCard } from "@/components/skeleton";
+import { BrandLogo } from "@/components/brand-logo";
+import { api } from "@/lib/api";
 import type { AlertsSummary, Monitor, Usage } from "@/lib/types";
+import { ImpactBadge, parseImpact, stripImpact } from "@/components/ui";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
@@ -80,7 +82,17 @@ export default function DashboardPage() {
     };
   }, []);
 
-  if (loading) return <Spinner label="Loading workspace…" />;
+  if (loading)
+    return (
+      <div className="space-y-4">
+        <SkeletonStats />
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      </div>
+    );
 
   const active = monitors.filter((m) => m.enabled).length;
   const checksPct =
@@ -167,27 +179,20 @@ export default function DashboardPage() {
             <Link key={m.id} href={`/monitors/${m.id}`} className="block">
               <Card hover className="flex items-center justify-between gap-4 !py-4">
                 <div className="flex min-w-0 items-start gap-3">
-                  {brandAssetUrl(m.brand?.logo_path) ? (
-                    <img
-                      src={brandAssetUrl(m.brand?.logo_path) ?? undefined}
-                      alt=""
-                      className="mt-1 h-7 w-7 shrink-0 rounded-lg border border-[var(--border)] bg-white object-contain p-0.5 dark:bg-slate-900"
-                    />
-                  ) : (
-                    <span
-                      className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${changeDotClass(m.latest_change?.change_category ?? null)}`}
-                      aria-hidden
-                    />
-                  )}
+                  <BrandLogo brand={m.brand} name={m.name} domain={m.url} size={28} className="mt-0.5" />
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate font-medium text-slate-900 dark:text-slate-100">{m.name}</p>
                       {m.latest_change && !m.latest_change.is_read ? <Badge tone="info">new</Badge> : null}
+                      {m.latest_change?.change_category ? (
+                        <span className={`h-2 w-2 rounded-full ${changeDotClass(m.latest_change.change_category)}`} aria-hidden />
+                      ) : null}
+                      {m.latest_change?.ai_summary ? <ImpactBadge impact={parseImpact(m.latest_change.ai_summary)} /> : null}
                     </div>
                     <p className="truncate text-xs text-slate-500 dark:text-slate-500">{m.url}</p>
                     <p className="mt-1 truncate text-sm text-slate-700 dark:text-slate-200">
                       {m.latest_change
-                        ? m.latest_change.ai_summary ||
+                        ? stripImpact(m.latest_change.ai_summary || "") ||
                           m.latest_change.diff_summary ||
                           "Content changed"
                         : "Watching — no changes yet"}

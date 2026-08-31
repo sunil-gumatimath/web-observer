@@ -9,13 +9,18 @@ import {
 	Card,
 	CategoryBadge,
 	ErrorBox,
+	ImpactBadge,
 	ModeBadge,
-	PageHeader,
+	parseImpact,
 	SectionTitle,
 	Spinner,
+	stripImpact,
 } from "@/components/ui";
 import { ConfirmButton } from "@/components/confirm-dialog";
 import { ReadableContent } from "@/components/readable-content";
+import { BrandLogo } from "@/components/brand-logo";
+import { SkeletonHero } from "@/components/skeleton";
+import { VisualDiff } from "@/components/visual-diff";
 import { api, ApiError, brandAssetUrl } from "@/lib/api";
 import type { ChangeEvent, Monitor, MonitorRun } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
@@ -64,8 +69,8 @@ function MonitorDetailInner() {
 	const [previewLoading, setPreviewLoading] = useState(false);
 	const [showFreshBanner, setShowFreshBanner] = useState(isFresh);
 	const [brandRefreshing, setBrandRefreshing] = useState(false);
-	const [snapshotAiSummary, setSnapshotAiSummary] = useState<string | null>(null);
-	const [aiSummarizing, setAiSummarizing] = useState(false);
+	const [sseConnected, setSseConnected] = useState(false);
+
 
 	const pollStartedAt = useRef<number | null>(null);
 	const latestSnapshotId = useRef<string | null>(null);
@@ -109,12 +114,7 @@ function MonitorDetailInner() {
 		};
 	}, [load]);
 
-	// Poll while a run is active, or when landing with ?fresh=1 until first terminal run.
-	//
-	// `shouldPoll` is a stable boolean: it stays `true` across successive polls
-	// while a run is active, so the effect does NOT re-run (and the interval is
-	// NOT torn down/recreated) on every load(). The interval callback reads the
-	// latest data via load()'s return value and refs, never via effect deps.
+	// Live updates: SSE primary with polling fallback
 	const hasActiveRun = runs.some(isActiveRun);
 	const waitingForFirst =
 		showFreshBanner &&
@@ -125,48 +125,92 @@ function MonitorDetailInner() {
 
 	useEffect(() => {
 		if (loading || !workspaceId) return;
-
 		if (!shouldPoll) {
 			pollStartedAt.current = null;
+			setSseConnected(false);
 			return;
 		}
 		if (pollStartedAt.current == null) pollStartedAt.current = Date.now();
 
-		const id = window.setInterval(async () => {
+		const ac = new AbortController();
+		let fallbackId: number | null = null;
+		let sseOk = false;
+
+		// Try SSE first
+		(async () => {
+			try {
+				await api.streamMonitorEvents(
+					workspaceId,
+					monitorId,
+					async (event, data) => {
+						if (event === "connected") setSseConnected(true);
+						if (event === "run" || event === "change") {
+							sseOk = true;
+							const started = pollStartedAt.current ?? Date.now();
+							const elapsed = Date.now() - started;
+							if (elapsed > POLL_SLOW_MS) setPollSlow(true);
+							try {
+								const { runs: next } = await load();
+								const stillActive = next.some(isActiveRun);
+								const hasTerminal = next.some((r) => TERMINAL.has(r.status));
+								if (!stillActive && hasTerminal) {
+									setPollSlow(false);
+									setPollTimedOut(false);
+									pollStartedAt.current = null;
+									if (isFreshRef.current) {
+										router.replace(`/monitors/${monitorIdRef.current}`, { scroll: false });
+									}
+									ac.abort();
+								}
+							} catch {
+								/* keep streaming */
+							}
+						}
+						if (event === "done") ac.abort();
+					},
+					ac.signal,
+				);
+			} catch {
+				setSseConnected(false);
+			}
+		})();
+
+		// Fallback polling if SSE not connected within 2.5s or fails
+		fallbackId = window.setInterval(async () => {
+			if (sseOk && sseConnected) return;
 			try {
 				const started = pollStartedAt.current ?? Date.now();
 				const elapsed = Date.now() - started;
 				if (elapsed > POLL_SLOW_MS) setPollSlow(true);
-
 				const { runs: next } = await load();
 				const stillActive = next.some(isActiveRun);
 				const hasTerminal = next.some((r) => TERMINAL.has(r.status));
 				const timedOut = elapsed > POLL_MAX_MS;
-
 				if (!stillActive && hasTerminal) {
 					setPollSlow(false);
 					setPollTimedOut(false);
 					pollStartedAt.current = null;
 					if (isFreshRef.current) {
-						router.replace(`/monitors/${monitorIdRef.current}`, {
-							scroll: false,
-						});
+						router.replace(`/monitors/${monitorIdRef.current}`, { scroll: false });
 					}
+					if (fallbackId) window.clearInterval(fallbackId);
+					ac.abort();
 				} else if (timedOut) {
 					setPollTimedOut(true);
 					pollStartedAt.current = null;
+					if (fallbackId) window.clearInterval(fallbackId);
+					ac.abort();
 				}
 			} catch {
-				// keep polling until timeout
+				/* keep polling */
 			}
 		}, POLL_MS);
 
-		return () => window.clearInterval(id);
-		// Deps are intentionally stable primitives: the interval is created once per
-		// poll session and only recreated when polling starts/stops (shouldPoll),
-		// the workspace changes, or initial loading finishes. `load` is stable
-		// (useCallback on [monitorId]); `router` is stable in the App Router.
-	}, [shouldPoll, loading, workspaceId, load, router]);
+		return () => {
+			ac.abort();
+			if (fallbackId) window.clearInterval(fallbackId);
+		};
+	}, [shouldPoll, loading, workspaceId, load, router, monitorId, sseConnected]);
 
 	// Load snapshot text preview for latest successful run.
 	useEffect(() => {
@@ -294,23 +338,7 @@ function MonitorDetailInner() {
 		}
 	}
 
-	async function handleGenerateAiSummary() {
-		if (!workspaceId) return;
-		const latestOk = runs.find((r) => r.status === "succeeded" && r.snapshot_id);
-		if (!latestOk?.snapshot_id) return;
-		setAiSummarizing(true);
-		setError(null);
-		try {
-			const res = await api.getSnapshotAiSummary(workspaceId, latestOk.snapshot_id);
-			setSnapshotAiSummary(res.summary);
-		} catch (e) {
-			setError(e instanceof Error ? e.message : "Failed to generate AI summary");
-		} finally {
-			setAiSummarizing(false);
-		}
-	}
-
-	if (loading) return <Spinner />;
+	if (loading) return <SkeletonHero />;
 	if (!monitor) {
 		return <ErrorBox message={error ?? "Monitor not found"} />;
 	}
@@ -348,14 +376,8 @@ function MonitorDetailInner() {
 				{/* Floating Header Content */}
 				<div className="relative px-5 pb-5 sm:px-6 sm:pb-6">
 					<div className="-mt-10 flex flex-wrap items-end justify-between gap-4">
-						<div className="flex size-18 sm:size-20 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border)] bg-white p-2 shadow-md dark:bg-slate-900">
-							{logo ? (
-								<img src={logo} alt="" className="size-12 object-contain" />
-							) : (
-								<span className="font-mono text-2xl font-bold text-sky-600 dark:text-sky-400">
-									{monitor.name?.[0]?.toUpperCase() ?? "W"}
-								</span>
-							)}
+						<div className="flex size-18 sm:size-20 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border)] bg-white p-1.5 shadow-md dark:bg-slate-900">
+							<BrandLogo brand={monitor.brand} name={monitor.name} domain={monitor.url} size={64} className="rounded-xl border-0" />
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<a
@@ -454,6 +476,10 @@ function MonitorDetailInner() {
 							<Badge tone={monitor.enabled ? "success" : "warn"}>
 								{monitor.enabled ? "active" : "paused"}
 							</Badge>
+							{workspaceId ? (
+								<img src={api.badgeUrl(workspaceId, monitor.id)} alt="status badge" className="h-5 rounded" loading="lazy" />
+							) : null}
+							{sseConnected ? <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="live" /> : null}
 						</div>
 						<a
 							href={monitor.url}
@@ -646,51 +672,18 @@ function MonitorDetailInner() {
 						) : null}
 					</div>
 
-					{hasSuccessfulSnapshot ? (
-						<div className="mt-4 border-t border-[var(--border)] pt-4">
-							{previewLoading ? (
-								<p className="text-sm text-slate-500">
-									Loading captured content…
-								</p>
-							) : hasSuccessfulSnapshot &&
-								previewText != null &&
-								previewText.length > 0 ? (
-								<ReadableContent
-									title="What we captured"
-									text={previewText}
-									maxChars={2500}
-									emptyLabel="No text content in this snapshot."
-									baseUrl={monitor?.url}
-									aiChangeSummary={latestChange?.ai_summary}
-									changeCategory={latestChange?.change_category}
-									isNoise={latestChange?.is_noise}
-									onSummarizeAi={handleGenerateAiSummary}
-									aiSummarizing={aiSummarizing}
-									generatedAiSummary={snapshotAiSummary}
-								/>
-							) : (
-								<p className="text-sm text-slate-500 dark:text-slate-400">
-									No text preview available for this snapshot
-									{"."}
-								</p>
-							)}
-						</div>
-					) : null}
 				</Card>
 			) : null}
 
-			{/* AI Change Summaries Section (Webdog parity: plain-language summaries of what changed and why it matters) */}
+			{/* AI Change Summaries — works on 1st add (baseline) and on every change */}
 			<section className="mb-8">
-				<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+				<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
 					<div>
-						<h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-							<span className="flex size-5 items-center justify-center rounded-md bg-sky-500/10 text-sky-500 dark:bg-sky-500/20">
-								✨
-							</span>
+						<h2 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
 							AI Change Summaries
 						</h2>
-						<p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-							Plain-language summaries of what changed on this page and why it matters.
+						<p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+							Each change gets a 1–2 sentence summary with category and impact.
 						</p>
 					</div>
 					{latestChange ? (
@@ -708,10 +701,11 @@ function MonitorDetailInner() {
 						<div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-500/15 pb-3 dark:border-sky-500/25">
 							<div className="flex flex-wrap items-center gap-2">
 								<CategoryBadge category={latestChange.change_category} />
+								<ImpactBadge impact={parseImpact(latestChange.ai_summary)} />
 								{latestChange.is_noise ? (
-									<Badge tone="warn">noise filter held</Badge>
+									<Badge tone="warn">noise held</Badge>
 								) : (
-									<Badge tone="success">detected change</Badge>
+									<Badge tone="success">signal</Badge>
 								)}
 								<span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
 									{new Date(latestChange.created_at).toLocaleString()}
@@ -724,10 +718,9 @@ function MonitorDetailInner() {
 								Inspect Diff
 							</Link>
 						</div>
-
 						<div className="mt-3.5">
 							<p className="text-sm font-medium leading-relaxed text-slate-900 dark:text-slate-100">
-								{latestChange.ai_summary || latestChange.diff_summary || "Page content changed."}
+								{stripImpact(latestChange.ai_summary || "") || latestChange.diff_summary || "Page content changed."}
 							</p>
 							{latestChange.diff_summary && latestChange.ai_summary ? (
 								<p className="mt-2 text-xs font-mono text-slate-600 dark:text-slate-400">
@@ -736,40 +729,54 @@ function MonitorDetailInner() {
 							) : null}
 						</div>
 					</div>
+				) : hasSuccessfulSnapshot && latestTerminal?.status === "succeeded" ? (
+					<div className="rounded-2xl border border-emerald-500/20 bg-emerald-50/40 p-5 shadow-sm dark:border-emerald-500/20 dark:bg-emerald-950/20">
+						<div className="flex items-start gap-3">
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+								✓
+							</span>
+							<div className="min-w-0 flex-1">
+								<h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Monitoring active — waiting for changes</h3>
+								<p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+									Baseline captured {latestTerminal.finished_at ? new Date(latestTerminal.finished_at).toLocaleString() : ""} · Next check {monitor.next_run_at ? new Date(monitor.next_run_at).toLocaleString() : `every ${monitor.schedule_interval_minutes}m`} · <ModeBadge mode={monitor.mode} />
+								</p>
+								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">
+									When a change is detected you&apos;ll get a titled summary + impact here and in Alerts.
+								</p>
+							</div>
+						</div>
+					</div>
+				) : polling || (latestRun && isActiveRun(latestRun)) ? (
+					<div className="rounded-2xl border border-sky-500/20 bg-sky-50/50 p-5 shadow-sm dark:border-sky-500/20 dark:bg-sky-950/20">
+						<div className="flex items-center gap-3">
+							<div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+							<div>
+								<p className="text-sm font-medium text-slate-900 dark:text-slate-100">Capturing baseline…</p>
+								<p className="text-xs text-slate-500 dark:text-slate-400">First success creates the baseline — summaries appear after the first real change.</p>
+							</div>
+						</div>
+					</div>
 				) : (
 					<div className="rounded-2xl border border-[var(--border)] bg-slate-50/60 p-5 shadow-sm dark:bg-slate-900/40">
-						<div className="flex items-start gap-3">
-							<div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-500 dark:bg-sky-500/20">
-								✨
-							</div>
-							<div className="min-w-0 flex-1">
-								<h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-									AI Change Monitoring Active
-								</h3>
-								<p className="mt-1 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-									Baseline snapshot is established. When future checks detect updates, an AI summary explaining <strong className="text-slate-800 dark:text-slate-200">what changed and why it matters</strong> will be automatically generated and displayed here.
-								</p>
-								<div className="mt-3 flex flex-wrap items-center gap-2">
-									<Badge tone="neutral">Mode: {monitor.mode}</Badge>
-									<span className="text-[11px] text-slate-500">
-										Checked every {monitor.schedule_interval_minutes}m
-									</span>
-								</div>
-							</div>
+						<p className="text-sm font-medium text-slate-900 dark:text-slate-100">No baseline yet</p>
+						<p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+							Run a check to capture the baseline. AI summaries are generated for each change after that.
+						</p>
+						<div className="mt-3 flex flex-wrap items-center gap-2">
+							<ModeBadge mode={monitor.mode} />
+							<Badge tone="neutral">every {monitor.schedule_interval_minutes}m</Badge>
 						</div>
 					</div>
 				)}
 			</section>
 
-			{/* Always available readable snapshot (not only right after create) */}
-			{!showResultCard && hasSuccessfulSnapshot ? (
+			{/* Latest captured content — always visible when a successful snapshot exists */}
+			{hasSuccessfulSnapshot ? (
 				<section className="mb-8">
 					<SectionTitle>Latest captured content</SectionTitle>
 					{previewLoading ? (
-						<p className="text-sm text-slate-500">Loading…</p>
-					) : hasSuccessfulSnapshot &&
-						previewText != null &&
-						previewText.length > 0 ? (
+						<p className="text-sm text-slate-500">Loading captured content…</p>
+					) : previewText != null && previewText.length > 0 ? (
 						<ReadableContent
 							text={previewText}
 							maxChars={2500}
@@ -777,18 +784,32 @@ function MonitorDetailInner() {
 							aiChangeSummary={latestChange?.ai_summary}
 							changeCategory={latestChange?.change_category}
 							isNoise={latestChange?.is_noise}
-							onSummarizeAi={handleGenerateAiSummary}
-							aiSummarizing={aiSummarizing}
-							generatedAiSummary={snapshotAiSummary}
 						/>
+					) : previewText === "" ? (
+						<Card>
+							<p className="text-sm text-slate-500 dark:text-slate-400">
+								Captured snapshot is empty — page had no extractable text. Try enabling JavaScript rendering or check the URL.
+							</p>
+						</Card>
 					) : (
 						<Card>
 							<p className="text-sm text-slate-500 dark:text-slate-400">
-								No text preview for the latest successful run
-								{"."}
+								No text preview available yet. Run a check — preview appears after the first successful run.
 							</p>
 						</Card>
 					)}
+				</section>
+			) : null}
+
+			{monitor.screenshots_enabled ? (
+				<section className="mb-8">
+					<SectionTitle>Visual diff</SectionTitle>
+					{(() => {
+						const okRuns = runs.filter((r) => r.status === "succeeded" && r.snapshot_id).slice(0, 2);
+						const after = okRuns[0] ? brandAssetUrl(`screenshots/${monitor.id}/${okRuns[0].id}.png`) : null;
+						const before = okRuns[1] ? brandAssetUrl(`screenshots/${monitor.id}/${okRuns[1].id}.png`) : null;
+						return <VisualDiff before={before} after={after} />;
+					})()}
 				</section>
 			) : null}
 

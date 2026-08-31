@@ -11,9 +11,10 @@ import {
 	ErrorBox,
 	ModeBadge,
 	PageHeader,
-	Spinner,
 } from "@/components/ui";
-import { api, brandAssetUrl } from "@/lib/api";
+import { BrandLogo } from "@/components/brand-logo";
+import { SkeletonTable } from "@/components/skeleton";
+import { api } from "@/lib/api";
 import type { Monitor } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -24,6 +25,8 @@ export default function MonitorsPage() {
 	const [monitors, setMonitors] = useState<Monitor[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
+	const [selected, setSelected] = useState<Set<string>>(new Set());
+	const [bulkBusy, setBulkBusy] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -44,7 +47,31 @@ export default function MonitorsPage() {
 		};
 	}, []);
 
-	if (loading) return <Spinner />;
+	if (loading) return <SkeletonTable rows={6} />;
+
+	const toggle = (id: string) => {
+		setSelected((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	};
+	const runBulk = async (action: string) => {
+		if (selected.size === 0) return;
+		setBulkBusy(true);
+		try {
+			const ws = await ensureWorkspace();
+			await api.bulkAction(ws, { monitor_ids: Array.from(selected), action });
+			const list = await api.listMonitors(ws);
+			setMonitors(list);
+			setSelected(new Set());
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Bulk action failed");
+		} finally {
+			setBulkBusy(false);
+		}
+	};
 
 	return (
 		<div>
@@ -74,6 +101,15 @@ export default function MonitorsPage() {
 			/>
 			{error ? <ErrorBox message={error} /> : null}
 
+			{selected.size > 0 && (
+				<div className="mb-3 flex items-center gap-2 rounded-xl border bg-amber-50 dark:bg-amber-900/20 p-2 text-sm">
+					<span>{selected.size} selected</span>
+					<Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => runBulk("pause")}>Pause</Button>
+					<Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => runBulk("resume")}>Resume</Button>
+					<Button size="sm" variant="danger" disabled={bulkBusy} onClick={() => runBulk("delete")}>Delete</Button>
+					<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
+				</div>
+			)}
 			{monitors.length === 0 ? (
 				<EmptyState
 					title="No monitors"
@@ -88,22 +124,19 @@ export default function MonitorsPage() {
 				<>
 					{/* Desktop table */}
 					<div className="hidden md:block">
-						<DataTable headers={["Name", "URL", "Mode", "Schedule", "Status"]}>
+						<DataTable headers={["", "Name", "URL", "Mode", "Schedule", "Status"]}>
 							{monitors.map((m) => (
 								<tr
 									key={m.id}
 									className="cursor-pointer transition hover:bg-slate-100/60 dark:hover:bg-white/[0.03]"
 									onClick={() => router.push(`/monitors/${m.id}`)}
 								>
+									<td className="px-2 py-3.5" onClick={(e) => e.stopPropagation()}>
+										<input type="checkbox" checked={selected.has(m.id)} onChange={() => toggle(m.id)} />
+									</td>
 									<td className="px-4 py-3.5">
 										<div className="flex items-center gap-2.5">
-											{brandAssetUrl(m.brand?.logo_path) ? (
-												<img
-													src={brandAssetUrl(m.brand?.logo_path) ?? undefined}
-													alt=""
-													className="h-6 w-6 rounded object-contain"
-												/>
-											) : null}
+											<BrandLogo brand={m.brand} name={m.name} domain={m.url} size={24} />
 											<Link
 												href={`/monitors/${m.id}`}
 												className="font-medium text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-300"
@@ -138,13 +171,7 @@ export default function MonitorsPage() {
 								<div className="glass-card !p-4 transition hover:border-sky-500/40 dark:hover:border-sky-500/25">
 									<div className="flex items-start justify-between gap-2">
 										<div className="flex items-center gap-2.5 min-w-0">
-											{brandAssetUrl(m.brand?.logo_path) ? (
-												<img
-													src={brandAssetUrl(m.brand?.logo_path) ?? undefined}
-													alt=""
-													className="h-6 w-6 shrink-0 rounded object-contain"
-												/>
-											) : null}
+											<BrandLogo brand={m.brand} name={m.name} domain={m.url} size={24} />
 											<p className="truncate font-medium text-slate-900 dark:text-slate-100">
 												{m.name}
 											</p>
