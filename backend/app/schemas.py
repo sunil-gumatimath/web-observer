@@ -96,6 +96,7 @@ class MonitorCreate(BaseModel):
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
     screenshots_enabled: bool = False
+    alert_config: dict | None = None
 
     @field_validator("mode")
     @classmethod
@@ -146,6 +147,8 @@ class MonitorCreate(BaseModel):
                 "site_links monitors fetch the sitemap over plain HTTP; "
                 "js_required is not supported"
             )
+        if self.mode == "rss_feed" and self.js_required:
+            raise ValueError("rss_feed monitors fetch RSS over plain HTTP; js_required is not supported")
         return self
 
     @model_validator(mode="after")
@@ -171,6 +174,7 @@ class MonitorUpdate(BaseModel):
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
     screenshots_enabled: bool | None = None
+    alert_config: dict | None = None
 
     @field_validator("mode")
     @classmethod
@@ -222,6 +226,8 @@ class MonitorUpdate(BaseModel):
                 "site_links monitors fetch the sitemap over plain HTTP; "
                 "js_required is not supported"
             )
+        if self.mode == "rss_feed" and self.js_required:
+            raise ValueError("rss_feed monitors fetch RSS over plain HTTP; js_required is not supported")
         return self
 
 
@@ -241,6 +247,7 @@ class MonitorOut(BaseModel):
     watch_note: str | None = None
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
+    alert_config: dict | None = None
     consecutive_failures: int = 0
     screenshots_enabled: bool = False
     brand: dict | None = None

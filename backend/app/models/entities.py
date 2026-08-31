@@ -37,6 +37,7 @@ class MonitorMode(enum.StrEnum):
     ``LIST_ITEMS``    CSS-selector list items as ``[text](href)``; set diff.
     ``JSON_FIELD``    single value addressed by a JSONPath-style query
                       (e.g. ``$.data.price``); the URL must return JSON.
+    ``RSS_FEED``      RSS/Atom feed item list; diff on GUID/link.
     """
 
     PAGE_CONTENT = "page_content"
@@ -44,6 +45,7 @@ class MonitorMode(enum.StrEnum):
     PRODUCT_PRICE = "product_price"
     LIST_ITEMS = "list_items"
     JSON_FIELD = "json_field"
+    RSS_FEED = "rss_feed"
 
 
 # Single source of truth for valid mode strings. API schemas, bulk import,
@@ -167,6 +169,10 @@ class Monitor(Base):
     watch_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     ignore_selectors: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     ignore_regexes: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    # Conditional alert config (JSONB): thresholds, regex, selective alerting.
+    # Examples: {"price_below": 99.99, "percent_change": 5, "regex_must_match": "in stock",
+    #            "min_diff_chars": 100, "list_min_added": 1}
+    alert_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # webdog.ai-style brand-aware dashboard info (auto-filled on add):
     # {title, description, logo_url, hero_url} with URLs pointing at our storage.
     brand: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
