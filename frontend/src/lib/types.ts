@@ -3,7 +3,8 @@ export type MonitorMode =
   | "site_links"
   | "product_price"
   | "list_items"
-  | "json_field";
+  | "json_field"
+  | "rss_feed";
 
 export type Monitor = {
   id: string;
@@ -21,6 +22,7 @@ export type Monitor = {
   watch_note?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
+  alert_config?: Record<string, unknown> | null;
   consecutive_failures?: number;
   screenshots_enabled?: boolean;
   brand?: MonitorBrand | null;
@@ -139,6 +141,8 @@ export type MonitorCreateInput = {
   watch_note?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
+  alert_config?: Record<string, unknown> | null;
+  screenshots_enabled?: boolean;
 };
 
 export type MonitorUpdateInput = {
@@ -154,6 +158,8 @@ export type MonitorUpdateInput = {
   watch_note?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
+  alert_config?: Record<string, unknown> | null;
+  screenshots_enabled?: boolean;
 };
 
 export type NotificationChannel = {

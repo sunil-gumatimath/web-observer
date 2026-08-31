@@ -483,3 +483,21 @@ export function CategoryBadge({ category }: { category: string | null | undefine
 	const tone = toneMap[category.toLowerCase()] ?? "neutral";
 	return <Badge tone={tone}>{category}</Badge>;
 }
+
+export function ImpactBadge({ impact }: { impact: string | null | undefined }) {
+	if (!impact) return null;
+	const t = impact.toLowerCase();
+	const tone: "neutral" | "success" | "danger" | "warn" | "info" =
+		t === "critical" ? "danger" : t === "high" ? "warn" : t === "medium" ? "info" : "neutral";
+	return <Badge tone={tone}>impact: {t}</Badge>;
+}
+
+export function parseImpact(summary: string | null | undefined): string | null {
+	if (!summary) return null;
+	const m = summary.match(/\(impact:\s*(low|medium|high|critical)\)/i);
+	return m ? m[1].toLowerCase() : null;
+}
+
+export function stripImpact(summary: string): string {
+	return summary.replace(/\s*\(impact:\s*(low|medium|high|critical)\)\s*$/i, "").trim();
+}

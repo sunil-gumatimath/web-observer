@@ -289,12 +289,6 @@ export const api = {
   getSnapshot: (workspaceId: string, snapshotId: string) =>
     request<SnapshotAccess>(`/api/v1/workspaces/${workspaceId}/snapshots/${snapshotId}`),
 
-  getSnapshotAiSummary: (workspaceId: string, snapshotId: string) =>
-    request<{ summary: string }>(
-      `/api/v1/workspaces/${workspaceId}/snapshots/${snapshotId}/ai-summary`,
-      { method: "POST" },
-    ),
-
   listChanges: (workspaceId: string, monitorId: string) =>
     request<ChangeEvent[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/changes`),
 
@@ -535,4 +529,52 @@ export const api = {
     request<InviteRedeem>(`/api/v1/invites/${encodeURIComponent(token)}/redeem`, {
       method: "POST",
     }),
+
+  bulkAction: (workspaceId: string, body: { monitor_ids: string[]; action: string }) =>
+    request<{ updated?: number; deleted?: number; missing: string[] }>(
+      `/api/v1/workspaces/${workspaceId}/monitors/bulk`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  badgeUrl: (workspaceId: string, monitorId: string) =>
+    `${config.apiBaseUrl}/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/badge.svg`,
+
+  // SSE via fetch streaming (EventSource can't send Authorization header)
+  streamMonitorEvents: async (
+    workspaceId: string,
+    monitorId: string,
+    onEvent: (event: string, data: unknown) => void,
+    signal?: AbortSignal,
+  ) => {
+    const headers = await authHeaders();
+    const res = await fetch(
+      `${config.apiBaseUrl}/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/events`,
+      { headers: { ...headers, Accept: "text/event-stream" }, signal, cache: "no-store" },
+    );
+    if (!res.ok || !res.body) throw new ApiError(res.status, "SSE failed", null);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
+      for (const part of parts) {
+        const lines = part.split("\n");
+        let event = "message";
+        let data = "";
+        for (const line of lines) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) data = line.slice(5).trim();
+        }
+        try {
+          onEvent(event, data ? JSON.parse(data) : null);
+        } catch {
+          onEvent(event, data);
+        }
+      }
+    }
+  },
 };

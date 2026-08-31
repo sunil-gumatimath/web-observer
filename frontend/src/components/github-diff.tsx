@@ -282,22 +282,33 @@ export function GithubDiff({
 		(r) => r.kind === "del" || r.kind === "replace",
 	).length;
 
+	const host = (() => {
+		try {
+			return baseUrl ? new URL(baseUrl).host : null;
+		} catch {
+			return null;
+		}
+	})();
+
 	const header = (
 		<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
 			<div className="flex flex-wrap items-center gap-2 text-sm">
-				<span className="text-slate-600 dark:text-slate-300">
-					Before → After
-				</span>
-				{!tooLarge ? (
-					<>
-						<span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-							+{added}
-						</span>
-						<span className="rounded bg-rose-500/15 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
-							−{removed}
-						</span>
-					</>
-				) : null}
+				{host ? (
+					<a
+						href={baseUrl}
+						target="_blank"
+						rel="noreferrer"
+						className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-600 ring-1 ring-neutral-950/5 transition hover:text-sky-700 hover:ring-sky-500/30 dark:bg-slate-900 dark:text-slate-400 dark:ring-white/10"
+					>
+						<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden className="size-3.5 shrink-0 text-neutral-400">
+							<path d="M6.5 9.5a2.5 2.5 0 0 0 3.54 0l2-2a2.5 2.5 0 0 0-3.54-3.54l-.5.5" />
+							<path d="M9.5 6.5a2.5 2.5 0 0 0-3.54 0l-2 2a2.5 2.5 0 0 0 3.54 3.54l.5-.5" />
+						</svg>
+						<span className="truncate font-mono">{host}</span>
+					</a>
+				) : (
+					<span className="text-slate-600 dark:text-slate-300">Before → After</span>
+				)}
 			</div>
 			<div className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800/70">
 				<SegmentedControl
@@ -310,6 +321,22 @@ export function GithubDiff({
 					]}
 				/>
 			</div>
+		</div>
+	);
+
+	const webdogHeader = (
+		<div className="flex items-center justify-between gap-3 border-b border-neutral-950/5 bg-neutral-50/80 px-3 py-2 dark:border-white/5 dark:bg-slate-900/50">
+			<p className="text-xs font-semibold text-neutral-700 dark:text-slate-300">What changed</p>
+			{!tooLarge ? (
+				<div className="flex items-center gap-1.5 tabular-nums">
+					<span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[0.6875rem] font-semibold text-emerald-700 ring-1 ring-emerald-600/15 ring-inset dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-500/20">
+						<span aria-hidden>＋</span>{added} added
+					</span>
+					<span className="inline-flex items-center gap-0.5 rounded-full bg-rose-50 px-2 py-0.5 text-[0.6875rem] font-semibold text-rose-700 ring-1 ring-rose-600/15 ring-inset dark:bg-rose-950/30 dark:text-rose-300 dark:ring-rose-500/20">
+						<span aria-hidden>－</span>{removed} removed
+					</span>
+				</div>
+			) : null}
 		</div>
 	);
 
@@ -353,30 +380,44 @@ export function GithubDiff({
 		return (
 			<div className="min-w-0 w-full max-w-full overflow-hidden">
 				{header}
-				<CardShell>
-					<div className="max-h-[min(70vh,32rem)] w-full min-w-0 max-w-full overflow-auto py-1 font-mono text-[13px] leading-5">
-						{rows.map((r, i) => {
-							if (r.kind === "equal")
-								return (
-									<UnifiedLine key={i} text={r.left ?? ""} variant="equal" baseUrl={baseUrl} />
-								);
-							if (r.kind === "del")
-								return (
-									<UnifiedLine key={i} text={r.left ?? ""} variant="del" baseUrl={baseUrl} />
-								);
-							if (r.kind === "add")
-								return (
-									<UnifiedLine key={i} text={r.right ?? ""} variant="add" baseUrl={baseUrl} />
-								);
-							return (
-								<div key={i}>
-									<UnifiedLine text={r.left ?? ""} variant="del" baseUrl={baseUrl} />
-									<UnifiedLine text={r.right ?? ""} variant="add" baseUrl={baseUrl} />
-								</div>
-							);
-						})}
+				<div className="overflow-hidden rounded-xl ring-1 ring-neutral-950/[0.08] shadow-xs dark:ring-white/10">
+					{webdogHeader}
+					<div className="max-h-72 overflow-auto bg-white dark:bg-slate-950">
+						<table className="w-full border-collapse font-mono text-xs">
+							<tbody>
+								{rows.map((r, i) => {
+									if (r.kind === "equal") return null;
+									if (r.kind === "del")
+										return (
+											<tr key={i} className="bg-rose-50/60 dark:bg-rose-950/20">
+												<td aria-hidden className="w-6 border-r border-neutral-950/5 bg-rose-100/80 px-2 text-center font-semibold select-none text-rose-700 dark:border-white/5 dark:bg-rose-900/30 dark:text-rose-300">−</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-rose-900 dark:text-rose-200"><mark className="rounded-sm bg-rose-200/80 px-0.5 text-rose-950 dark:bg-rose-900/40 dark:text-rose-100 [box-decoration-break:clone]"><DiffLineText text={r.left ?? ""} baseUrl={baseUrl} /></mark></td>
+											</tr>
+										);
+									if (r.kind === "add")
+										return (
+											<tr key={i} className="bg-emerald-50/60 dark:bg-emerald-950/20">
+												<td aria-hidden className="w-6 border-r border-neutral-950/5 bg-emerald-100/80 px-2 text-center font-semibold select-none text-emerald-700 dark:border-white/5 dark:bg-emerald-900/30 dark:text-emerald-300">+</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-emerald-900 dark:text-emerald-200"><mark className="rounded-sm bg-emerald-200/80 px-0.5 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100 [box-decoration-break:clone]"><DiffLineText text={r.right ?? ""} baseUrl={baseUrl} /></mark></td>
+											</tr>
+										);
+									return (
+										<>
+											<tr key={`${i}-del`} className="bg-rose-50/60 dark:bg-rose-950/20">
+												<td aria-hidden className="w-6 border-r border-neutral-950/5 bg-rose-100/80 px-2 text-center font-semibold select-none text-rose-700 dark:border-white/5 dark:bg-rose-900/30 dark:text-rose-300">−</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-rose-900 dark:text-rose-200"><mark className="rounded-sm bg-rose-200/80 px-0.5 text-rose-950 dark:bg-rose-900/40 dark:text-rose-100 [box-decoration-break:clone]"><DiffLineText text={r.left ?? ""} baseUrl={baseUrl} /></mark></td>
+											</tr>
+											<tr key={`${i}-add`} className="bg-emerald-50/60 dark:bg-emerald-950/20">
+												<td aria-hidden className="w-6 border-r border-neutral-950/5 bg-emerald-100/80 px-2 text-center font-semibold select-none text-emerald-700 dark:border-white/5 dark:bg-emerald-900/30 dark:text-emerald-300">+</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-emerald-900 dark:text-emerald-200"><mark className="rounded-sm bg-emerald-200/80 px-0.5 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100 [box-decoration-break:clone]"><DiffLineText text={r.right ?? ""} baseUrl={baseUrl} /></mark></td>
+											</tr>
+										</>
+									);
+								})}
+							</tbody>
+						</table>
 					</div>
-				</CardShell>
+				</div>
 			</div>
 		);
 	}
