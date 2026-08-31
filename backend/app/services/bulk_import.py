@@ -51,6 +51,7 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
         "js_required": str(out.get("js_required") or "false").lower() in ("1", "true", "yes"),
         "ignore_selectors": out.get("ignore_selectors"),
         "ignore_regexes": out.get("ignore_regexes"),
+        "alert_config": out.get("alert_config"),
     }
 
 
@@ -142,6 +143,7 @@ def import_monitors(
             js_required=js_required,
             ignore_selectors=row.get("ignore_selectors"),
             ignore_regexes=row.get("ignore_regexes"),
+            alert_config=row.get("alert_config"),
             base_interval_minutes=row["schedule_interval_minutes"],
         )
         db.add(mon)

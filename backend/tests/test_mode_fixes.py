@@ -84,6 +84,7 @@ def test_monitor_modes_derived_from_enum() -> None:
         "product_price",
         "list_items",
         "json_field",
+        "rss_feed",
     }
 
 

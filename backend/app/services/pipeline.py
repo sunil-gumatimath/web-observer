@@ -105,7 +105,9 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
                 "extraction_failed",
                 "css_selector is required for list_items monitors",
             )
-        items = extract_html_list(result.text, monitor.css_selector)
+        items = extract_html_list(
+            result.text, monitor.css_selector, ignore_selectors=ignore_selectors
+        )
         return list_to_normalized(items), items
 
     if mode == MonitorMode.JSON_FIELD.value:
@@ -119,6 +121,12 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
                 "(a JSON path like $.data.price)",
             )
         return extract_json_field(result.text, path), None
+
+    if mode == "rss_feed":
+        from app.services.rss import extract_rss_items
+
+        items = extract_rss_items(result.text)
+        return list_to_normalized(items), items
 
     # page_content (default): main content as markdown when detectable
     # (webdog `useMainContentOnly` parity — strips nav/boilerplate), falling
@@ -160,6 +168,7 @@ class _ChangeContext:
     summary: str = ""
     diff_text: str = ""
     enrichment: AIEnrichment | None = None  # Enrichment from ai_summary
+    suppressed_reason: str | None = None  # conditional threshold suppression
 
 
 # ---------------------------------------------------------------------------
@@ -488,6 +497,25 @@ def _detect_change(
             ctx.diff_text = unified_diff(prev_text, normalized)
             ctx.summary = short_summary(prev_text, normalized)
 
+    # Conditional alert config: suppress insignificant changes (thresholds/regex)
+    try:
+        from app.services.conditional import should_alert
+
+        _ok, _reason = should_alert(
+            monitor,
+            prev_text,
+            normalized,
+            items_before=items_from_normalized(prev_text) if monitor.mode in LIST_DIFF_MODES else None,
+            items_after=items if monitor.mode in LIST_DIFF_MODES else None,
+        )
+        if not _ok:
+            ctx.suppressed_reason = _reason
+            logger.info(
+                "conditional_suppressed monitor_id=%s reason=%s", monitor.id, _reason
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("conditional_eval_failed monitor_id=%s error=%s", monitor.id, exc)
+
     from app.services.adaptive import note_check_outcome
 
     note_check_outcome(monitor, changed=True, succeeded=True)
@@ -588,10 +616,25 @@ def _create_change_event(
         logger.warning("ai_token_accounting_failed workspace_id=%s", monitor.workspace_id)
     ctx.enrichment = enrichment
 
-    # P0: single-call enrichment already includes triage (is_noise/noise_reason)
-    # when a watch_note is present. Avoid a second LLM call.
-    is_noise = bool(getattr(enrichment, "is_noise", False))
-    triage_reason = getattr(enrichment, "noise_reason", None)
+    # Conditional suppression overrides AI triage — treat as noise with reason
+    if getattr(ctx, "suppressed_reason", None):
+        enrichment = AIEnrichment(
+            summary=f"[Conditional] {ctx.suppressed_reason} (threshold not met)",
+            category=getattr(enrichment, "category", None) or "other",
+            provider=getattr(enrichment, "provider", "heuristic"),
+            model=getattr(enrichment, "model", None),
+            is_noise=True,
+            noise_reason=ctx.suppressed_reason,
+            tokens_used=getattr(enrichment, "tokens_used", 0),
+        )
+        ctx.enrichment = enrichment
+        is_noise = True
+        triage_reason = None
+    else:
+        # P0: single-call enrichment already includes triage (is_noise/noise_reason)
+        # when a watch_note is present. Avoid a second LLM call.
+        is_noise = bool(getattr(enrichment, "is_noise", False))
+        triage_reason = getattr(enrichment, "noise_reason", None)
     # Backward-compat fallback: if enrichment came from a mocked heuristic/fallback
     # provider with no noise flag but watch_note exists, fall back to triage_change
     # so existing tests mocking _call_llm_triage still work.

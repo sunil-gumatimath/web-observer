@@ -65,6 +65,30 @@ def enqueue_change_webhooks(
     return ids
 
 
+def _backoff_seconds(attempt: int) -> int:
+    # Exponential backoff: 30s, 2m, 8m, 30m capped
+    return min(30 * (4 ** (attempt - 1)), 1800)
+
+
+def reap_stuck_webhook_deliveries(db: Session, older_than_seconds: int = 600) -> int:
+    """Reset deliveries stuck in processing for longer than threshold."""
+    from datetime import timedelta
+
+    cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
+    stuck = db.scalars(
+        select(WebhookDelivery).where(
+            WebhookDelivery.status == "processing",
+            WebhookDelivery.updated_at < cutoff,
+        )
+    ).all()
+    for d in stuck:
+        d.status = "pending"
+    if stuck:
+        db.commit()
+        logger.info("webhook_reaped_stuck count=%d", len(stuck))
+    return len(stuck)
+
+
 def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
     delivery = db.get(WebhookDelivery, delivery_id)
     if delivery is None or delivery.status == "sent":
@@ -128,10 +152,36 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
         if 200 <= resp.status_code < 300:
             delivery.status = "sent"
             delivery.last_error = None
-        else:
-            delivery.status = "pending" if delivery.attempts < 5 else "failed"
-            delivery.last_error = f"HTTP {resp.status_code}: {resp.text[:500]}"
+            db.commit()
+            return
+        # Handle Retry-After header for 429 / 503
+        retry_after = None
+        if resp.status_code in (429, 503):
+            ra = resp.headers.get("Retry-After", "")
+            try:
+                retry_after = int(ra.strip())
+                if retry_after < 0 or retry_after > 3600:
+                    retry_after = None
+            except (ValueError, AttributeError):
+                retry_after = None
+        delivery.status = "pending" if delivery.attempts < 5 else "failed"
+        delivery.last_error = f"HTTP {resp.status_code}: {resp.text[:500]}"
+        if retry_after:
+            delivery.last_error += f" (retry_after={retry_after}s)"
         db.commit()
+        if delivery.status == "pending":
+            # Exponential backoff before next attempt — raise to trigger dramatiq retry
+            backoff = retry_after or _backoff_seconds(delivery.attempts)
+            logger.info(
+                "webhook_delivery_retry id=%s attempt=%d backoff=%ds status=%d",
+                delivery_id,
+                delivery.attempts,
+                backoff,
+                resp.status_code,
+            )
+            raise RuntimeError(f"webhook retry pending: HTTP {resp.status_code} backoff {backoff}s")
+    except RuntimeError:
+        raise
     except Exception as exc:  # noqa: BLE001
         delivery.status = "pending" if delivery.attempts < 5 else "failed"
         delivery.last_error = str(exc)[:2000]

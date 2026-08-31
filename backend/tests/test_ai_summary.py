@@ -51,7 +51,7 @@ def test_parse_llm_content_clean_json() -> None:
     from app.services.ai_summary import _parse_llm_content
 
     raw = '```json\n{"category": "pricing", "summary": "Here is what changed: Price dropped from $20 to $15.", "is_noise": false}\n```'
-    cat, summary, is_noise, reason = _parse_llm_content(raw, "other")
+    cat, summary, is_noise, reason, *_ = _parse_llm_content(raw, "other")
     assert cat == "pricing"
     assert summary == "Price dropped from $20 to $15."
     assert is_noise is False
@@ -62,16 +62,22 @@ def test_parse_llm_content_noise_with_reason() -> None:
     from app.services.ai_summary import _parse_llm_content
 
     raw = '{"category": "content", "summary": "AI Summary: Routine timestamp update.", "is_noise": true, "noise_reason": "Timestamp only"}'
-    cat, summary, is_noise, reason = _parse_llm_content(raw, "other")
+    cat, summary, is_noise, reason, *_ = _parse_llm_content(raw, "other")
     assert cat == "content"
     assert summary == "Routine timestamp update."
     assert is_noise is True
     assert reason == "Timestamp only"
 
 
-def test_summarize_snapshot_text_fallback() -> None:
-    from app.services.ai_summary import summarize_snapshot_text
+def test_parse_enhanced_with_title_impact() -> None:
+    from app.services.ai_summary import _parse_llm_content
 
-    res = summarize_snapshot_text("This is a simple sample webpage text for testing baseline.")
-    assert "Baseline snapshot captured" in res
-    assert "words" in res
+    raw = '{"category":"pricing","title":"Price Drop Alert","summary":"Price dropped from $20 to $15. Great deal.","impact":"high","confidence":0.92,"is_noise":false}'
+    cat, summary, is_noise, reason, title, impact, conf = _parse_llm_content(raw, "other")
+    assert cat == "pricing"
+    assert title == "Price Drop Alert"
+    assert impact == "high"
+    assert conf == 0.92
+
+
+

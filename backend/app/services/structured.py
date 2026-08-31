@@ -116,7 +116,9 @@ def extract_json_list(text: str, path: str) -> list[str]:
     return items
 
 
-def extract_html_list(html: str, css_selector: str) -> list[str]:
+def extract_html_list(
+    html: str, css_selector: str, ignore_selectors: list[str] | None = None
+) -> list[str]:
     from selectolax.parser import HTMLParser
 
     if not css_selector:
@@ -124,6 +126,13 @@ def extract_html_list(html: str, css_selector: str) -> list[str]:
     tree = HTMLParser(html)
     for node in tree.css("script, style, noscript, template"):
         node.decompose()
+    # Strip ignored selectors before matching the main selector (noise reduction)
+    for sel in ignore_selectors or []:
+        try:
+            for n in tree.css(sel):
+                n.decompose()
+        except Exception:
+            continue
     nodes = tree.css(css_selector)
     if not nodes:
         raise ExtractionError(

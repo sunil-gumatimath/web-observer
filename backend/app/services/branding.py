@@ -85,6 +85,13 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
     meta.hero_candidates = hero_candidates
 
     logo_candidates: list[str] = []
+    # og:logo / itemprop logo often higher quality than favicons – check first
+    for key in ("og:logo", "logo"):
+        val = _content_for(key)
+        if val:
+            u = _abs(final_url, val)
+            if u and u not in logo_candidates:
+                logo_candidates.append(u)
     for sel in (
         'link[rel~="icon"]',
         'link[rel="icon"]',
@@ -117,12 +124,36 @@ def fetch_brand_info(url: str, *, timeout_seconds: int = 5) -> BrandMeta:
     # Resolve relative URLs against the final URL after redirects
     meta = parse_brand_meta(result.text or "", result.final_url or url)
 
-    # Fallback to Google favicon service / domain favicon if no logo was discovered
-    if not meta.logo_candidates:
-        parsed = urlparse(url)
-        if parsed.netloc:
-            domain = parsed.netloc.split(":")[0]
-            meta.logo_candidates.append(f"https://www.google.com/s2/favicons?domain={domain}&sz=128")
+    # Build tiered fallback stack: keep extracted candidates first, then
+    # append multi-provider candidates in priority order (highest quality first).
+    # Deduplicate, keep order, cap at 8.
+    parsed = urlparse(result.final_url or url)
+    domain = (parsed.netloc or urlparse(url).netloc).split(":")[0]
+    if domain:
+        tiered = [
+            f"https://logo.clearbit.com/{domain}?size=256",
+            f"https://www.google.com/s2/favicons?domain={domain}&sz=256",
+            f"https://www.google.com/s2/favicons?domain={domain}&sz=128",
+            f"https://icons.duckduckgo.com/ip3/{domain}.ico",
+            f"https://unavatar.io/{domain}",
+            f"https://{domain}/favicon.ico",
+        ]
+        # If extracted candidates already exist they keep priority; append tiered
+        # ones that are not duplicates. If no extracted candidates, the tiered
+        # list itself becomes the fallback stack.
+        for cand in tiered:
+            if cand not in meta.logo_candidates:
+                meta.logo_candidates.append(cand)
+        # Deduplicate while preserving order and enforce max 8 candidates
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for c in meta.logo_candidates:
+            if c not in seen:
+                seen.add(c)
+                deduped.append(c)
+            if len(deduped) >= 8:
+                break
+        meta.logo_candidates = deduped
 
     return meta
 
@@ -131,15 +162,13 @@ def _download_image(url: str, *, max_bytes: int = MAX_IMAGE_BYTES) -> bytes | No
     try:
         result = fetch_binary(
             url,
-            # 3s was too tight: several sites (news.ycombinator.com included)
-            # intermittently missed it, leaving the monitor with no logo at
-            # all while the same URL succeeded on a retry.
-            timeout_seconds=10,
+            timeout_seconds=8,
             max_response_bytes=max_bytes,
         )
         if result.status_code >= 400 or not result.content:
             return None
-        # HTML guard: mislabelled URLs may return HTML error pages; skip them
+        # HTML guard: mislabelled URLs may return HTML error pages; skip them.
+        # Allow SVG (image/svg+xml) which starts with <svg or <?xml.
         ct = (result.content_type or "").lower()
         if "text/html" in ct:
             return None
@@ -203,7 +232,11 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
         "hero_url": next(iter(meta.hero_candidates), None),
     }
 
-    # Try each candidate until one succeeds (HTML guard inside _download_image)
+    # Try each candidate in priority order until one succeeds (HTML guard
+    # inside _download_image). Order encodes quality: extracted og:logo /
+    # icons first, then Clearbit 256, Google HD 256, Google 128, DuckDuckGo,
+    # Unavatar, direct /favicon.ico. Larger/higher-res providers are earlier
+    # so the first successful download is the best quality available.
     for logo_src in meta.logo_candidates:
         data = _download_image(logo_src)
         if data and len(data) <= MAX_ASSET_OBJECT_SIZE:
@@ -213,6 +246,14 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
                 put_bytes(key=key, data=data, content_type=content_type)
                 brand["logo_path"] = key
                 brand["logo_url"] = logo_src
+                logger.info(
+                    "brand_logo_chosen monitor_id=%s provider=%s url=%s size=%d ext=%s",
+                    monitor.id,
+                    logo_src,
+                    logo_src,
+                    len(data),
+                    ext,
+                )
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.debug("brand_logo_store_failed error=%s", exc)

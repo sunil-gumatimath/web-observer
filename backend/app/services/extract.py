@@ -92,6 +92,7 @@ def extract_markdown(
     tree = HTMLParser(html)
     for node in tree.css("script, style, noscript, template"):
         node.decompose()
+    _strip_boilerplate(tree)
 
     for selector in ignore_selectors or []:
         if not selector or not str(selector).strip():
@@ -168,6 +169,30 @@ def normalize_text(text: str) -> str:
 _MIN_MAIN_CONTENT_CHARS = 200
 
 
+def _strip_boilerplate(tree: HTMLParser) -> None:
+    """Remove common chrome that trafilatura/markdownify miss on React-heavy pages."""
+    for sel in (
+        "nav",
+        "header",
+        "footer",
+        "aside",
+        '[role="navigation"]',
+        '[role="banner"]',
+        '[role="contentinfo"]',
+        ".nav",
+        ".navbar",
+        ".header",
+        ".footer",
+        ".cookie",
+        ".cookies",
+    ):
+        try:
+            for node in tree.css(sel):
+                node.decompose()
+        except Exception:
+            pass
+
+
 def extract_main_markdown(
     html: str,
     *,
@@ -191,6 +216,7 @@ def extract_main_markdown(
     tree = HTMLParser(html)
     for node in tree.css("script, style, noscript, template"):
         node.decompose()
+    _strip_boilerplate(tree)
     for selector in ignore_selectors or []:
         if not selector or not str(selector).strip():
             continue
