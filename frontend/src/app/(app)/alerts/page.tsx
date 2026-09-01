@@ -7,6 +7,7 @@ import {
 	Badge,
 	Button,
 	Card,
+	CategoryBadge,
 	EmptyState,
 	ErrorBox,
 	Input,
@@ -15,8 +16,10 @@ import {
 	Select,
 	Spinner,
 } from "@/components/ui";
+import { BrandLogo } from "@/components/brand-logo";
+import { GithubDiff } from "@/components/github-diff";
 import { api } from "@/lib/api";
-import type { AlertInboxItem, AlertsSummary } from "@/lib/types";
+import type { AlertInboxItem, AlertsSummary, ChangeEventDetail } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
 import { ensureWorkspace } from "@/lib/workspace";
 
@@ -24,36 +27,9 @@ type Filter = "all" | "unread" | "noise";
 
 const PAGE_SIZE = 100;
 
-const CHANGE_COLORS: Record<string, string> = {
-	pricing: "bg-emerald-500",
-	availability: "bg-sky-500",
-	legal: "bg-amber-500",
-	content: "bg-violet-500",
-	design: "bg-pink-500",
-	api: "bg-indigo-500",
-	security: "bg-rose-500",
-	other: "bg-slate-400",
-};
-
-const CATEGORY_LABEL: Record<string, string> = {
-	pricing: "Pricing",
-	availability: "Availability",
-	legal: "Legal",
-	content: "Content",
-	design: "Design",
-	api: "API",
-	security: "Security",
-	other: "Change",
-};
-
-function changeDotClass(cat: string | null): string {
-	if (!cat) return "bg-slate-300 dark:bg-slate-600";
-	return CHANGE_COLORS[cat] ?? "bg-slate-400";
-}
-
 function relativeTime(iso: string): string {
-	const diff = Date.now() - new Date(iso).getTime();
-	const m = Math.floor(diff / 60000);
+	const ms = Date.now() - new Date(iso).getTime();
+	const m = Math.floor(ms / 60000);
 	if (m < 1) return "just now";
 	if (m < 60) return `${m}m ago`;
 	const h = Math.floor(m / 60);
@@ -85,6 +61,10 @@ export default function AlertsPage() {
 	const [loading, setLoading] = useState(true);
 	const [busy, setBusy] = useState(false);
 	const [limit, setLimit] = useState(PAGE_SIZE);
+
+	// Cache of fetched diff details for inline expansion
+	const [expandedDiffs, setExpandedDiffs] = useState<Record<string, ChangeEventDetail>>({});
+	const [loadingDiffs, setLoadingDiffs] = useState<Record<string, boolean>>({});
 
 	const load = useCallback(async (ws: string, f: Filter, lim: number) => {
 		const [items, sum] = await Promise.all([
@@ -207,6 +187,33 @@ export default function AlertsPage() {
 		}
 	}
 
+	async function toggleInlineDiff(alert: AlertInboxItem) {
+		if (!workspaceId) return;
+		if (expandedDiffs[alert.id]) {
+			// Collapse
+			setExpandedDiffs((prev) => {
+				const next = { ...prev };
+				delete next[alert.id];
+				return next;
+			});
+			return;
+		}
+
+		// Expand & load
+		setLoadingDiffs((prev) => ({ ...prev, [alert.id]: true }));
+		try {
+			const detail = await api.getChange(workspaceId, alert.id);
+			setExpandedDiffs((prev) => ({ ...prev, [alert.id]: detail }));
+			if (!alert.is_read) {
+				await markRead(alert, true);
+			}
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Failed to load diff");
+		} finally {
+			setLoadingDiffs((prev) => ({ ...prev, [alert.id]: false }));
+		}
+	}
+
 	const signalCount = summary ? summary.total - summary.noise : 0;
 
 	if (loading) return <Spinner />;
@@ -230,6 +237,7 @@ export default function AlertsPage() {
 			/>
 			{error ? <ErrorBox message={error} /> : null}
 
+			{/* Filter Tabs */}
 			<div className="mb-6">
 				<SegmentedControl<Filter>
 					ariaLabel="Alert filter"
@@ -255,6 +263,7 @@ export default function AlertsPage() {
 				/>
 			</div>
 
+			{/* Search & Secondary Filters */}
 			<div className="mb-6 flex flex-wrap items-center gap-2">
 				<Input
 					type="search"
@@ -310,6 +319,7 @@ export default function AlertsPage() {
 				)}
 			</div>
 
+			{/* Alerts Feed */}
 			{alerts.length === 0 ? (
 				filter === "unread" && summary && summary.total > summary.noise ? (
 					<EmptyState
@@ -333,90 +343,143 @@ export default function AlertsPage() {
 					body="No alerts match your current search or filters. Try clearing them."
 				/>
 			) : (
-				<div className="space-y-2">
+				<div className="space-y-3">
 					{visibleAlerts.map((a) => {
 						const headline = a.ai_summary || a.diff_summary || "Content changed";
 						const reason = a.is_noise ? triageReason(a.ai_summary ?? null) : null;
+						const isExpanded = Boolean(expandedDiffs[a.id]);
+						const isLoadingDiff = Boolean(loadingDiffs[a.id]);
+						const diffDetail = expandedDiffs[a.id];
+
 						return (
 							<Card
 								key={a.id}
-								className={
+								className={`transition-all ${
 									a.is_read
-										? "!py-0"
-										: "!py-0 border-l-4 border-l-sky-500 bg-sky-500/[0.04] dark:bg-sky-500/[0.06]"
-								}
+										? "!p-0 border border-[var(--border)]"
+										: "!p-0 border-l-4 border-l-sky-500 bg-sky-500/[0.02] dark:bg-sky-500/[0.04]"
+								}`}
 							>
-								<div className="flex items-start gap-3 p-4">
-									<span
-										className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${changeDotClass(
-											a.change_category ?? null,
-										)}`}
-										aria-hidden
-									/>
-									<div className="min-w-0 flex-1">
-										<div className="mb-1.5 flex flex-wrap items-center gap-2">
-											{!a.is_read ? <Badge tone="info">unread</Badge> : null}
-											{a.is_noise ? (
-												<Badge tone="warn">noise</Badge>
-											) : a.change_category ? (
-												<Badge tone="neutral">
-													{CATEGORY_LABEL[a.change_category] ??
-														a.change_category}
-												</Badge>
-											) : null}
-											<span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-												{a.monitor_name}
-											</span>
-										</div>
-										<p className="text-[15px] font-medium leading-snug text-slate-800 dark:text-slate-100">
-											{reason ?? headline}
-										</p>
-										{reason ? (
-											<p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400 line-through decoration-slate-400/60">
-												{headline}
+								{/* Alert Header Row */}
+								<div className="flex flex-wrap items-start justify-between gap-3 p-4">
+									<div className="flex items-start gap-3 min-w-0 flex-1">
+										{/* Brand / Favicon Logo */}
+										<BrandLogo
+											name={a.monitor_name}
+											domain={a.monitor_url}
+											size={32}
+											className="mt-0.5"
+										/>
+
+										<div className="min-w-0 flex-1">
+											{/* Top Badges & Monitor Name */}
+											<div className="mb-1.5 flex flex-wrap items-center gap-2">
+												{!a.is_read ? <Badge tone="info">unread</Badge> : null}
+												{a.is_noise ? (
+													<Badge tone="warn">noise</Badge>
+												) : (
+													<CategoryBadge category={a.change_category} />
+												)}
+												<Link
+													href={`/monitors/${a.monitor_id}`}
+													className="text-sm font-semibold text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 truncate"
+												>
+													{a.monitor_name}
+												</Link>
+												<span className="text-xs text-slate-400 dark:text-slate-500">·</span>
+												<span className="text-xs text-slate-500 dark:text-slate-400">
+													{relativeTime(a.created_at)}
+												</span>
+											</div>
+
+											{/* AI Summary / Headline */}
+											<p className="text-[15px] font-medium leading-snug text-slate-900 dark:text-slate-100">
+												{reason ?? headline}
 											</p>
-										) : null}
-										<p className="mt-1.5 truncate text-xs text-slate-500 dark:text-slate-500">
-											{a.monitor_url} · {relativeTime(a.created_at)}
-										</p>
+											{reason ? (
+												<p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400 line-through decoration-slate-400/60">
+													{headline}
+												</p>
+											) : null}
+
+											{/* Monitor URL subtitle */}
+											<p className="mt-1.5 truncate text-xs text-slate-500 dark:text-slate-500">
+												{a.monitor_url}
+											</p>
+										</div>
 									</div>
-									<div className="flex shrink-0 flex-wrap gap-2">
+
+									{/* Action Buttons */}
+									<div className="flex shrink-0 items-center gap-1.5 self-start pt-1">
+										{/* Toggle Diff Preview Button */}
 										<Button
 											type="button"
 											size="sm"
-											disabled={busy}
-											onClick={async () => {
-												if (!a.is_read) await markRead(a, true);
-												router.push(`/changes/${a.id}`);
-											}}
+											variant={isExpanded ? "secondary" : "primary"}
+											disabled={busy || isLoadingDiff}
+											onClick={() => toggleInlineDiff(a)}
+											className="text-xs font-medium"
 										>
-											Open
+											{isLoadingDiff
+												? "Loading…"
+												: isExpanded
+												? "Hide diff"
+												: "Show changes"}
 										</Button>
+
+										{/* Mark Read/Unread */}
 										<Button
 											type="button"
 											size="sm"
-											variant="secondary"
+											variant="ghost"
 											disabled={busy}
 											onClick={() => markRead(a, !a.is_read)}
+											title={a.is_read ? "Mark unread" : "Mark read"}
+											className="text-xs"
 										>
-											{a.is_read ? "Mark unread" : "Mark read"}
+											{a.is_read ? "Unread" : "Read"}
 										</Button>
+
+										{/* Noise Toggle */}
 										<Button
 											type="button"
 											size="sm"
 											variant="ghost"
 											disabled={busy}
 											onClick={() => toggleNoise(a)}
+											title={a.is_noise ? "Restore to signal" : "Mark as noise"}
+											className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400"
 										>
-											{a.is_noise ? "Unmark noise" : "Noise"}
+											{a.is_noise ? "Signal" : "Noise"}
 										</Button>
+
+										{/* Direct link to detail page */}
+										<Link href={`/changes/${a.id}`}>
+											<Button type="button" size="sm" variant="ghost" className="text-xs">
+												Full page ↗
+											</Button>
+										</Link>
 									</div>
 								</div>
+
+								{/* Inline Diff Accordion View */}
+								{isExpanded && diffDetail ? (
+									<div className="border-t border-[var(--border)] bg-slate-50/50 p-4 dark:bg-slate-900/30">
+										<GithubDiff
+											before={diffDetail.previous_text}
+											after={diffDetail.new_text}
+											unifiedDiff={diffDetail.diff}
+											baseUrl={a.monitor_url}
+										/>
+									</div>
+								) : null}
 							</Card>
 						);
 					})}
+
+					{/* Pagination / Load more */}
 					{alerts.length >= limit ? (
-						<div className="flex flex-col items-center gap-1.5 pt-3">
+						<div className="flex flex-col items-center gap-1.5 pt-4">
 							<Button
 								type="button"
 								variant="secondary"

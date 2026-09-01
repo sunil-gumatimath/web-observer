@@ -13,6 +13,7 @@ import {
 	SectionTitle,
 	Spinner,
 } from "@/components/ui";
+import { BrandLogo } from "@/components/brand-logo";
 import { GithubDiff } from "@/components/github-diff";
 import { api } from "@/lib/api";
 import type {
@@ -128,6 +129,21 @@ export default function ChangeDetailPage() {
 
 	return (
 		<div>
+			{monitor ? (
+				<div className="mb-4 flex items-center gap-3">
+					<BrandLogo name={monitor.name} domain={monitor.url} brand={monitor.brand} size={36} />
+					<div className="min-w-0 flex-1">
+						<Link
+							href={`/monitors/${monitor.id}`}
+							className="text-lg font-bold text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400"
+						>
+							{monitor.name}
+						</Link>
+						<p className="text-xs text-slate-500 font-mono truncate">{monitor.url}</p>
+					</div>
+				</div>
+			) : null}
+
 			<PageHeader
 				title="Change detail"
 				description={
