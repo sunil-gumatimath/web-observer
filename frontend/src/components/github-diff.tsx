@@ -1,17 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { cn, SegmentedControl } from "@/components/ui";
 import { resolveImageUrl, splitLineSegments } from "@/lib/image-md";
 
 /**
- * GitHub-style before/after diff.
- *
- * Line-level LCS over the two texts, rendered the way webdog/ GitHub show a
- * change: a split (side-by-side) view with removed lines in red on the
- * "Before" side and added lines in green on the "After" side, plus a unified
- * view. Falls back to the raw unified diff when the text is too large to diff
- * in the browser.
+ * GitHub-style before/after diff with intelligent hunking (changes only).
  */
 
 type Row = {
@@ -22,7 +16,12 @@ type Row = {
 	rightNo?: number;
 };
 
+type DiffItem =
+	| { type: "row"; row: Row; index: number }
+	| { type: "collapsed"; count: number; startIdx: number; endIdx: number };
+
 const MAX_LINES = 1500;
+const CONTEXT_LINES = 3;
 
 function lineLcs(a: string[], b: string[]) {
 	const n = a.length;
@@ -120,11 +119,6 @@ function Gutter({ no }: { no?: number }) {
 	);
 }
 
-/**
- * Render a diff line, showing markdown images as small inline chips so
- * captured visuals (logos, screenshots of sections) are visible in alerts.
- * Unresolvable image tokens degrade to their alt text.
- */
 function DiffLineText({ text, baseUrl }: { text: string; baseUrl?: string }) {
 	const segs = useMemo(() => splitLineSegments(text || ""), [text]);
 	if (segs.length === 0) return null;
@@ -172,59 +166,27 @@ function SplitCell({
 }) {
 	const bg =
 		variant === "del"
-			? "bg-rose-500/10"
+			? "bg-rose-500/10 text-rose-800 dark:text-rose-200"
 			: variant === "add"
-				? "bg-emerald-500/10"
+				? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
 				: variant === "equal"
-					? ""
+					? "text-slate-700 dark:text-slate-300"
 					: "bg-slate-500/[0.02]";
-	const txt =
-		variant === "del"
-			? "text-rose-700 dark:text-rose-300"
-			: variant === "add"
-				? "text-emerald-700 dark:text-emerald-300"
-				: "text-slate-700 dark:text-slate-300";
-	const sign = variant === "del" ? "−" : variant === "add" ? "+" : "";
+
 	return (
-		<div className={cn("flex min-h-[1.375rem] min-w-0 overflow-hidden", bg)}>
+		<div className={cn("flex min-h-[1.375rem] min-w-0 overflow-hidden font-mono text-xs", bg)}>
 			<Gutter no={no} />
 			<span
 				className={cn(
-					"min-w-0 flex-1 overflow-hidden whitespace-pre-wrap break-words px-2 [overflow-wrap:anywhere] [word-break:break-word]",
-					txt,
+					"min-w-0 flex-1 overflow-hidden px-2 py-0.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]",
+					variant === "del"
+						? "bg-rose-500/10"
+						: variant === "add"
+							? "bg-emerald-500/10"
+							: "",
 				)}
 			>
-				{sign}
-				<DiffLineText text={text ?? ""} baseUrl={baseUrl} />
-			</span>
-		</div>
-	);
-}
-
-function UnifiedLine({
-	text,
-	variant,
-	baseUrl,
-}: {
-	text: string;
-	variant: "equal" | "del" | "add";
-	baseUrl?: string;
-}) {
-	const cls =
-		variant === "del"
-			? "bg-rose-500/10 text-rose-700 dark:text-rose-300"
-			: variant === "add"
-				? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-				: "text-slate-600 dark:text-slate-300";
-	const sign = variant === "del" ? "−" : variant === "add" ? "+" : " ";
-	const srPrefix =
-		variant === "del" ? "Removed: " : variant === "add" ? "Added: " : "";
-	return (
-		<div className={cn("flex min-w-0 overflow-hidden px-3", cls)}>
-			<span className="min-w-0 flex-1 overflow-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]">
-				{srPrefix ? <span className="sr-only">{srPrefix}</span> : null}
-				<span aria-hidden="true">{sign}</span>
-				<DiffLineText text={text} baseUrl={baseUrl} />
+				{text != null ? <DiffLineText text={text} baseUrl={baseUrl} /> : null}
 			</span>
 		</div>
 	);
@@ -256,6 +218,8 @@ export function GithubDiff({
 	baseUrl?: string;
 }) {
 	const [view, setView] = useState<"split" | "unified">("split");
+	const [scope, setScope] = useState<"changes" | "full">("changes");
+	const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set());
 
 	const tooLarge =
 		(before?.split("\n").length ?? 0) > MAX_LINES ||
@@ -282,6 +246,68 @@ export function GithubDiff({
 		(r) => r.kind === "del" || r.kind === "replace",
 	).length;
 
+	// Build hunk items (collapsing unchanged stretches in 'changes' mode)
+	const diffItems: DiffItem[] = useMemo(() => {
+		if (scope === "full" || rows.length === 0) {
+			return rows.map((row, index) => ({ type: "row", row, index }));
+		}
+
+		// Mark rows that should be visible (changes + context window)
+		const visible = new Array<boolean>(rows.length).fill(false);
+		let hasAnyChange = false;
+
+		for (let i = 0; i < rows.length; i++) {
+			if (rows[i].kind !== "equal") {
+				hasAnyChange = true;
+				const start = Math.max(0, i - CONTEXT_LINES);
+				const end = Math.min(rows.length - 1, i + CONTEXT_LINES);
+				for (let j = start; j <= end; j++) {
+					visible[j] = true;
+				}
+			}
+		}
+
+		// If no changes detected, show all rows
+		if (!hasAnyChange) {
+			return rows.map((row, index) => ({ type: "row", row, index }));
+		}
+
+		const items: DiffItem[] = [];
+		let i = 0;
+		while (i < rows.length) {
+			if (visible[i] || expandedSections.has(i)) {
+				items.push({ type: "row", row: rows[i], index: i });
+				i++;
+			} else {
+				const startIdx = i;
+				while (i < rows.length && !visible[i] && !expandedSections.has(i)) {
+					i++;
+				}
+				const endIdx = i - 1;
+				const count = endIdx - startIdx + 1;
+				// If only 1-2 unchanged lines, show them directly rather than a collapse bar
+				if (count <= 2) {
+					for (let k = startIdx; k <= endIdx; k++) {
+						items.push({ type: "row", row: rows[k], index: k });
+					}
+				} else {
+					items.push({ type: "collapsed", count, startIdx, endIdx });
+				}
+			}
+		}
+		return items;
+	}, [rows, scope, expandedSections]);
+
+	function expandHunk(startIdx: number, endIdx: number) {
+		setExpandedSections((prev) => {
+			const next = new Set(prev);
+			for (let k = startIdx; k <= endIdx; k++) {
+				next.add(k);
+			}
+			return next;
+		});
+	}
+
 	const host = (() => {
 		try {
 			return baseUrl ? new URL(baseUrl).host : null;
@@ -307,26 +333,57 @@ export function GithubDiff({
 						<span className="truncate font-mono">{host}</span>
 					</a>
 				) : (
-					<span className="text-slate-600 dark:text-slate-300">Before → After</span>
+					<span className="text-slate-600 dark:text-slate-300 font-medium text-xs">Before → After</span>
 				)}
 			</div>
-			<div className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800/70">
-				<SegmentedControl
-					ariaLabel="Diff view"
-					value={view}
-					onChange={setView}
-					options={[
-						{ value: "split", label: "Split" },
-						{ value: "unified", label: "Unified" },
-					]}
-				/>
+
+			<div className="flex flex-wrap items-center gap-2">
+				{/* Scope toggle: Changes only vs Full page */}
+				<div className="flex rounded-lg border border-[var(--border)] bg-slate-100 p-0.5 dark:bg-slate-800 text-xs">
+					<button
+						type="button"
+						onClick={() => setScope("changes")}
+						className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+							scope === "changes"
+								? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-slate-100"
+								: "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+						}`}
+					>
+						Changes only
+					</button>
+					<button
+						type="button"
+						onClick={() => setScope("full")}
+						className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+							scope === "full"
+								? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-slate-100"
+								: "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+						}`}
+					>
+						Full page
+					</button>
+				</div>
+
+				<div className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800/70">
+					<SegmentedControl
+						ariaLabel="Diff view"
+						value={view}
+						onChange={setView}
+						options={[
+							{ value: "split", label: "Split" },
+							{ value: "unified", label: "Unified" },
+						]}
+					/>
+				</div>
 			</div>
 		</div>
 	);
 
-	const webdogHeader = (
+	const diffSummaryHeader = (
 		<div className="flex items-center justify-between gap-3 border-b border-neutral-950/5 bg-neutral-50/80 px-3 py-2 dark:border-white/5 dark:bg-slate-900/50">
-			<p className="text-xs font-semibold text-neutral-700 dark:text-slate-300">What changed</p>
+			<p className="text-xs font-semibold text-neutral-700 dark:text-slate-300">
+				{scope === "changes" ? "Changes detected" : "Full document diff"}
+			</p>
 			{!tooLarge ? (
 				<div className="flex items-center gap-1.5 tabular-nums">
 					<span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[0.6875rem] font-semibold text-emerald-700 ring-1 ring-emerald-600/15 ring-inset dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-500/20">
@@ -351,18 +408,18 @@ export function GithubDiff({
 								const t = line.trimStart();
 								if (t.startsWith("+") && !t.startsWith("+++"))
 									return (
-										<span key={i} className="add block">
+										<span key={i} className="add block text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
 											{line}
 										</span>
 									);
 								if (t.startsWith("-") && !t.startsWith("---"))
 									return (
-										<span key={i} className="del block">
+										<span key={i} className="del block text-rose-700 dark:text-rose-300 bg-rose-500/10">
 											{line}
 										</span>
 									);
 								return (
-									<span key={i} className="block">
+									<span key={i} className="block text-slate-600 dark:text-slate-400">
 										{line}
 									</span>
 								);
@@ -381,37 +438,84 @@ export function GithubDiff({
 			<div className="min-w-0 w-full max-w-full overflow-hidden">
 				{header}
 				<div className="overflow-hidden rounded-xl ring-1 ring-neutral-950/[0.08] shadow-xs dark:ring-white/10">
-					{webdogHeader}
-					<div className="max-h-72 overflow-auto bg-white dark:bg-slate-950">
+					{diffSummaryHeader}
+					<div className="max-h-[min(75vh,36rem)] overflow-auto bg-white dark:bg-slate-950">
 						<table className="w-full border-collapse font-mono text-xs">
 							<tbody>
-								{rows.map((r, i) => {
-									if (r.kind === "equal") return null;
-									if (r.kind === "del")
+								{diffItems.map((item, i) => {
+									if (item.type === "collapsed") {
 										return (
-											<tr key={i} className="bg-rose-50/60 dark:bg-rose-950/20">
-												<td aria-hidden className="w-6 border-r border-neutral-950/5 bg-rose-100/80 px-2 text-center font-semibold select-none text-rose-700 dark:border-white/5 dark:bg-rose-900/30 dark:text-rose-300">−</td>
-												<td className="px-3 py-1 break-all whitespace-pre-wrap text-rose-900 dark:text-rose-200"><mark className="rounded-sm bg-rose-200/80 px-0.5 text-rose-950 dark:bg-rose-900/40 dark:text-rose-100 [box-decoration-break:clone]"><DiffLineText text={r.left ?? ""} baseUrl={baseUrl} /></mark></td>
+											<tr key={`collapsed-${i}`} className="bg-slate-100/70 dark:bg-slate-900/80 border-y border-[var(--border)]">
+												<td colSpan={2} className="py-1.5 px-3 text-center text-xs text-slate-500 dark:text-slate-400">
+													<button
+														type="button"
+														onClick={() => expandHunk(item.startIdx, item.endIdx)}
+														className="text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 font-medium hover:underline inline-flex items-center gap-1"
+													>
+														<span>↕ Expand {item.count} unchanged lines</span>
+													</button>
+												</td>
 											</tr>
 										);
-									if (r.kind === "add")
+									}
+
+									const r = item.row;
+									if (r.kind === "equal") {
 										return (
-											<tr key={i} className="bg-emerald-50/60 dark:bg-emerald-950/20">
-												<td aria-hidden className="w-6 border-r border-neutral-950/5 bg-emerald-100/80 px-2 text-center font-semibold select-none text-emerald-700 dark:border-white/5 dark:bg-emerald-900/30 dark:text-emerald-300">+</td>
-												<td className="px-3 py-1 break-all whitespace-pre-wrap text-emerald-900 dark:text-emerald-200"><mark className="rounded-sm bg-emerald-200/80 px-0.5 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100 [box-decoration-break:clone]"><DiffLineText text={r.right ?? ""} baseUrl={baseUrl} /></mark></td>
+											<tr key={`row-${item.index}`} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+												<td aria-hidden className="w-8 border-r border-[var(--border)] px-2 text-center text-[11px] select-none text-slate-400">{r.rightNo ?? r.leftNo}</td>
+												<td className="px-3 py-1 whitespace-pre-wrap text-slate-600 dark:text-slate-300 break-words">
+													<DiffLineText text={r.right ?? r.left ?? ""} baseUrl={baseUrl} />
+												</td>
 											</tr>
 										);
+									}
+
+									if (r.kind === "del") {
+										return (
+											<tr key={`del-${item.index}`} className="bg-rose-50/60 dark:bg-rose-950/20">
+												<td aria-hidden className="w-8 border-r border-neutral-950/5 bg-rose-100/80 px-2 text-center font-semibold select-none text-rose-700 dark:border-white/5 dark:bg-rose-900/30 dark:text-rose-300">−</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-rose-900 dark:text-rose-200">
+													<mark className="rounded-sm bg-rose-200/80 px-0.5 text-rose-950 dark:bg-rose-900/40 dark:text-rose-100 [box-decoration-break:clone]">
+														<DiffLineText text={r.left ?? ""} baseUrl={baseUrl} />
+													</mark>
+												</td>
+											</tr>
+										);
+									}
+
+									if (r.kind === "add") {
+										return (
+											<tr key={`add-${item.index}`} className="bg-emerald-50/60 dark:bg-emerald-950/20">
+												<td aria-hidden className="w-8 border-r border-neutral-950/5 bg-emerald-100/80 px-2 text-center font-semibold select-none text-emerald-700 dark:border-white/5 dark:bg-emerald-900/30 dark:text-emerald-300">+</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-emerald-900 dark:text-emerald-200">
+													<mark className="rounded-sm bg-emerald-200/80 px-0.5 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100 [box-decoration-break:clone]">
+														<DiffLineText text={r.right ?? ""} baseUrl={baseUrl} />
+													</mark>
+												</td>
+											</tr>
+										);
+									}
+
 									return (
-										<>
-											<tr key={`${i}-del`} className="bg-rose-50/60 dark:bg-rose-950/20">
-												<td aria-hidden className="w-6 border-r border-neutral-950/5 bg-rose-100/80 px-2 text-center font-semibold select-none text-rose-700 dark:border-white/5 dark:bg-rose-900/30 dark:text-rose-300">−</td>
-												<td className="px-3 py-1 break-all whitespace-pre-wrap text-rose-900 dark:text-rose-200"><mark className="rounded-sm bg-rose-200/80 px-0.5 text-rose-950 dark:bg-rose-900/40 dark:text-rose-100 [box-decoration-break:clone]"><DiffLineText text={r.left ?? ""} baseUrl={baseUrl} /></mark></td>
+										<React.Fragment key={`rep-${item.index}`}>
+											<tr className="bg-rose-50/60 dark:bg-rose-950/20">
+												<td aria-hidden className="w-8 border-r border-neutral-950/5 bg-rose-100/80 px-2 text-center font-semibold select-none text-rose-700 dark:border-white/5 dark:bg-rose-900/30 dark:text-rose-300">−</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-rose-900 dark:text-rose-200">
+													<mark className="rounded-sm bg-rose-200/80 px-0.5 text-rose-950 dark:bg-rose-900/40 dark:text-rose-100 [box-decoration-break:clone]">
+														<DiffLineText text={r.left ?? ""} baseUrl={baseUrl} />
+													</mark>
+												</td>
 											</tr>
-											<tr key={`${i}-add`} className="bg-emerald-50/60 dark:bg-emerald-950/20">
-												<td aria-hidden className="w-6 border-r border-neutral-950/5 bg-emerald-100/80 px-2 text-center font-semibold select-none text-emerald-700 dark:border-white/5 dark:bg-emerald-900/30 dark:text-emerald-300">+</td>
-												<td className="px-3 py-1 break-all whitespace-pre-wrap text-emerald-900 dark:text-emerald-200"><mark className="rounded-sm bg-emerald-200/80 px-0.5 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100 [box-decoration-break:clone]"><DiffLineText text={r.right ?? ""} baseUrl={baseUrl} /></mark></td>
+											<tr className="bg-emerald-50/60 dark:bg-emerald-950/20">
+												<td aria-hidden className="w-8 border-r border-neutral-950/5 bg-emerald-100/80 px-2 text-center font-semibold select-none text-emerald-700 dark:border-white/5 dark:bg-emerald-900/30 dark:text-emerald-300">+</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-emerald-900 dark:text-emerald-200">
+													<mark className="rounded-sm bg-emerald-200/80 px-0.5 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100 [box-decoration-break:clone]">
+														<DiffLineText text={r.right ?? ""} baseUrl={baseUrl} />
+													</mark>
+												</td>
 											</tr>
-										</>
+										</React.Fragment>
 									);
 								})}
 							</tbody>
@@ -429,36 +533,57 @@ export function GithubDiff({
 			<SrOnlyDiffSummary rows={rows} />
 			<div aria-hidden="true" className="min-w-0 w-full max-w-full overflow-hidden">
 				<CardShell>
+					{diffSummaryHeader}
 					<div className="grid w-full min-w-0 grid-cols-2 border-b border-[var(--border)] bg-slate-50/70 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
-						<div className="min-w-0 overflow-hidden px-2 py-1.5">Before</div>
-						<div className="min-w-0 overflow-hidden px-2 py-1.5">After</div>
+						<div className="min-w-0 overflow-hidden px-3 py-1.5">Before</div>
+						<div className="min-w-0 overflow-hidden px-3 py-1.5">After</div>
 					</div>
-					<div className="max-h-[min(70vh,32rem)] w-full min-w-0 max-w-full overflow-auto">
-						{rows.map((r, i) => (
-							<div key={i} className="grid w-full min-w-0 grid-cols-2">
-								{r.kind === "del" ? (
-									<>
-										<SplitCell text={r.left} no={r.leftNo} variant="del" baseUrl={baseUrl} />
-										<SplitCell variant="empty" baseUrl={baseUrl} />
-									</>
-								) : r.kind === "add" ? (
-									<>
-										<SplitCell variant="empty" baseUrl={baseUrl} />
-										<SplitCell text={r.right} no={r.rightNo} variant="add" baseUrl={baseUrl} />
-									</>
-								) : r.kind === "replace" ? (
-									<>
-										<SplitCell text={r.left} no={r.leftNo} variant="del" baseUrl={baseUrl} />
-										<SplitCell text={r.right} no={r.rightNo} variant="add" baseUrl={baseUrl} />
-									</>
-								) : (
-									<>
-										<SplitCell text={r.left} no={r.leftNo} variant="equal" baseUrl={baseUrl} />
-										<SplitCell text={r.right} no={r.rightNo} variant="equal" baseUrl={baseUrl} />
-									</>
-								)}
-							</div>
-						))}
+					<div className="max-h-[min(75vh,38rem)] w-full min-w-0 max-w-full overflow-auto">
+						{diffItems.map((item, i) => {
+							if (item.type === "collapsed") {
+								return (
+									<div
+										key={`collapsed-${i}`}
+										className="border-y border-[var(--border)] bg-slate-100/80 py-1.5 text-center dark:bg-slate-900/90"
+									>
+										<button
+											type="button"
+											onClick={() => expandHunk(item.startIdx, item.endIdx)}
+											className="inline-flex items-center gap-1.5 text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline dark:text-sky-400 dark:hover:text-sky-300"
+										>
+											<span>↕ Expand {item.count} unchanged lines</span>
+										</button>
+									</div>
+								);
+							}
+
+							const r = item.row;
+							return (
+								<div key={`row-${item.index}`} className="grid w-full min-w-0 grid-cols-2">
+									{r.kind === "del" ? (
+										<>
+											<SplitCell text={r.left} no={r.leftNo} variant="del" baseUrl={baseUrl} />
+											<SplitCell variant="empty" baseUrl={baseUrl} />
+										</>
+									) : r.kind === "add" ? (
+										<>
+											<SplitCell variant="empty" baseUrl={baseUrl} />
+											<SplitCell text={r.right} no={r.rightNo} variant="add" baseUrl={baseUrl} />
+										</>
+									) : r.kind === "replace" ? (
+										<>
+											<SplitCell text={r.left} no={r.leftNo} variant="del" baseUrl={baseUrl} />
+											<SplitCell text={r.right} no={r.rightNo} variant="add" baseUrl={baseUrl} />
+										</>
+									) : (
+										<>
+											<SplitCell text={r.left} no={r.leftNo} variant="equal" baseUrl={baseUrl} />
+											<SplitCell text={r.right} no={r.rightNo} variant="equal" baseUrl={baseUrl} />
+										</>
+									)}
+								</div>
+							);
+						})}
 					</div>
 				</CardShell>
 			</div>
