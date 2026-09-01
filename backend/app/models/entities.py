@@ -38,6 +38,7 @@ class MonitorMode(enum.StrEnum):
     ``JSON_FIELD``    single value addressed by a JSONPath-style query
                       (e.g. ``$.data.price``); the URL must return JSON.
     ``RSS_FEED``      RSS/Atom feed item list; diff on GUID/link.
+    ``README``        GitHub repo README.md markdown; tracks doc changes.
     """
 
     PAGE_CONTENT = "page_content"
@@ -46,6 +47,7 @@ class MonitorMode(enum.StrEnum):
     LIST_ITEMS = "list_items"
     JSON_FIELD = "json_field"
     RSS_FEED = "rss_feed"
+    README = "readme"
 
 
 # Single source of truth for valid mode strings. API schemas, bulk import,

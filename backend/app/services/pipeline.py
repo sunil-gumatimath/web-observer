@@ -128,6 +128,12 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
         items = extract_rss_items(result.text)
         return list_to_normalized(items), items
 
+    if mode == "readme":
+        # README mode: result.text is already normalized markdown from readme fetcher
+        from app.services.extract import normalize_text
+
+        return normalize_text(result.text), None
+
     # page_content (default): main content as markdown when detectable
     # (webdog `useMainContentOnly` parity — strips nav/boilerplate), falling
     # back to whole-body markdown for pages where detection fails.

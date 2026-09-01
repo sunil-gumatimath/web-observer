@@ -4,7 +4,8 @@ export type MonitorMode =
   | "product_price"
   | "list_items"
   | "json_field"
-  | "rss_feed";
+  | "rss_feed"
+  | "readme";
 
 export type Monitor = {
   id: string;
@@ -143,8 +144,8 @@ export type MonitorCreateInput = {
   ignore_regexes?: string[] | null;
   alert_config?: Record<string, unknown> | null;
   screenshots_enabled?: boolean;
+  run_now?: boolean;
 };
-
 export type MonitorUpdateInput = {
   name?: string;
   url?: string;

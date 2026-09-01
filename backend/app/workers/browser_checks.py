@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 MODE_SITE_LINKS = "site_links"
+MODE_README = "readme"
 
 
 @dramatiq.actor(queue_name="browser_checks", max_retries=2, time_limit=180_000)
@@ -26,10 +27,9 @@ def run_browser_check(run_id: str) -> None:
     """Execute a JS-required or visual monitor run with Playwright."""
 
     def _pre_run_hook(monitor, run, db):
-        # Defense-in-depth: a site_links monitor must never run through
-        # Playwright — a rendered page is not a sitemap, so snapshotting it
-        # would produce garbage. Route back to the sitemap-aware HTTP worker.
-        if monitor.mode == MODE_SITE_LINKS:
+        # Defense-in-depth: site_links/readme monitors must never run through
+        # Playwright — they fetch sitemap/README over plain HTTP.
+        if monitor.mode in (MODE_SITE_LINKS, MODE_README):
             from app.workers.checks import run_http_check
 
             run.status = RunStatus.QUEUED.value

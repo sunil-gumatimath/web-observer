@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 MODE_SITE_LINKS = "site_links"
+MODE_README = "readme"
 
 
 @dramatiq.actor(queue_name="http_checks", max_retries=3, time_limit=120_000)
@@ -26,10 +27,10 @@ def run_http_check(run_id: str) -> None:
     """Execute a single HTTP monitor run end-to-end."""
 
     def _pre_run_hook(monitor, run, db):
-        # Misrouted browser job. site_links must stay on THIS worker even when
-        # js_required is set: its fetch path is sitemap discovery over plain
-        # HTTP, so handing it to Playwright would snapshot the wrong content.
-        if monitor.js_required and monitor.mode != MODE_SITE_LINKS:
+        # Misrouted browser job. site_links/readme must stay on THIS worker even when
+        # js_required is set: their fetch paths are plain HTTP, so handing them to
+        # Playwright would snapshot the wrong content.
+        if monitor.js_required and monitor.mode not in (MODE_SITE_LINKS, MODE_README):
             from app.workers.browser_checks import run_browser_check
 
             run.status = RunStatus.QUEUED.value
@@ -60,6 +61,34 @@ def run_http_check(run_id: str) -> None:
                 content_type="text/plain; charset=utf-8",
                 # round() returns an int here and avoids a lint-rule trip on
                 # unchecked int() conversion of a value that cannot fail.
+                latency_ms=round((time.perf_counter() - started) * 1000),
+            )
+        if monitor.mode == MODE_README:
+            started = time.perf_counter()
+            from app.services.readme import fetch_readme_text
+
+            try:
+                text, final_url = fetch_readme_text(
+                    monitor.url,
+                    timeout_seconds=monitor.timeout_seconds,
+                    max_response_bytes=monitor.max_response_bytes,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Preserve ExtractionError code when possible
+                code = getattr(exc, "code", "readme_not_found")
+                raise FetchError(code, str(exc)) from exc
+            content = text.encode("utf-8")
+            if len(content) > monitor.max_response_bytes:
+                raise FetchError(
+                    "response_too_large",
+                    f"README size {len(content)} exceeds limit {monitor.max_response_bytes}",
+                )
+            return FetchResult(
+                final_url=final_url,
+                status_code=200,
+                content=content,
+                text=text,
+                content_type="text/markdown; charset=utf-8",
                 latency_ms=round((time.perf_counter() - started) * 1000),
             )
         return fetch_url(

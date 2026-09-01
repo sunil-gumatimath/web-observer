@@ -52,6 +52,7 @@ const STARTER_TEMPLATES: Array<{
 	{ label: "Job listings", name: "Jobs", mode: "page_content", interval: 60, urlHint: "…/careers" },
 	{ label: "Docs page", name: "Docs", mode: "page_content", interval: 1440, urlHint: "…/docs" },
 	{ label: "Site links", name: "Site links", mode: "site_links", interval: 1440, urlHint: "domain.com" },
+	{ label: "README", name: "README", mode: "readme", interval: 1440, urlHint: "owner/repo" },
 ];
 
 const MIN_INTERVAL_MIN = 15;
@@ -74,12 +75,16 @@ function intervalError(minutes: number | null): string | null {
 }
 
 function needsJs(mode: MonitorMode): boolean {
-	// site_links watches the sitemap over plain HTTP; the others may need a browser.
-	return mode !== "site_links";
+	// site_links/readme/rss_field watch over plain HTTP; the others may need a browser.
+	return mode !== "site_links" && mode !== "readme" && mode !== "rss_feed";
 }
 
 function showsIgnore(mode: MonitorMode): boolean {
 	return mode === "page_content";
+}
+
+function isReadmeMode(mode: MonitorMode): boolean {
+	return mode === "readme";
 }
 
 export default function NewMonitorPage() {
@@ -106,10 +111,13 @@ export default function NewMonitorPage() {
 		const trimmed = input.trim();
 		if (!trimmed) return "";
 		if (/^https?:\/\//i.test(trimmed)) return trimmed;
+		// readme shorthand like owner/repo must stay as-is
+		if (isReadmeMode(mode) && /^[\w.\-]+\/[\w.\-]+$/.test(trimmed)) return trimmed;
 		return `https://${trimmed}`;
 	}
 
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
+		if (isReadmeMode(mode)) return;
 		const candidate = normalizeUrl(rawUrl ?? url);
 		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
 		setBrandLoading(true);
@@ -123,10 +131,14 @@ export default function NewMonitorPage() {
 		} finally {
 			setBrandLoading(false);
 		}
-	}, [url, name]);
+	}, [url, name, mode]);
 
-	// Auto-lookup brand on typing with debounce
+	// Auto-lookup brand on typing with debounce (skip for readme)
 	useEffect(() => {
+		if (isReadmeMode(mode)) {
+			setBrand(null);
+			return;
+		}
 		const candidate = normalizeUrl(url);
 		if (!candidate || candidate.length < 8 || !candidate.includes(".")) {
 			setBrand(null);
@@ -136,7 +148,7 @@ export default function NewMonitorPage() {
 			lookupBrand(candidate);
 		}, 600);
 		return () => clearTimeout(timer);
-	}, [url, lookupBrand]);
+	}, [url, lookupBrand, mode]);
 
 	async function onSubmit(e: FormEvent) {
 		e.preventDefault();
@@ -183,17 +195,10 @@ export default function NewMonitorPage() {
 				watch_note: watchNote.trim() || null,
 				ignore_selectors: ignore.length ? ignore : null,
 				ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
+				run_now: runNow,
 			});
-
-			// Kick off first check so the detail page can show a live result.
-			if (runNow) {
-				try {
-					await api.runMonitor(ws, monitor.id);
-				} catch {
-					// Scheduler may already have queued a run — detail page will poll either way.
-				}
-			}
-
+			// run_now is handled server-side in the same POST to avoid a second
+			// round-trip (~0.7s saved). No second await here — navigate immediately.
 			router.push(`/monitors/${monitor.id}?fresh=1`);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to create monitor");
@@ -258,8 +263,13 @@ export default function NewMonitorPage() {
 								value={url}
 								onBlur={() => lookupBrand()}
 								onChange={(e) => setUrl(e.target.value)}
-								placeholder="https://example.com/pricing or example.com"
+								placeholder={isReadmeMode(mode) ? "owner/repo  or  https://github.com/owner/repo" : "https://example.com/pricing or example.com"}
 							/>
+							{isReadmeMode(mode) ? (
+								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+									Tracks the repository&apos;s <code>README.md</code> — any doc change on the default branch triggers a diff &amp; alert.
+								</p>
+							) : null}
 						</div>
 
 						{brandLoading ? (
@@ -361,6 +371,9 @@ export default function NewMonitorPage() {
 								<option value="json_field">
 									JSON field (API / JSON responses)
 								</option>
+								<option value="readme">
+									GitHub README (repo documentation)
+								</option>
 								</Select>
 								{mode === "list_items" ? (
 								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -370,6 +383,11 @@ export default function NewMonitorPage() {
 								{mode === "json_field" ? (
 								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
 								JSON field: watches one value inside a JSON response and reports when it changes. Set the JSON path below.
+								</p>
+								) : null}
+								{mode === "readme" ? (
+								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+								README: monitors <code>README.md</code> on the repo&apos;s default branch (main/master). Use <code>vercel/next.js</code> or the full GitHub URL.
 								</p>
 								) : null}
 						</div>
@@ -413,10 +431,18 @@ export default function NewMonitorPage() {
 								/>
 								JavaScript rendering required (Playwright)
 							</label>
-						) : (
+						) : mode === "readme" ? (
+							<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+								README mode fetches <code>README.md</code> from the repo&apos;s default branch over HTTP.
+							</p>
+						) : mode === "site_links" ? (
 							<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
 								Site links mode reads the sitemap over HTTP and watches for
 								added or removed URLs.
+							</p>
+						) : (
+							<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+								RSS mode reads the feed over HTTP and watches for added or removed entries.
 							</p>
 						)}
 						<div>

@@ -314,13 +314,28 @@ def create_monitor(
             detail=f"Minimum interval for plan {plan.name} is {plan.min_interval_minutes} minutes",
         )
 
-    try:
-        validate_url_for_fetch(body.url, resolve_dns=True)
-    except SSRFError as exc:
-        raise HTTPException(
-            status_code=400, detail={"error_code": exc.code, "message": str(exc)}
-        ) from exc
+    if body.mode == "readme":
+        # Validate GitHub repo format instead of generic SSRF http check
+        try:
+            from app.services.readme import parse_github_repo
 
+            parse_github_repo(body.url)
+        except Exception as exc:  # noqa: BLE001
+            code = getattr(exc, "code", "invalid_url")
+            raise HTTPException(
+                status_code=400, detail={"error_code": code, "message": str(exc)}
+            ) from exc
+    else:
+        try:
+            # No DNS at create time: the worker re-validates with resolve_dns=True
+            # before any outbound fetch. Doing it here only added ~20-70ms per
+            # request and blocked the API thread on a path where the caller never
+            # sees the resolution result. Keep the cheap scheme/host check only.
+            validate_url_for_fetch(body.url, resolve_dns=False)
+        except SSRFError as exc:
+            raise HTTPException(
+                status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+            ) from exc
     now = datetime.now(UTC)
     # Browser rendering is only used when explicitly requested (js_required).
     js_required = body.js_required
@@ -390,8 +405,35 @@ def create_monitor(
     except Exception as exc:  # noqa: BLE001 - brand is optional enrichment
         logger.warning("brand_enrich_enqueue_failed monitor_id=%s error=%s", monitor.id, exc)
 
-    return monitor
+    # Optionally enqueue the first check in the same request so the frontend
+    # doesn't need a second round-trip (saves ~0.7s Neon + HTTP). Fail-open:
+    # the scheduler will still pick it up via next_run_at if enqueue fails.
+    if body.run_now:
+        try:
+            from uuid import uuid4 as _uuid4
 
+            from app.models import MonitorRun
+            from app.models.entities import RunStatus
+
+            run = MonitorRun(
+                monitor_id=monitor.id,
+                workspace_id=workspace_id,
+                config_version=monitor.config_version,
+                idempotency_key=f"create:{monitor.id}:{_uuid4().hex}",
+                scheduled_at=now,
+                queued_at=now,
+                status=RunStatus.QUEUED.value,
+                attempt=1,
+            )
+            db.add(run)
+            db.commit()
+            db.refresh(run)
+            enqueue_check(str(run.id), needs_browser=bool(monitor.js_required))
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning("create_auto_run_enqueue_failed monitor_id=%s error=%s", monitor.id, exc)
+
+    return monitor
 
 class SitemapDiscoverIn(BaseModel):
     url: str
@@ -563,12 +605,25 @@ def update_monitor(
     # alert_config changes do not bump config_version (thresholds don't affect baseline)
 
     if "url" in data and data["url"] is not None:
-        try:
-            validate_url_for_fetch(data["url"], resolve_dns=True)
-        except SSRFError as exc:
-            raise HTTPException(
-                status_code=400, detail={"error_code": exc.code, "message": str(exc)}
-            ) from exc
+        # Determine effective mode after patch (body.mode may be None)
+        effective_mode = data.get("mode") or monitor.mode
+        if effective_mode == "readme":
+            try:
+                from app.services.readme import parse_github_repo
+
+                parse_github_repo(str(data["url"]))
+            except Exception as exc:  # noqa: BLE001
+                code = getattr(exc, "code", "invalid_url")
+                raise HTTPException(
+                    status_code=400, detail={"error_code": code, "message": str(exc)}
+                ) from exc
+        else:
+            try:
+                validate_url_for_fetch(data["url"], resolve_dns=True)
+            except SSRFError as exc:
+                raise HTTPException(
+                    status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+                ) from exc
 
     for key, value in data.items():
         setattr(monitor, key, value)
@@ -601,6 +656,12 @@ def update_monitor(
         raise HTTPException(
             status_code=400,
             detail="rss_feed monitors fetch RSS over plain HTTP; js_required is not supported",
+        )
+    if monitor.mode == "readme" and monitor.js_required:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="readme monitors fetch the README over plain HTTP; js_required is not supported",
         )
 
     # PATCH re-enabling a paused monitor should schedule next run promptly

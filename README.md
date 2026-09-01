@@ -159,7 +159,7 @@ pip install -r requirements.txt
 python -m playwright install chromium
 
 cd ..\frontend
-npm install
+bun install # or npm install
 ```
 
 ### Every time (5 processes)
@@ -172,7 +172,7 @@ Redis must already be running. Prefer loading env from `backend/.env` (Neon).
 | 2 | **HTTP worker** | `dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2` |
 | 3 | **Browser worker** | `dramatiq app.workers --queues browser_checks --processes 1 --threads 1` |
 | 4 | **Scheduler** | `python -m app.scheduler` |
-| 5 | **Frontend** | `npm run dev` (port 3000) |
+| 5 | **Frontend** | `bun run dev` or `npm run dev` (port 3000) |
 
 **Browser worker is required** for `js_required` monitors and opt-in `screenshots_enabled`.  
 Use **`--threads 1`** on Windows. Playwright runs in a **subprocess** (`playwright_job`) to avoid `[Errno 9] Bad file descriptor`.
@@ -216,15 +216,16 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 
 | Area | What's included |
 |------|-----------------|
-| Monitoring modes | `page_content` (whole page text; `js_required` for SPAs), `site_links` (sitemap URL changes), `product_price` (price/currency, defaults to a daily schedule), `list_items` (CSS-selector link list), `json_field` (single value via JSONPath-style query, e.g. `$.data.price`, from a JSON endpoint) — list modes (`site_links`/`list_items`) fetch over plain HTTP only |
+| Monitoring modes | `page_content` (whole page text; `js_required` for SPAs), `readme` (GitHub repository README changes via `owner/repo` or full URL, renders GitHub-style markdown diffs), `site_links` (sitemap URL changes), `rss_feed` (RSS/Atom feed updates), `product_price` (price/currency, defaults to a daily schedule), `list_items` (CSS-selector link list), `json_field` (single value via JSONPath-style query, e.g. `$.data.price`, from a JSON endpoint) — list modes (`site_links`/`list_items`) fetch over plain HTTP only |
 | Alert channels | Email (Resend), Slack webhook, Discord webhook |
 | AI change summaries | Optional plain-language summaries per change (heuristic by default; enable OpenAI-compatible LLM via `LLM_API_BASE` — works with OpenAI or Vercel AI Gateway — and toggle per-workspace via `ai_summaries_enabled`) |
 | AI relevance filter | Optional per-monitor `watch_note` triage — LLM scores each diff vs. watch note; routine noise (cookie banners, ads, counters) is marked `is_noise=true`, held in dashboard (not deleted), excluded from notifications/digests, fails open on LLM error |
-| Diffs | GitHub-style added/removed line views for every content change (unified diff + split view) via `GithubDiff` |
+| Diffs | GitHub-style added/removed line views for every content change (unified diff + split view) via `GithubDiff` and readable markdown views |
 | Screenshots | Opt-in per-monitor `screenshots_enabled`: when enabled, every check captures a fresh Playwright screenshot (`brand-assets/` + `screenshots/` storage) with aHash history and side-by-side comparison |
-| Outbound webhooks | Signed (`X-MTW-Signature`) deliveries on change events + delivery log |
+| Outbound webhooks | Signed (`X-MTW-Signature`) deliveries on change events + delivery log with exponential backoff |
 | API keys | `mtw_...` bearer tokens for programmatic access |
-| Bulk workflows | CSV / JSON import + export of monitors and changes |
+| Bulk workflows | CSV / JSON import + export of monitors and changes, plus sitemap URL discovery and batch creation |
+| Instant first check | Single-request `run_now` on monitor creation immediately queues an initial run and baseline check without extra round-trips |
 | Alerts inbox | Every change stored in-app with `is_read`/`is_noise` state, independent of external notifications — filter Signal/Unread/Noise |
 | Watch notes | Free-text `watch_note` per monitor drives AI relevance filter |
 | Digests | Daily / weekly workspace digest emails (background `digest_job`) — noise excluded |
@@ -239,7 +240,6 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Opt-in screenshots | `screenshots_enabled` (off by default) — when enabled, every check captures a fresh screenshot at a glance |
 
 The web UI (Next.js) exposes: **Dashboard**, **Monitors** (list / new / edit / detail), **Changes** (per-change diff), **Alerts** (inbox), **Import** (bulk CSV/JSON), **Settings** (channels, workspace, billing), and an in-app **Docs** page.
-
 ## Tests
 
 ```powershell
@@ -265,13 +265,14 @@ Python / FastAPI · Neon Postgres · Redis / Dramatiq · Next.js · Clerk · Res
 These extend the platform beyond the original roadmap:
 
 - **Brand-aware dashboard** — adding a website auto-fills title/description/logo/hero from HTML `<meta>` (no Context.dev) and re-hosts via `brand-assets/` for dashboard + public share pages. Also refreshable via per-monitor *Brand* action (`POST /workspaces/{id}/monitors/{id}/brand`).
+- **GitHub README & RSS monitoring** — dedicated `readme` mode for tracking repository documentation updates with GitHub Markdown styling and `rss_feed` mode for syndication feeds.
+- **Single-roundtrip monitor creation** — `run_now` flag batches monitor creation and initial check queuing into a single transaction and HTTP request.
 - **Managed or self-serve keys** — a workspace owner can set per-workspace LLM keys (`llm_api_key` / `llm_api_base` / `llm_model`) and Resend keys (`resend_api_key` / `email_from`) in **Settings → Workspace keys**. AI summaries and email alerts use the workspace keys when present, otherwise the global keys. Works with OpenAI or Vercel AI Gateway (set `LLM_API_BASE=https://ai-gateway.vercel.sh/v1`). Settings values are masked on read.
 - **Public share links** — from a monitor's detail page, *Share* creates an opaque-token link (`/share/{token}`) that anyone can open to view the monitor's change history. The token is hashed at rest (only its prefix is stored) and the link is revocable.
 - **Teams** — **Settings → Team** generates expiring multi-use invite links with role/max-uses. Switch workspaces via `GET /me` and `localStorage` (`web_observer_workspace_id`).
 - **Opt-in screenshots** — `screenshots_enabled` off by default; when enabled, every check captures a fresh Playwright screenshot (`screenshots/{monitor_id}/{run_id}.png`) with aHash history.
 
 > Database: apply schema changes with `alembic upgrade head` from `backend/`.
-> Alembic is the single source of truth — ad-hoc `apply_*.py` scripts have been
 > removed so there is only one schema-application path. In development the API
 > also runs `Base.metadata.create_all()` at startup; in production it does not,
 > so migrations are never silently bypassed.

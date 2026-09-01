@@ -97,7 +97,9 @@ class MonitorCreate(BaseModel):
     ignore_regexes: list[str] | None = None
     screenshots_enabled: bool = False
     alert_config: dict | None = None
-
+    # If true, enqueue an initial check in the same request (avoids a second
+    # round-trip from the frontend). The worker still re-validates the URL.
+    run_now: bool = False
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
@@ -108,9 +110,16 @@ class MonitorCreate(BaseModel):
     @field_validator("url")
     @classmethod
     def validate_url_scheme(cls, v: str) -> str:
-        if not (v.startswith("http://") or v.startswith("https://")):
-            raise ValueError("url must start with http:// or https://")
-        return v
+        # Allow http(s) URLs for all modes, plus owner/repo shorthand for readme.
+        s = v.strip()
+        if s.startswith("http://") or s.startswith("https://"):
+            return v
+        # readme shorthand like "owner/repo"
+        import re
+
+        if re.match(r"^[\w.\-]+/[\w.\-]+$", s):
+            return v
+        raise ValueError("url must start with http:// or https:// (or owner/repo for readme)")
 
     @field_validator("schedule_interval_minutes")
     @classmethod
@@ -138,10 +147,30 @@ class MonitorCreate(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def check_readme_url(self) -> MonitorCreate:
+        if self.mode == "readme":
+            import re
+
+            s = (self.url or "").strip()
+            # Accept http(s) github/raw URLs or owner/repo shorthand
+            if s.startswith("http://") or s.startswith("https://"):
+                # Must look like a GitHub or raw URL, or at least contain owner/repo somewhere
+                if "github" not in s.lower() and "raw.githubusercontent" not in s.lower():
+                    # Still allow any http(s) — raw fallback will try to parse; be permissive
+                    return self
+                return self
+            if re.match(r"^[\w.\-]+/[\w.\-]+$", s):
+                return self
+            raise ValueError("readme monitors require a GitHub repo: 'owner/repo' or 'https://github.com/owner/repo'")
+        else:
+            # Non-readme modes must be http(s)
+            if not (self.url.startswith("http://") or self.url.startswith("https://")):
+                raise ValueError("url must start with http:// or https://")
+        return self
+
+    @model_validator(mode="after")
     def check_site_links_js(self) -> MonitorCreate:
-        # site_links fetches the sitemap over plain HTTP; routing it through
-        # the browser worker would snapshot the rendered page instead of the
-        # sitemap, producing garbage snapshots and phantom diffs.
+        # site_links / readme / rss_feed fetch over plain HTTP; browser queue would snapshot wrong content.
         if self.mode == "site_links" and self.js_required:
             raise ValueError(
                 "site_links monitors fetch the sitemap over plain HTTP; "
@@ -149,6 +178,8 @@ class MonitorCreate(BaseModel):
             )
         if self.mode == "rss_feed" and self.js_required:
             raise ValueError("rss_feed monitors fetch RSS over plain HTTP; js_required is not supported")
+        if self.mode == "readme" and self.js_required:
+            raise ValueError("readme monitors fetch the README over plain HTTP; js_required is not supported")
         return self
 
     @model_validator(mode="after")
@@ -186,9 +217,16 @@ class MonitorUpdate(BaseModel):
     @field_validator("url")
     @classmethod
     def validate_url_scheme(cls, v: str | None) -> str | None:
-        if v is not None and not (v.startswith("http://") or v.startswith("https://")):
-            raise ValueError("url must start with http:// or https://")
-        return v
+        if v is None:
+            return v
+        s = v.strip()
+        if s.startswith("http://") or s.startswith("https://"):
+            return v
+        import re
+
+        if re.match(r"^[\w.\-]+/[\w.\-]+$", s):
+            return v
+        raise ValueError("url must start with http:// or https:// (or owner/repo for readme)")
 
     @field_validator("schedule_interval_minutes")
     @classmethod
@@ -228,6 +266,30 @@ class MonitorUpdate(BaseModel):
             )
         if self.mode == "rss_feed" and self.js_required:
             raise ValueError("rss_feed monitors fetch RSS over plain HTTP; js_required is not supported")
+        if self.mode == "readme" and self.js_required:
+            raise ValueError("readme monitors fetch the README over plain HTTP; js_required is not supported")
+        return self
+
+    @model_validator(mode="after")
+    def check_readme_url(self) -> MonitorUpdate:
+        # Only validate when url is being changed or mode is readme
+        if self.url is not None or self.mode == "readme":
+            url = self.url or ""
+            mode = self.mode
+            # need full check only if we know mode is readme or url looks like shorthand for non-readme
+            if mode == "readme" and url:
+                import re
+
+                s = url.strip()
+                if not (s.startswith("http://") or s.startswith("https://") or re.match(r"^[\w.\-]+/[\w.\-]+$", s)):
+                    raise ValueError("readme monitors require a GitHub repo: 'owner/repo' or 'https://github.com/owner/repo'")
+            elif url and not (url.startswith("http://") or url.startswith("https://")):
+                # For non-readme updates, shorthand is not allowed
+                import re
+
+                if re.match(r"^[\w.\-]+/[\w.\-]+$", url.strip()):
+                    # Could be user trying to set readme shorthand without changing mode — block
+                    raise ValueError("url must start with http:// or https:// (owner/repo only for readme mode)")
         return self
 
 

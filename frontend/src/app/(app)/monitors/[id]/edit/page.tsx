@@ -19,11 +19,15 @@ import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
 function needsJs(mode: MonitorMode): boolean {
-	return mode !== "site_links";
+	return mode !== "site_links" && mode !== "readme" && mode !== "rss_feed";
 }
 
 function showsIgnore(mode: MonitorMode): boolean {
 	return mode === "page_content";
+}
+
+function isReadmeMode(mode: MonitorMode): boolean {
+	return mode === "readme";
 }
 
 const MIN_INTERVAL_MIN = 15;
@@ -116,10 +120,12 @@ export default function EditMonitorPage() {
 		const trimmed = input.trim();
 		if (!trimmed) return "";
 		if (/^https?:\/\//i.test(trimmed)) return trimmed;
+		if (isReadmeMode(mode) && /^[\w.\-]+\/[\w.\-]+$/.test(trimmed)) return trimmed;
 		return `https://${trimmed}`;
 	}
 
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
+		if (isReadmeMode(mode)) return;
 		const candidate = normalizeUrl(rawUrl ?? url);
 		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
 		try {
@@ -130,17 +136,18 @@ export default function EditMonitorPage() {
 		} catch {
 			// keep current brand
 		}
-	}, [url, name]);
+	}, [url, name, mode]);
 
-	// Auto-lookup brand on URL change with debounce
+	// Auto-lookup brand on URL change with debounce (skip for readme)
 	useEffect(() => {
+		if (isReadmeMode(mode)) return;
 		const candidate = normalizeUrl(url);
 		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
 		const timer = setTimeout(() => {
 			lookupBrand(candidate);
 		}, 600);
 		return () => clearTimeout(timer);
-	}, [url, lookupBrand]);
+	}, [url, lookupBrand, mode]);
 
 	async function onSubmit(e: FormEvent) {
 		e.preventDefault();
@@ -178,7 +185,7 @@ export default function EditMonitorPage() {
 				.filter(Boolean);
 			await api.updateMonitor(workspaceId, monitorId, {
 				name,
-				url,
+				url: finalUrl,
 				mode,
 				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
@@ -222,11 +229,17 @@ export default function EditMonitorPage() {
 						<Input
 							id="url"
 							required
-							type="url"
+							type={isReadmeMode(mode) ? "text" : "url"}
 							value={url}
 							onBlur={() => lookupBrand()}
 							onChange={(e) => setUrl(e.target.value)}
+							placeholder={isReadmeMode(mode) ? "owner/repo  or  https://github.com/owner/repo" : undefined}
 						/>
+						{isReadmeMode(mode) ? (
+							<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+								Tracks the repository&apos;s <code>README.md</code> — any doc change on the default branch triggers a diff &amp; alert.
+							</p>
+						) : null}
 					</div>
 					{brand ? (
 						<div className="rounded-xl border border-[var(--border)] bg-slate-50/60 p-3.5 dark:bg-slate-950/40">
@@ -286,6 +299,9 @@ export default function EditMonitorPage() {
 							<option value="json_field">
 								JSON field (API / JSON responses)
 							</option>
+							<option value="readme">
+								GitHub README (repo documentation)
+							</option>
 							</Select>
 					</div>
 					<div>
@@ -326,10 +342,18 @@ export default function EditMonitorPage() {
 							/>
 							JavaScript rendering required
 						</label>
-					) : (
+					) : mode === "readme" ? (
+						<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+							README mode fetches <code>README.md</code> from the repo&apos;s default branch over HTTP.
+						</p>
+					) : mode === "site_links" ? (
 						<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
 							Site links mode reads the sitemap over HTTP and watches for added
 							or removed URLs.
+						</p>
+					) : (
+						<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+							RSS mode reads the feed over HTTP and watches for added or removed entries.
 						</p>
 					)}
 					<div>
