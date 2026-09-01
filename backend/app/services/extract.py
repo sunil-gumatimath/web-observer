@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import logging
 import re
 import unicodedata
@@ -155,13 +156,15 @@ def extract_markdown(
 
 
 def normalize_text(text: str) -> str:
+    text = html.unescape(text)
     text = unicodedata.normalize("NFKC", text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Clean empty link tokens like [](url) -> url
+    text = re.sub(r"\[\s*\]\(([^)\s]+)\)", r"\1", text)
     lines = [_WS_RE.sub(" ", line).strip() for line in text.split("\n")]
     text = "\n".join(line for line in lines if line != "")
     text = _BLANK_RE.sub("\n\n", text)
     return text.strip()
-
 
 # Minimum readable size for a main-content extraction to be trusted. Below this
 # the detector most likely missed the real content (or the page is a shell), so

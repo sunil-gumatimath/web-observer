@@ -774,12 +774,30 @@ function MonitorDetailInner() {
 			{hasSuccessfulSnapshot ? (
 				<section className="mb-8">
 					<SectionTitle>Latest captured content</SectionTitle>
+					{previewText &&
+					!monitor.js_required &&
+					(previewText.length < 80 ||
+						/loading\b|enable javascript|requires javascript|please wait/i.test(previewText)) ? (
+						<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-200">
+							<p className="leading-relaxed">
+								<strong>Note:</strong> This website may require client-side JavaScript to render its full content. If text looks incomplete, enable <em>JavaScript rendering (Playwright)</em>.
+							</p>
+							<Button
+								size="sm"
+								variant="secondary"
+								onClick={() => router.push(`/monitors/${monitor.id}/edit`)}
+								className="shrink-0 text-xs"
+							>
+								Enable JS rendering
+							</Button>
+						</div>
+					) : null}
 					{previewLoading ? (
 						<p className="text-sm text-slate-500">Loading captured content…</p>
 					) : previewText != null && previewText.length > 0 ? (
 						<ReadableContent
 							text={previewText}
-							maxChars={2500}
+							maxChars={4000}
 							baseUrl={monitor?.url}
 							aiChangeSummary={latestChange?.ai_summary}
 							changeCategory={latestChange?.change_category}
