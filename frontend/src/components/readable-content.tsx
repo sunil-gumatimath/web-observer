@@ -4,20 +4,41 @@ import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui";
 import { resolveImageUrl } from "@/lib/image-md";
 
+/** Decode common HTML entities (named & numeric). */
+export function decodeHtmlEntities(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&mdash;/g, "—")
+    .replace(/&ndash;/g, "–")
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
 /** Soft-clean extracted page text for human reading. */
 export function prepareReadableText(raw: string): string {
   if (!raw) return "";
   let t = raw
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-    .replace(/<img\s+[^>]*src="([^"]+)"[^>]*alt="([^"]*)"[^>]*\/?>/gi, "![$2]($1)")
-    .replace(/<img\s+[^>]*alt="([^"]*)"[^>]*src="([^"]+)"[^>]*\/?>/gi, "![$1]($2)")
-    .replace(/<a\s+[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
+    // Match img with single, double or unquoted attributes
+    .replace(/<img\s+[^>]*src=['"]?([^'"\s>]+)['"]?[^>]*alt=['"]?([^'">]*)['"]?[^>]*\/?>/gi, "![$2]($1)")
+    .replace(/<img\s+[^>]*alt=['"]?([^'">]*)['"]?[^>]*src=['"]?([^'"\s>]+)['"]?[^>]*\/?>/gi, "![$1]($2)")
+    .replace(/<img\s+[^>]*src=['"]?([^'"\s>]+)['"]?[^>]*\/?>/gi, "![]($1)")
+    // Match a with single, double or unquoted href
+    .replace(/<a\s+[^>]*href=['"]?([^'"\s>]+)['"]?[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
     .replace(/<[^>]+>/g, "") // strip remaining raw html wrappers
     .replace(/\u00a0/g, " ")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n");
 
+  t = decodeHtmlEntities(t);
   // collapse excess blank lines
   t = t.replace(/\n{3,}/g, "\n\n").trim();
   return t;
@@ -27,8 +48,8 @@ export function prepareReadableText(raw: string): string {
 export function renderInlineMarkdown(text: string, baseUrl?: string): React.ReactNode[] {
   if (!text) return [];
 
-  // Match: ![alt](url), [text](url), `code`, **bold**, *italic*, __bold__, _italic_
-  const pattern = /(!?\[(?:\\.|[^[\]])*\]\((?:\\.|[^()\s]+)(?:\s+"[^"]*")?\)|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/g;
+  // Match: ![alt](url "title"), [text](url "title"), `code`, **bold**, *italic*, __bold__, _italic_
+  const pattern = /(!?\[(?:\\.|[^[\]])*\]\((?:\\.|[^()\s]+)(?:\s+["'][^"']*["'])?\)|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/g;
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -63,9 +84,9 @@ export function renderInlineMarkdown(text: string, baseUrl?: string): React.Reac
       }
     } else if (token.startsWith("[")) {
       // Link
-      const m = token.match(/^\[([^\]]*)\]\(([^)\s]+)/);
+      const m = token.match(/^\[([^\]]*)\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/);
       if (m) {
-        const label = m[1] || m[2];
+        const label = m[1]?.trim() || m[2];
         const href = resolveImageUrl(m[2], baseUrl) || m[2];
         const isSafe = /^https?:\/\//i.test(href) || href.startsWith("/");
         if (isSafe) {
@@ -85,7 +106,6 @@ export function renderInlineMarkdown(text: string, baseUrl?: string): React.Reac
         }
       }
     } else if (token.startsWith("`") && token.endsWith("`")) {
-      // Inline Code
       nodes.push(
         <code
           key={`code-${keyIndex++}`}
