@@ -92,8 +92,8 @@ services:
       - key: REDIS_URL
         sync: false
     dockerCommand: python -m app.scheduler --once
-    # NOTE: Prefer Fly.io for scheduler as Render cron free is per-minute and
-    # will cold-start each minute. Better to run `python -m app.scheduler` as a
-    # persistent worker on Fly.
+    # NOTE: Render cron free runs --once per minute and cold-starts each time.
+    # For steady per-minute scheduling, run `python -m app.scheduler` as a
+    # persistent worker instead (see scripts/deploy-vm.sh web-observer-scheduler unit).
 
 # Frontend → deploy separately on Vercel (see docs/free-hosting.md)

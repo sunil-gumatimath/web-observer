@@ -28,6 +28,8 @@ Stack: `FastAPI + Neon Postgres + Upstash Redis/Dramatiq + Next.js + Clerk + Res
    ```
 3. Deploy. Frontend at `https://web-observer.vercel.app`.
 
+> Preview deployments (`https://*.vercel.app`) are accepted by the API via `allow_origin_regex` (`backend/app/main.py:81`) on top of the explicit `CORS_ORIGINS` list — no per-preview env change needed. Enumerated methods/headers only; `X-Internal-Token` is the dev/no-Clerk auth header.
+
 ## Upstash Redis — 1 min
 
 1. `console.upstash.com` → Create Redis (Global) → Copy `rediss://default:...@...:6379`.
@@ -39,7 +41,7 @@ Stack: `FastAPI + Neon Postgres + Upstash Redis/Dramatiq + Next.js + Clerk + Res
 2. Dashboard → Each service → Environment → Add `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `INTERNAL_API_TOKEN`, `CLERK_*`, `RESEND_API_KEY`.
 3. Render auto-deploys `api` (health `/health`), `worker`, `browser`, `scheduler`.
 
-> Render free web service sleeps after 15m; next `Fetch`/`Run now` will cold-start (~30s). Fly keeps warm.
+> Render free web service sleeps after 15m; next `Fetch`/`Run now` will cold-start (~30s). For an always-on free option use the GCP e2-micro VM below.
 
 ## Neon
 
@@ -66,6 +68,14 @@ gcloud compute instances create web-observer-vm --machine-type=e2-micro --zone=u
 gcloud compute scp --zone us-central1-a ./docker-compose.yml web-observer-vm:~/
 gcloud compute ssh --zone us-central1-a web-observer-vm -- "docker compose up -d --build"
 # set .env on VM with DATABASE_URL (Neon) + REDIS_URL (rediss://humorous-vulture-...) + SECRET_KEY...
+```
+
+Automated alternative (Ubuntu VM, no Docker — systemd services): `scripts/deploy-vm.sh` provisions swap (4GB, required on 1GB RAM), Redis, Python venv, Playwright Chromium, and 4 systemd units (`web-observer-api` :8002, `web-observer-scheduler`, `web-observer-worker-http`, `web-observer-worker-browser`):
+```bash
+# on the VM, from the repo root:
+bash scripts/deploy-vm.sh
+# then set backend/.env (DATABASE_URL, REDIS_URL, SECRET_KEY, INTERNAL_API_TOKEN, CLERK_*, RESEND_API_KEY)
+# and: sudo systemctl status web-observer-api
 ```
 
 **B) Cloud Run (serverless, auto-scale to 0):**

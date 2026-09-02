@@ -78,6 +78,7 @@ _ALLOWED_HEADERS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=_ALLOWED_METHODS,
     allow_headers=_ALLOWED_HEADERS,

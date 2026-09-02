@@ -10,7 +10,7 @@ Web change-detection and alerting platform.
 
 ## Status
 
-**Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `010_add_missing_foreign_keys` (post-roadmap work added a storage optimization, the alerts inbox, monitor watch notes, brand/workspace-key columns, and referential-integrity fixes). Billing is optional (solo use: skip Stripe).
+**Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `011_add_alert_config` (post-roadmap work added a storage optimization, the alerts inbox, monitor watch notes, brand/workspace-key columns, referential-integrity fixes, and per-monitor conditional alert thresholds). Billing is optional (solo use: skip Stripe).
 
 Verified end-to-end: backend unit tests pass, the frontend type-checks, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
@@ -28,7 +28,6 @@ Verified end-to-end: backend unit tests pass, the frontend type-checks, and the 
 | [docs/adrs/](docs/adrs/) | Architecture decision records |
 | [docs/integrations/n8n-zapier.md](docs/integrations/n8n-zapier.md) | n8n / Zapier automation |
 | [docs/architecture-uml.md](docs/architecture-uml.md) | Architecture diagrams |
-| `web-observer-final-roadmap.md` | Original product roadmap (historical) |
 
 ## How monitoring works (short)
 
@@ -220,6 +219,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Alert channels | Email (Resend), Slack webhook, Discord webhook |
 | AI change summaries | Optional plain-language summaries per change (heuristic by default; enable OpenAI-compatible LLM via `LLM_API_BASE` — works with OpenAI or Vercel AI Gateway — and toggle per-workspace via `ai_summaries_enabled`) |
 | AI relevance filter | Optional per-monitor `watch_note` triage — LLM scores each diff vs. watch note; routine noise (cookie banners, ads, counters) is marked `is_noise=true`, held in dashboard (not deleted), excluded from notifications/digests, fails open on LLM error |
+| Conditional alerting | Optional per-monitor `alert_config` JSONB (migration `011`) — thresholds evaluated in `backend/app/services/conditional.py:26` before notify: `price_below`/`price_above` + `percent_change` (`product_price`), `percent_change` (`json_field`, `page_content`), `list_min_added`/`list_min_removed` (`list_items`/`site_links`/`rss_feed`), `min_diff_chars`, `regex_must_match`/`regex_must_not_match`. Unmet thresholds mark the change `is_noise=true` with reason (stored, excluded from notifications/digests); empty config = alert on any hash difference. Set via `POST/PATCH /monitors` body or bulk import CSV/JSON `alert_config` column |
 | Diffs | GitHub-style added/removed line views for every content change (unified diff + split view) via `GithubDiff` and readable markdown views |
 | Screenshots | Opt-in per-monitor `screenshots_enabled`: when enabled, every check captures a fresh Playwright screenshot (`brand-assets/` + `screenshots/` storage) with aHash history and side-by-side comparison |
 | Outbound webhooks | Signed (`X-MTW-Signature`) deliveries on change events + delivery log with exponential backoff |
