@@ -38,50 +38,46 @@ Verified end-to-end: backend unit tests pass, the frontend type-checks, and the 
 
 ## Architecture
 
+## Architecture
+
+One idea: **you watch pages, workers do the checking, you get told only when something matters.**
+
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant S as Scheduler
-    participant API as FastAPI
-    participant DB as Postgres
-    participant R as Redis (broker)
-    participant W as Check Worker (dramatiq)
-    participant T as Monitored page
-    participant P as Pipeline
-    participant OBJ as Object Storage
-    participant N as Notify/Webhook Worker
-    participant EXT as Email · Slack · Discord · Webhook
-
-    Note over API: Manual run: POST /monitors/{id}/run also enqueues a check
-
-    S->>DB: claim_due_monitors (FOR UPDATE SKIP LOCKED)
-    DB-->>S: due monitors (60s lease + jitter)
-    S->>R: enqueue_check(run_id, needs_browser)
-    R->>W: run_http_check / run_browser_check
-    W->>T: fetch_url / Playwright (+ optional screenshot)
-    T-->>W: FetchResult (text, status, latency)
-    W->>P: apply_fetch_result(monitor, run, result)
-    P->>OBJ: store raw html + normalized text
-    P->>DB: insert Snapshot (SHA256 content_hash)
-
-    alt first success
-        P-->>W: baseline set — no alert
-    else same hash / similar image
-        P-->>W: unchanged — no alert
-    else content changed
-        P->>P: unified diff → AI summary + watch_note triage
-        P->>DB: insert ChangeEvent (is_noise, is_read)
-        P->>DB: insert NotificationOutbox + WebhookDelivery
-        W->>R: enqueue deliver_outbox_message / deliver_webhook_message
-        N->>EXT: send email (Resend) / Slack / Discord / signed webhook (X-MTW-Signature)
-        EXT-->>N: delivery logged
-    end
-
-    W->>DB: run status = succeeded/failed (adaptive interval update)
+flowchart LR
+    YOU[You<br/>Next.js UI] --> API[API<br/>FastAPI]
+    API --> DB[(Postgres<br/>monitors, snapshots,<br/>changes)]
+    SCHED[Scheduler] --> DB
+    SCHED --> Q[[Redis queue]]
+    Q --> CHECK[Check workers<br/>fetch the page]
+    CHECK --> PAGE((Web page))
+    PAGE --> CHECK
+    CHECK --> DB
+    CHECK --> Q
+    Q --> NOTIFY[Notify workers]
+    NOTIFY --> ALERTS[Email · Slack<br/>Discord · Webhooks]
+    ALERTS --> YOU
 ```
 
-* **No `worker.ts` / `SCRAPE_CRON` / `Context.dev API`.** Workers are Python `dramatiq` (`backend/app/workers/checks.py:21`, `browser_checks.py:24`) via `RedisBroker` (`backend/app/workers/broker.py:9`). Scheduling is Postgres-driven `claim_due_monitors` (`SELECT ... FOR UPDATE SKIP LOCKED`) with 60s lease + jitter `backend/app/config.py:73-75`, `backend/app/scheduler.py:40`. Extraction/screenshot is in-process (`backend/app/services/pipeline.py:56`, `backend/app/services/visual.py:280`) only calling an external LLM when `LLM_API_KEY` is set (OpenAI or `https://ai-gateway.vercel.sh/v1`). Snapshots cover all 4 modes, not just sitemap/markdown/product.
-* Full diagrams: `docs/architecture-uml.md` (Components, ERD, Sequence).  
+**In plain English:**
+
+1. **You create a monitor** (URL + what to watch) in the UI. The API saves it to Postgres.
+2. **A scheduler wakes up every minute**, asks Postgres "which monitors are due?", and drops check jobs on a Redis queue. (Manual **Run now** skips the line and queues a job immediately.)
+3. **Check workers fetch the page** — plain HTTP for normal pages, a real browser (Playwright) for JavaScript sites — and compare it to the last snapshot using a content hash.
+   - First successful check → saved as the **baseline**, no alert.
+   - Same content → nothing happens.
+   - Changed → a diff is saved, an optional AI summary is attached, and noise (cookie banners, tiny edits below your thresholds) is marked but kept, not deleted.
+4. **Notify workers send the alert** — email (Resend), Slack, Discord, or a signed webhook — and log the delivery. Quiet monitors are checked less often over time (adaptive scheduling).
+
+<details>
+<summary><strong>Under the hood (for contributors)</strong></summary>
+
+- Workers are Python `dramatiq` (`backend/app/workers/checks.py:21`, `browser_checks.py:24`) on three queues — `http_checks`, `browser_checks`, `notifications` — via `RedisBroker` (`backend/app/workers/broker.py:9`).
+- Due-monitor claiming is Postgres-driven (`SELECT ... FOR UPDATE SKIP LOCKED`, 60s lease + jitter: `backend/app/config.py:73-75`, `backend/app/scheduler.py:40`), so multiple schedulers never double-claim.
+- Snapshots store raw HTML + normalized text with a SHA256 `content_hash`; change rows carry `is_noise` / `is_read`; webhooks are HMAC-signed (`X-MTW-Signature`).
+- An external LLM is only called when `LLM_API_KEY` is set; otherwise summaries/triage use fast local heuristics.
+- Full diagrams (components, ERD, sequence): `docs/architecture-uml.md`.
+
+</details>
 
 ## What you need
 
