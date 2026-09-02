@@ -1,0 +1,99 @@
+# Render Blueprint — free tier (api sleeps after 15m, workers stay warm on free)
+# Apply: connect repo at dashboard.render.com → Blueprint → Apply
+# Requires: Neon DATABASE_URL, Upstash REDIS_URL in Render Dashboard → Environment
+services:
+  - type: web
+    name: web-observer-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: STORAGE_BACKEND
+        value: local
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false
+      - key: CLERK_JWKS_URL
+        sync: false
+      - key: CLERK_ISSUER
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_API_BASE
+        sync: false
+    # autoDeploy: false  # uncomment to disable auto deploy on push
+
+  - type: worker
+    name: web-observer-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false
+    # http_checks + notifications
+    dockerCommand: dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2
+
+  - type: worker
+    name: web-observer-browser
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.browser
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false
+    dockerCommand: dramatiq app.workers --queues browser_checks --processes 1 --threads 1
+
+  - type: cron
+    name: web-observer-scheduler
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    schedule: "* * * * *"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+    dockerCommand: python -m app.scheduler --once
+    # NOTE: Prefer Fly.io for scheduler as Render cron free is per-minute and
+    # will cold-start each minute. Better to run `python -m app.scheduler` as a
+    # persistent worker on Fly.
+
+# Frontend → deploy separately on Vercel (see docs/free-hosting.md)
