@@ -1,9 +1,23 @@
-export function LogoIcon({ size = 36, className }: { size?: number; className?: string }) {
+"use client";
+
+type LogoIconProps = {
+  size?: number;
+  className?: string;
+};
+
+/**
+ * Minimal / Clean — V2
+ * No literal eye, no busy pulse zig-zag.
+ * A focused target: centered dot + two precise rings + one active arc + ping.
+ * Reads at 16px, calm on light header and dark header.
+ * ViewBox 0 0 32 32.
+ */
+export function LogoIcon({ size = 36, className = "" }: LogoIconProps) {
   return (
     <span
-      className={className}
-      style={{ width: size, height: size, display: "inline-flex" }}
-      aria-hidden="true"
+      aria-hidden
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.10)] ring-1 ring-black/5 dark:bg-slate-900 dark:ring-white/10 ${className}`}
+      style={{ width: size, height: size }}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -12,111 +26,64 @@ export function LogoIcon({ size = 36, className }: { size?: number; className?: 
         height={size}
         fill="none"
         role="img"
+        aria-label="Web Observer"
         className="h-full w-full"
       >
-        <defs>
-          {/* Screen Bezel Metallic Slate Gradient */}
-          <linearGradient id="comp-bezel" x1="0" y1="2" x2="0" y2="22" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#1e293b" />
-            <stop offset="100%" stopColor="#0f172a" />
-          </linearGradient>
+        {/* soft inner highlight */}
+        <rect x="0.5" y="0.5" width="31" height="31" rx="9.5" fill="#0f172a" />
+        <rect x="0.5" y="0.5" width="31" height="31" rx="9.5" stroke="white" strokeOpacity="0.08" />
 
-          {/* Outer Bezel Dual-Tone Border (High contrast on both white and dark themes) */}
-          <linearGradient id="comp-border" x1="2" y1="2" x2="30" y2="22" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.85" />
-            <stop offset="40%" stopColor="#94a3b8" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.85" />
-          </linearGradient>
+        {/* outer track — hairline */}
+        <circle cx="16" cy="16" r="9.5" stroke="white" strokeOpacity="0.14" strokeWidth="0.95" />
 
-          {/* Deep Obsidian Display Screen Viewport */}
-          <linearGradient id="comp-screen" x1="4" y1="4" x2="28" y2="19" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#030712" />
-            <stop offset="50%" stopColor="#0b1329" />
-            <stop offset="100%" stopColor="#080e1e" />
-          </linearGradient>
-
-          {/* Pulse Waveform Gradient */}
-          <linearGradient id="comp-pulse-grad" x1="5" y1="12" x2="27" y2="12" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#0284c7" />
-            <stop offset="40%" stopColor="#38bdf8" />
-            <stop offset="70%" stopColor="#818cf8" />
-            <stop offset="100%" stopColor="#c084fc" />
-          </linearGradient>
-
-          {/* Wave Glow Area Gradient */}
-          <linearGradient id="comp-wave-area" x1="16" y1="8" x2="16" y2="15" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
-          </linearGradient>
-
-          {/* Stand Gradient */}
-          <linearGradient id="comp-stand" x1="0" y1="21" x2="0" y2="28" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#64748b" />
-            <stop offset="100%" stopColor="#334155" />
-          </linearGradient>
-        </defs>
-
-        {/* Drop Shadow backing for depth on pure white backgrounds */}
-        <rect x="2.5" y="2.5" width="27" height="19" rx="3.5" fill="#000000" fillOpacity="0.12" />
-
-        {/* Monitor Outer Bezel */}
-        <rect x="2.5" y="2.5" width="27" height="18.5" rx="3.5" fill="url(#comp-bezel)" stroke="url(#comp-border)" strokeWidth="0.9" />
-
-        {/* Display Screen Glass */}
-        <rect x="4.2" y="4.2" width="23.6" height="14" rx="2" fill="url(#comp-screen)" stroke="#1e293b" strokeWidth="0.5" />
-
-        {/* Window Controls (Red, Yellow, Green) */}
-        <circle cx="6.8" cy="6.4" r="0.75" fill="#f43f5e" />
-        <circle cx="8.8" cy="6.4" r="0.75" fill="#fbbf24" />
-        <circle cx="10.8" cy="6.4" r="0.75" fill="#34d399" />
-
-        {/* Radar Telemetry Grid on Screen */}
-        <circle cx="16" cy="11.5" r="4.5" stroke="#38bdf8" strokeOpacity="0.18" strokeWidth="0.5" strokeDasharray="2 1.5" />
-        <line x1="5.5" y1="11.5" x2="26.5" y2="11.5" stroke="#38bdf8" strokeOpacity="0.12" strokeWidth="0.5" />
-
-        {/* Wave Glow Area */}
+        {/* active scanning arc — the only accent */}
         <path
-          d="M 5.5 11.5 L 11 11.5 L 13.5 8 L 15.5 15 L 18 9 L 20 11.5 L 26.5 11.5 L 26.5 16 L 5.5 16 Z"
-          fill="url(#comp-wave-area)"
-        />
-
-        {/* Dynamic Live Change Pulse / Waveform */}
-        <path
-          d="M 5.5 11.5 L 11 11.5 L 13.5 8 L 15.5 15 L 18 9 L 20 11.5 L 26.5 11.5"
-          stroke="url(#comp-pulse-grad)"
-          strokeWidth="1.3"
+          d="M 16 6.5 A 9.5 9.5 0 0 1 24.25 9.75"
+          stroke="#38bdf8"
+          strokeWidth="1.55"
           strokeLinecap="round"
-          strokeLinejoin="round"
         />
+        {/* small ping at arc tip */}
+        <circle cx="24.25" cy="9.75" r="1.35" fill="#38bdf8" stroke="#0f172a" strokeWidth="0.9" />
+        <circle cx="24.25" cy="9.75" r="2.45" fill="#38bdf8" fillOpacity="0.18" />
 
-        {/* Active Signal Beacon on Waveform Peak */}
-        <circle cx="18" cy="9" r="2.2" fill="#22d3ee" fillOpacity="0.25" />
-        <circle cx="18" cy="9" r="1.1" fill="#22d3ee" stroke="#ffffff" strokeWidth="0.5" />
-        <circle cx="18" cy="9" r="0.45" fill="#ffffff" />
+        {/* middle ring */}
+        <circle cx="16" cy="16" r="5.9" stroke="white" strokeWidth="1.35" strokeOpacity="0.95" />
 
-        {/* Live Pulse Beacon / Alert Node */}
-        <circle cx="24" cy="6.4" r="1.2" fill="#38bdf8" fillOpacity="0.3" />
-        <circle cx="24" cy="6.4" r="0.7" fill="#38bdf8" />
-        <circle cx="24" cy="6.4" r="0.3" fill="#ffffff" />
-
-        {/* Monitor Stand Neck */}
-        <path d="M 14.5 21 L 17.5 21 L 18.2 25.5 L 13.8 25.5 Z" fill="url(#comp-stand)" stroke="#475569" strokeWidth="0.5" />
-
-        {/* Monitor Stand Base */}
-        <rect x="9.5" y="25.5" width="13" height="2.2" rx="1.1" fill="url(#comp-stand)" stroke="#64748b" strokeWidth="0.6" />
-        <line x1="11.5" y1="26" x2="20.5" y2="26" stroke="#94a3b8" strokeWidth="0.5" strokeLinecap="round" />
+        {/* center — the page being watched */}
+        <circle cx="16" cy="16" r="2.35" fill="white" />
+        <circle cx="16" cy="16" r="2.35" stroke="#38bdf8" strokeOpacity="0.0" />
       </svg>
     </span>
   );
 }
 
-export function Logo({ compact = false, iconSize = 36 }: { compact?: boolean; iconSize?: number }) {
+type LogoProps = {
+  compact?: boolean;
+  iconSize?: number;
+  className?: string;
+  responsiveWordmark?: boolean;
+};
+
+export function Logo({ compact = false, iconSize = 36, className = "", responsiveWordmark = false }: LogoProps) {
   return (
-    <span className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-slate-900 dark:text-white">
-      <LogoIcon size={iconSize} className="shrink-0" />
+    <span className={`inline-flex items-center gap-2.5 ${className}`} aria-label="Web Observer">
+      <LogoIcon size={iconSize} />
       {!compact ? (
-        <span className="hidden sm:inline text-[17px] font-bold tracking-[-0.02em]">
-          Web <span className="text-sky-500 dark:text-sky-400">Observer</span>
+        <span
+          className={`inline-flex items-baseline gap-[0.28em] select-none ${responsiveWordmark ? "hidden sm:inline-flex" : ""}`}
+          style={{
+            fontFamily:
+              'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+            letterSpacing: "-0.03em",
+          }}
+        >
+          <span className="text-[18.5px] font-[700] leading-none tracking-[-0.03em] text-slate-900 dark:text-white">
+            Web
+          </span>
+          <span className="text-[18.5px] font-[500] leading-none tracking-[-0.03em] text-slate-500 dark:text-slate-300">
+            Observer
+          </span>
         </span>
       ) : null}
     </span>
