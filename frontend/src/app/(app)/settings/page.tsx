@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { NotificationChannelsPanel } from "@/components/notification-channels";
 import { TeamInvites } from "@/components/team-invites";
 import { WorkspaceKeys } from "@/components/workspace-keys";
+import { WorkspaceMembers } from "@/components/workspace-members";
+import { AuditLogsPanel } from "@/components/audit-logs";
+import { ConfirmButton } from "@/components/confirm-dialog";
 import {
   Badge,
   Button,
@@ -17,7 +20,7 @@ import {
   SuccessBox,
 } from "@/components/ui";
 import { api, type MeResponse } from "@/lib/api";
-import type { WebhookDelivery } from "@/lib/types";
+import type { ApiKeyRow, WebhookDelivery, WebhookOut } from "@/lib/types";
 import { config } from "@/lib/config";
 import { ensureWorkspace, getStoredWorkspaceId, setStoredWorkspaceId } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -244,6 +247,10 @@ export default function SettingsPage() {
           </div>
         ) : null}
 
+        {workspaceId ? <WorkspaceMembers workspaceId={workspaceId} /> : null}
+
+        {workspaceId ? <AuditLogsPanel workspaceId={workspaceId} /> : null}
+
         {workspaceId ? <EnterprisePanel workspaceId={workspaceId} /> : null}
       </div>
     </div>
@@ -252,17 +259,72 @@ export default function SettingsPage() {
 
 /** Optional tools for solo use — billing/plan upgrades are skipped. */
 function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
+  const [apiKeyName, setApiKeyName] = useState("default");
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [apiKeys, setApiKeys] = useState<ApiKeyRow[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [webhooks, setWebhooks] = useState<WebhookOut[]>([]);
+  const [webhooksLoading, setWebhooksLoading] = useState(false);
+
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [webhookUrl, setWebhookUrl] = useState("");
   const [creatingKey, setCreatingKey] = useState(false);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
 
   const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  async function loadApiKeys() {
+    setApiKeysLoading(true);
+    try {
+      const list = await api.listApiKeys(workspaceId);
+      setApiKeys(list);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setApiKeysLoading(false);
+    }
+  }
+
+  async function deleteApiKey(keyId: string) {
+    setErr(null);
+    setMsg(null);
+    try {
+      await api.deleteApiKey(workspaceId, keyId);
+      setApiKeys((prev) => prev.filter((k) => k.id !== keyId));
+      setMsg("API key revoked.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to revoke API key");
+    }
+  }
+
+  async function loadWebhooks() {
+    setWebhooksLoading(true);
+    try {
+      const list = await api.listWebhooks(workspaceId);
+      setWebhooks(list);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setWebhooksLoading(false);
+    }
+  }
+
+  async function deleteWebhook(endpointId: string) {
+    setErr(null);
+    setMsg(null);
+    try {
+      await api.deleteWebhook(workspaceId, endpointId);
+      setWebhooks((prev) => prev.filter((w) => w.id !== endpointId));
+      setMsg("Webhook deleted.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to delete webhook");
+    }
+  }
 
   async function loadDeliveries() {
     setDeliveriesLoading(true);
@@ -275,6 +337,14 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
       setDeliveriesLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (workspaceId) {
+      loadApiKeys();
+      loadWebhooks();
+      loadDeliveries();
+    }
+  }, [workspaceId]);
 
   async function retry(deliveryId: string) {
     setRetryingId(deliveryId);
@@ -294,65 +364,190 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     <div className="space-y-4">
       <SectionTitle>Optional: API keys & webhooks</SectionTitle>
       <p className="text-xs text-slate-500 dark:text-slate-500">
-        Billing is disabled for solo use. Free plan already includes full personal limits.
+        API access tokens and outbound signed webhooks (HMAC-SHA256).
       </p>
       {err ? <ErrorBox message={err} /> : null}
       {msg ? <SuccessBox message={msg} /> : null}
-      <Card className="space-y-3">
-        <Button
-          type="button"
-          disabled={creatingKey}
-          onClick={async () => {
-            setErr(null);
-            setCreatingKey(true);
-            try {
-              const r = await api.createApiKey(workspaceId, "default");
-              setApiKey(r.raw_key);
-              setMsg("API key created — copy it now; it will not be shown again.");
-            } catch (e) {
-              setErr(e instanceof Error ? e.message : "API key failed");
-            } finally {
-              setCreatingKey(false);
-            }
-          }}
-        >
-          {creatingKey ? "Creating…" : "Create API key"}
-        </Button>
+
+      {/* API Keys Panel */}
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="section-label">API keys</p>
+          <Button type="button" variant="secondary" size="sm" disabled={apiKeysLoading} onClick={loadApiKeys}>
+            {apiKeysLoading ? "Loading…" : "Refresh"}
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-48 flex-1">
+            <Label htmlFor="key-name">Key label</Label>
+            <Input
+              id="key-name"
+              placeholder="e.g. CI/CD or CLI"
+              value={apiKeyName}
+              onChange={(e) => setApiKeyName(e.target.value)}
+            />
+          </div>
+          <Button
+            type="button"
+            disabled={creatingKey || !apiKeyName.trim()}
+            onClick={async () => {
+              setErr(null);
+              setCreatingKey(true);
+              try {
+                const r = await api.createApiKey(workspaceId, apiKeyName.trim());
+                setApiKey(r.raw_key);
+                setMsg("API key created — copy it now; it will not be shown again.");
+                await loadApiKeys();
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "API key failed");
+              } finally {
+                setCreatingKey(false);
+              }
+            }}
+          >
+            {creatingKey ? "Creating…" : "Create API key"}
+          </Button>
+        </div>
+
         {apiKey ? (
-          <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
-            {apiKey}
-          </p>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+              Save your secret key now. It will never be shown again:
+            </p>
+            <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+              {apiKey}
+            </p>
+          </div>
         ) : null}
-      </Card>
-      <Card className="space-y-3">
-        <Label htmlFor="wh">Webhook URL (https) — optional</Label>
-        <Input id="wh" placeholder="https://hooks.slack.com/services/..." value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} />
-        <Button
-          type="button"
-          disabled={creatingWebhook || !webhookUrl.trim()}
-          onClick={async () => {
-            setErr(null);
-            setCreatingWebhook(true);
-            try {
-              const r = await api.createWebhook(workspaceId, webhookUrl.trim());
-              setWebhookSecret(r.secret);
-              setMsg("Webhook created — store the signing secret securely.");
-            } catch (e) {
-              setErr(e instanceof Error ? e.message : "Webhook failed");
-            } finally {
-              setCreatingWebhook(false);
-            }
-          }}
-        >
-          {creatingWebhook ? "Adding…" : "Add webhook"}
-        </Button>
-        {webhookSecret ? (
-          <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
-            secret: {webhookSecret}
-          </p>
-        ) : null}
+
+        <div className="space-y-2">
+          {apiKeys.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-4 text-center text-xs text-slate-500 dark:text-slate-500">
+              No API keys created yet.
+            </p>
+          ) : (
+            apiKeys.map((k) => (
+              <div
+                key={k.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 dark:bg-slate-950/40"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{k.name}</span>
+                    <span className="font-mono text-xs text-slate-500">{k.key_prefix}…</span>
+                  </div>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    Created {new Date(k.created_at).toLocaleDateString()}
+                    {k.last_used_at ? ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}` : " · Never used"}
+                  </p>
+                </div>
+                <ConfirmButton
+                  variant="danger"
+                  size="sm"
+                  confirmLabel="Revoke"
+                  title="Revoke API key?"
+                  body={`Are you sure you want to revoke key "${k.name}"? Any clients using it will lose access.`}
+                  onConfirm={() => deleteApiKey(k.id)}
+                >
+                  Revoke
+                </ConfirmButton>
+              </div>
+            ))
+          )}
+        </div>
       </Card>
 
+      {/* Webhooks Panel */}
+      <Card className="space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="section-label">Outbound Webhooks</p>
+          <Button type="button" variant="secondary" size="sm" disabled={webhooksLoading} onClick={loadWebhooks}>
+            {webhooksLoading ? "Loading…" : "Refresh"}
+          </Button>
+        </div>
+
+        <div>
+          <Label htmlFor="wh">Webhook URL (https)</Label>
+          <div className="mt-1 flex gap-2">
+            <Input
+              id="wh"
+              placeholder="https://example.com/webhooks/monitor-the-web"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+            />
+            <Button
+              type="button"
+              disabled={creatingWebhook || !webhookUrl.trim()}
+              onClick={async () => {
+                setErr(null);
+                setCreatingWebhook(true);
+                try {
+                  const r = await api.createWebhook(workspaceId, webhookUrl.trim());
+                  setWebhookSecret(r.secret);
+                  setMsg("Webhook created — store the signing secret securely.");
+                  setWebhookUrl("");
+                  await loadWebhooks();
+                } catch (e) {
+                  setErr(e instanceof Error ? e.message : "Webhook failed");
+                } finally {
+                  setCreatingWebhook(false);
+                }
+              }}
+            >
+              {creatingWebhook ? "Adding…" : "Add webhook"}
+            </Button>
+          </div>
+        </div>
+
+        {webhookSecret ? (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+              Webhook signing secret (used for X-MTW-Signature HMAC):
+            </p>
+            <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+              {webhookSecret}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          {webhooks.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-4 text-center text-xs text-slate-500 dark:text-slate-500">
+              No webhooks registered yet.
+            </p>
+          ) : (
+            webhooks.map((w) => (
+              <div
+                key={w.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 dark:bg-slate-950/40"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Badge tone={w.enabled ? "success" : "neutral"}>{w.enabled ? "Active" : "Disabled"}</Badge>
+                    <span className="truncate font-mono text-xs text-slate-900 dark:text-slate-100">{w.url}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                    Added {new Date(w.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <ConfirmButton
+                  variant="danger"
+                  size="sm"
+                  confirmLabel="Delete"
+                  title="Delete webhook?"
+                  body="Are you sure you want to delete this webhook endpoint?"
+                  onConfirm={() => deleteWebhook(w.id)}
+                >
+                  Delete
+                </ConfirmButton>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
+
+      {/* Webhook Deliveries Log */}
       <Card className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <p className="section-label">Webhook deliveries</p>
