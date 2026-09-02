@@ -22,6 +22,7 @@ import { api } from "@/lib/api";
 import type { AlertInboxItem, AlertsSummary, ChangeEventDetail } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
 import { ensureWorkspace } from "@/lib/workspace";
+import { config } from "@/lib/config";
 
 type Filter = "all" | "unread" | "noise";
 
@@ -224,15 +225,30 @@ export default function AlertsPage() {
 				title="Alerts"
 				description="Every detected change across your monitors — summarized by AI and triaged against your watch notes."
 				actions={
-					<Button
-						type="button"
-						variant="secondary"
-						disabled={busy || !summary?.unread}
-						onClick={markAllRead}
-					>
-						Mark all read
-						{summary && summary.unread > 0 ? ` (${summary.unread})` : ""}
-					</Button>
+					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={() => {
+								if (!workspaceId) return;
+								window.open(
+									`${config.apiBaseUrl}/api/v1/workspaces/${workspaceId}/export/changes`,
+									"_blank",
+								);
+							}}
+						>
+							Export JSON
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							disabled={busy || !summary?.unread}
+							onClick={markAllRead}
+						>
+							Mark all read
+							{summary && summary.unread > 0 ? ` (${summary.unread})` : ""}
+						</Button>
+					</div>
 				}
 			/>
 			{error ? <ErrorBox message={error} /> : null}

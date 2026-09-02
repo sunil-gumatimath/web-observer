@@ -374,6 +374,9 @@ export default function NewMonitorPage() {
 								<option value="readme">
 									GitHub README (repo documentation)
 								</option>
+								<option value="visual">
+									Visual diff (screenshot comparison)
+								</option>
 								</Select>
 								{mode === "list_items" ? (
 								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">

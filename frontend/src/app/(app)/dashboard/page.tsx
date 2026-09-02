@@ -84,9 +84,9 @@ export default function DashboardPage() {
 
   if (loading)
     return (
-      <div className="space-y-4">
+      <div suppressHydrationWarning className="space-y-4">
         <SkeletonStats />
-        <div className="space-y-2">
+        <div suppressHydrationWarning className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}

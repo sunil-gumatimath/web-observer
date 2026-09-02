@@ -302,6 +302,9 @@ export default function EditMonitorPage() {
 							<option value="readme">
 								GitHub README (repo documentation)
 							</option>
+							<option value="visual">
+								Visual diff (screenshot comparison)
+							</option>
 							</Select>
 					</div>
 					<div>

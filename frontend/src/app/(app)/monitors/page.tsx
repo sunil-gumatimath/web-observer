@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import type { Monitor } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
+import { config } from "@/lib/config";
 
 export default function MonitorsPage() {
 	usePageTitle("Monitors");
@@ -79,24 +80,39 @@ export default function MonitorsPage() {
 				title="Monitors"
 				description="All page checks in this workspace."
 				actions={
-					<Link href="/monitors/new">
-						<Button type="button">
-							<svg
-								className="h-4 w-4"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-								strokeWidth={2}
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									d="M12 4.5v15m7.5-7.5h-15"
-								/>
-							</svg>
-							New monitor
+					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={async () => {
+								const ws = await ensureWorkspace();
+								window.open(
+									`${config.apiBaseUrl}/api/v1/workspaces/${ws}/export/monitors?format=csv`,
+									"_blank",
+								);
+							}}
+						>
+							Export CSV
 						</Button>
-					</Link>
+						<Link href="/monitors/new">
+							<Button type="button">
+								<svg
+									className="h-4 w-4"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+									strokeWidth={2}
+								>
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										d="M12 4.5v15m7.5-7.5h-15"
+									/>
+								</svg>
+								New monitor
+							</Button>
+						</Link>
+					</div>
 				}
 			/>
 			{error ? <ErrorBox message={error} /> : null}
