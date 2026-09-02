@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+</p>
+
 # Resend email setup
 
 Web Observer sends alert emails through the **notification worker** using the official Resend SDK.

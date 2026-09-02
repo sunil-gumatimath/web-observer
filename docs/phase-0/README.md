@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+</p>
+
 # Phase 0 — Validation and Architecture
 
 ## Exit criteria

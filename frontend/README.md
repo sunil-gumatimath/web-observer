@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+</p>
+
 # Web Observer — Frontend
 
 Next.js (App Router) UI for Web Observer: monitors, alerts, settings, Clerk auth.

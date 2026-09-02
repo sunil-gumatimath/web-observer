@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+</p>
+
 # n8n & Zapier examples
 
 ## Signed webhook → automation

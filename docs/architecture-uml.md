@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+</p>
+
 # Web Observer — Architecture as UML
 
 Generated from a code review of the `backend/` and `frontend/` trees.

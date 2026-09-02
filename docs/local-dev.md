@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+</p>
+
 # Local development **without Docker**
 
 You need:

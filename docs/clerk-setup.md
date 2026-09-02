@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+</p>
+
 # Clerk setup (this project)
 
 Linked app: **Web Observer** (`app_3GJz6qgIFDXNyyMSm9ayJgXpZ6q`)  
