@@ -2,9 +2,5 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "regions": ["bom1"],
-  "env": {
-    "NEXT_PUBLIC_API_BASE_URL": "@api-base-url",
-    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "@clerk-publishable-key"
-  }
+  "regions": ["bom1"]
 }
