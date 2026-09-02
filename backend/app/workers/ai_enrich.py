@@ -126,11 +126,15 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
             watch_note=getattr(monitor, "watch_note", None),
             llm=llm_cfg,
             brand=getattr(monitor, "brand", None),
+            semantic_trigger=getattr(monitor, "semantic_trigger", None),
         )
 
         # Update ChangeEvent
         change.ai_summary = enrichment.summary
         change.change_category = enrichment.category
+        change.title = getattr(enrichment, "title", None)
+        change.impact = getattr(enrichment, "impact", None)
+        change.confidence = getattr(enrichment, "confidence", None)
         change.is_noise = bool(enrichment.is_noise)
         noise_surfaced = (
             enrichment.is_noise

@@ -15,6 +15,64 @@ from app.models.entities import OutboxStatus
 logger = logging.getLogger(__name__)
 
 
+def generate_ai_digest_summary(workspace: Workspace, event_bullets: list[str]) -> str | None:
+    """Generate a concise executive briefing summarizing all changes in this digest period."""
+    from app.config import get_settings
+    from app.services.ai_summary import _effective_llm, _post_with_retries
+    from app.services.crypto import decrypt_secret
+
+    settings = get_settings()
+    if not settings.ai_summaries_enabled or not getattr(workspace, "ai_summaries_enabled", True):
+        return None
+
+    llm_cfg = None
+    if workspace.llm_api_key or workspace.llm_api_base or workspace.llm_model:
+        llm_cfg = {
+            "api_key": decrypt_secret(workspace.llm_api_key),
+            "api_base": workspace.llm_api_base,
+            "model": workspace.llm_model,
+        }
+    cfg = _effective_llm(llm_cfg)
+    if not cfg.get("api_key"):
+        return None
+
+    base = (cfg["api_base"] or "https://api.openai.com/v1").rstrip("/")
+    bullet_text = "\n".join(event_bullets[:30])
+    prompt = (
+        f"You are an executive web observer intelligence assistant. Below are {len(event_bullets)} changes detected across "
+        f"monitored targets for workspace '{workspace.name}'.\n"
+        "Write a concise 2-3 sentence executive briefing synthesizing key takeaways, themes (e.g. pricing shifts, legal updates), "
+        "and any critical anomalies. Be direct, factual, and concise.\n\n"
+        f"Changes:\n{bullet_text}"
+    )
+
+    try:
+        resp = _post_with_retries(
+            f"{base}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {cfg['api_key']}",
+                "Content-Type": "application/json",
+            },
+            payload={
+                "model": cfg["model"],
+                "temperature": 0.3,
+                "max_tokens": 250,
+                "messages": [
+                    {"role": "system", "content": "You are an executive intelligence analyst. Deliver concise, high-value briefings."},
+                    {"role": "user", "content": prompt},
+                ],
+            },
+            timeout=20.0,
+            max_attempts=2,
+        )
+        data = resp.json()
+        content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
+        return content or None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("digest_ai_summary_failed workspace_id=%s error=%s", workspace.id, exc)
+        return None
+
+
 def build_digest_body(db: Session, workspace: Workspace, *, since: datetime) -> tuple[str, int]:
     events = list(
         db.scalars(
@@ -31,13 +89,23 @@ def build_digest_body(db: Session, workspace: Workspace, *, since: datetime) -> 
     if not events:
         return "", 0
 
-    lines = [f"Digest for {workspace.name}", f"Period since {since.isoformat()}", ""]
+    bullet_lines: list[str] = []
     for ev in events:
         mon = db.get(Monitor, ev.monitor_id)
         name = mon.name if mon else str(ev.monitor_id)
         cat = ev.change_category or "other"
         summary = ev.ai_summary or ev.diff_summary or "change"
-        lines.append(f"- [{cat}] {name}: {summary}")
+        bullet_lines.append(f"- [{cat}] {name}: {summary}")
+
+    briefing = generate_ai_digest_summary(workspace, bullet_lines)
+
+    lines = [f"Digest for {workspace.name}", f"Period since {since.isoformat()}", ""]
+    if briefing:
+        lines.append("Executive Briefing:")
+        lines.append(briefing)
+        lines.append("")
+        lines.append("Detailed Changes:")
+    lines.extend(bullet_lines)
 
     plain = "\n".join(lines)
     return plain, len(events)

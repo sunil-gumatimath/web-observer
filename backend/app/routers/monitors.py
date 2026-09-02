@@ -354,6 +354,7 @@ def create_monitor(
         max_response_bytes=body.max_response_bytes,
         js_required=js_required,
         watch_note=(body.watch_note or None),
+        semantic_trigger=(body.semantic_trigger or None),
         ignore_selectors=body.ignore_selectors,
         ignore_regexes=body.ignore_regexes,
         alert_config=body.alert_config,

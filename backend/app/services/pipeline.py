@@ -475,10 +475,11 @@ def _detect_change(
     # Detect preview truncation: no text_object_key or storage miss, and DB preview indicates truncation
     preview_truncated = storage_miss and len(prev_text) >= SNAPSHOT_DB_PREVIEW_CHARS
     if monitor.mode == "visual":
+        from app.config import get_settings
         from app.services.visual import visual_diff_summary
 
         v_summary, v_diff = visual_diff_summary(
-            prev_text, normalized, threshold=settings.visual_ahash_threshold
+            prev_text, normalized, threshold=get_settings().visual_ahash_threshold
         )
         if "Visual similar" in v_summary:
             from app.services.adaptive import note_check_outcome
@@ -590,6 +591,7 @@ def _create_change_event(
             watch_note=watch_note,
             llm=None,  # heuristic only for immediate row
             brand=getattr(monitor, "brand", None),
+            semantic_trigger=getattr(monitor, "semantic_trigger", None),
         )
         # Mark provider as pending to signal async upgrade
         enrichment.provider = "heuristic_pending"
@@ -605,6 +607,9 @@ def _create_change_event(
             diff_summary=ctx.summary,
             ai_summary=enrichment.summary,
             change_category=enrichment.category,
+            title=getattr(enrichment, "title", None),
+            impact=getattr(enrichment, "impact", None),
+            confidence=getattr(enrichment, "confidence", None),
             is_noise=False,  # triage deferred to worker
             is_read=False,
         )
@@ -629,6 +634,7 @@ def _create_change_event(
         watch_note=watch_note,
         llm=llm_cfg,
         brand=getattr(monitor, "brand", None),
+        semantic_trigger=getattr(monitor, "semantic_trigger", None),
     )
     # P0: token accounting — record LLM usage for this change
     try:
@@ -702,6 +708,9 @@ def _create_change_event(
         diff_summary=ctx.summary,
         ai_summary=enrichment.summary,
         change_category=enrichment.category,
+        title=getattr(enrichment, "title", None),
+        impact=getattr(enrichment, "impact", None),
+        confidence=getattr(enrichment, "confidence", None),
         is_noise=is_noise,
         is_read=False,
     )
