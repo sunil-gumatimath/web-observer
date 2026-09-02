@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180" fill="none">
+  <rect width="180" height="180" rx="40" fill="#020617"/>
+  <defs>
+    <linearGradient id="ao-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="ao-border" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.85" />
+      <stop offset="50%" stop-color="#818cf8" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.85" />
+    </linearGradient>
+    <linearGradient id="ao-eye-stroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+    <linearGradient id="ao-pulse" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="45%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+    <radialGradient id="ao-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.38" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <!-- Centered 96x96 mark at (42,42) scaled 3x from 32 base -->
+  <g transform="translate(42 42) scale(3)">
+    <rect x="0.7" y="0.7" width="30.6" height="30.6" rx="7.5" fill="url(#ao-bg)" stroke="url(#ao-border)" stroke-width="1.15" />
+    <circle cx="16" cy="16" r="9" fill="url(#ao-glow)" />
+    <path d="M 6.5 16 C 10 10.2 22 10.2 25.5 16 C 22 21.8 10 21.8 6.5 16 Z" fill="#0f172a" fill-opacity="0.6" stroke="url(#ao-eye-stroke)" stroke-width="1.4" stroke-linejoin="round" />
+    <circle cx="16" cy="16" r="4.2" stroke="#38bdf8" stroke-opacity="0.85" stroke-width="1.1" fill="#020617" />
+    <circle cx="16" cy="16" r="1.35" fill="#e0f2fe" fill-opacity="0.92" />
+    <circle cx="15.25" cy="15.2" r="0.55" fill="white" fill-opacity="0.95" />
+    <path d="M 6.5 16 H 11.4 L 13.7 12.15 L 18.3 19.85 L 20.6 16 H 25.5" stroke="url(#ao-pulse)" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="13.7" cy="12.15" r="2.15" fill="#38bdf8" fill-opacity="0.28" />
+    <circle cx="13.7" cy="12.15" r="1.1" fill="#38bdf8" stroke="white" stroke-width="0.55" />
+    <circle cx="13.7" cy="12.15" r="0.42" fill="white" />
+    <circle cx="23.65" cy="8.3" r="1.55" fill="#10b981" />
+    <circle cx="23.65" cy="8.3" r="2.6" stroke="#10b981" stroke-opacity="0.45" stroke-width="0.65" />
+  </g>
+</svg>

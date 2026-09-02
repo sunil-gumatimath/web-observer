@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none" role="img" aria-label="Web Observer">
+  <rect width="1200" height="630" fill="#f8fafc"/>
+  <rect width="1200" height="630" fill="#020617" style="mix-blend-mode: normal; opacity: 0;"/>
+  <!-- subtle grid -->
+  <g opacity="0.06" stroke="#64748b" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105"/><line x1="0" y1="210" x2="1200" y2="210"/><line x1="0" y1="315" x2="1200" y2="315"/><line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="150" y1="0" x2="150" y2="630"/><line x1="300" y1="0" x2="300" y2="630"/><line x1="600" y1="0" x2="600" y2="630"/><line x1="900" y1="0" x2="900" y2="630"/><line x1="1050" y1="0" x2="1050" y2="630"/>
+  </g>
+  <circle cx="200" cy="160" r="280" fill="#38bdf8" opacity="0.05"/>
+  <!-- mark 120x120 at 100, 225 -->
+  <g transform="translate(100 240) scale(3.75)">
+    <rect x="0.5" y="0.5" width="31" height="31" rx="9.5" fill="#0f172a"/>
+    <rect x="0.5" y="0.5" width="31" height="31" rx="9.5" stroke="white" stroke-opacity="0.08"/>
+    <circle cx="16" cy="16" r="9.5" stroke="white" stroke-opacity="0.14" stroke-width="0.95"/>
+    <path d="M 16 6.5 A 9.5 9.5 0 0 1 24.25 9.75" stroke="#38bdf8" stroke-width="1.55" stroke-linecap="round"/>
+    <circle cx="24.25" cy="9.75" r="1.35" fill="#38bdf8" stroke="#0f172a" stroke-width="0.9"/>
+    <circle cx="24.25" cy="9.75" r="2.45" fill="#38bdf8" fill-opacity="0.18"/>
+    <circle cx="16" cy="16" r="5.9" stroke="white" stroke-width="1.35" stroke-opacity="0.95"/>
+    <circle cx="16" cy="16" r="2.35" fill="white"/>
+  </g>
+  <text x="250" y="322" style="font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 66px; font-weight: 700; letter-spacing: -0.04em; fill: #0f172a;">Web <tspan style="font-weight: 500; fill: #64748b;">Observer</tspan></text>
+  <text x="252" y="362" style="font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 24px; font-weight: 400; letter-spacing: -0.02em; fill: #64748b;">Know the moment pages you care about change.</text>
+  <text x="252" y="395" style="font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; fill: #94a3b8;">CONTENT · PRICE · LINKS · HIGH-SIGNAL ALERTS</text>
+</svg>

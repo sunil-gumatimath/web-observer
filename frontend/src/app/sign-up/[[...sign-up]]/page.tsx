@@ -4,7 +4,7 @@ import { SignUp } from "@clerk/nextjs";
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
-import { LogoIcon } from "@/components/logo";
+import { Logo } from "@/components/logo";
 import { clerkAppearance } from "@/lib/clerk-appearance";
 import { config } from "@/lib/config";
 
@@ -47,8 +47,7 @@ export default function SignUpPage() {
 					href="/"
 					className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-[var(--text)]"
 				>
-					<LogoIcon size={36} />
-					<span>Web Observer</span>
+					<Logo iconSize={36} />
 				</Link>
 				<h1 className="mt-4 text-2xl font-semibold text-[var(--text)]">
 					Create your account

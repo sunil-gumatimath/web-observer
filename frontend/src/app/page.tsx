@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogoIcon } from "@/components/logo";
+import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const features = [
@@ -48,7 +48,7 @@ export default function HomePage() {
   // suppressHydrationWarning: browser extensions (e.g. Retriever) inject attrs
   // like `rtrvr-ls` into the DOM before React hydrates — not an app bug.
   return (
-      <div className="relative min-h-screen overflow-hidden text-[var(--text)]" suppressHydrationWarning>
+    <div className="relative min-h-screen overflow-hidden text-[var(--text)]" suppressHydrationWarning>
       <div className="pointer-events-none absolute inset-0 hero-grid" />
 
       <header
@@ -56,8 +56,7 @@ export default function HomePage() {
         suppressHydrationWarning
       >
         <Link href="/dashboard" className="flex items-center gap-2.5 font-semibold tracking-tight">
-          <LogoIcon size={36} />
-          <span className="hidden sm:inline text-slate-900 dark:text-white">Web Observer</span>
+          <Logo iconSize={36} />
         </Link>
         <div className="flex items-center gap-2">
           <ThemeToggle />
