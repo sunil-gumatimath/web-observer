@@ -4,6 +4,8 @@ import type {
   AlertInboxItem,
   AlertsSummary,
   ApiKeyCreated,
+  ApiKeyRow,
+  AuditLogRow,
   BrandInfo,
   BulkImportResponse,
   ChangeEvent,
@@ -27,6 +29,7 @@ import type {
   Usage,
   WebhookDelivery,
   WebhookOut,
+  WorkspaceMemberRow,
   WorkspaceSettings,
 } from "@/lib/types";
 
@@ -413,17 +416,56 @@ export const api = {
       }),
     }),
 
+  listApiKeys: (workspaceId: string) =>
+    request<ApiKeyRow[]>(`/api/v1/workspaces/${workspaceId}/api-keys`),
+
   createApiKey: (workspaceId: string, name: string) =>
     request<ApiKeyCreated>(`/api/v1/workspaces/${workspaceId}/api-keys`, {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
 
+  deleteApiKey: (workspaceId: string, keyId: string) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/api-keys/${keyId}`, {
+      method: "DELETE",
+    }),
+
+  listWebhooks: (workspaceId: string) =>
+    request<WebhookOut[]>(`/api/v1/workspaces/${workspaceId}/webhooks`),
+
   createWebhook: (workspaceId: string, url: string) =>
     request<WebhookOut>(`/api/v1/workspaces/${workspaceId}/webhooks`, {
       method: "POST",
       body: JSON.stringify({ url }),
     }),
+
+  deleteWebhook: (workspaceId: string, endpointId: string) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/webhooks/${endpointId}`, {
+      method: "DELETE",
+    }),
+
+  listMembers: (workspaceId: string) =>
+    request<WorkspaceMemberRow[]>(`/api/v1/workspaces/${workspaceId}/members`),
+
+  updateMemberRole: (workspaceId: string, userId: string, role: string) =>
+    request<WorkspaceMemberRow>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+
+  removeMember: (workspaceId: string, userId: string) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, {
+      method: "DELETE",
+    }),
+
+  listAuditLogs: (workspaceId: string, opts?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return request<AuditLogRow[]>(
+      `/api/v1/workspaces/${workspaceId}/audit-logs${qs ? `?${qs}` : ""}`,
+    );
+  },
 
   testNotificationChannel: (workspaceId: string, channelId: string) =>
     request<{ ok: boolean; detail: string }>(

@@ -5,7 +5,8 @@ export type MonitorMode =
   | "list_items"
   | "json_field"
   | "rss_feed"
-  | "readme";
+  | "readme"
+  | "visual";
 
 export type Monitor = {
   id: string;
@@ -317,4 +318,29 @@ export type InviteRedeem = {
   workspace_name: string;
   role: string;
   message: string;
+};
+
+export type ApiKeyRow = {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};
+
+export type WorkspaceMemberRow = {
+  user_id: string;
+  email: string | null;
+  role: string;
+};
+
+export type AuditLogRow = {
+  id: string;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  actor_email: string | null;
+  meta: Record<string, unknown> | null;
+  created_at: string;
 };

@@ -98,7 +98,7 @@ export default function HomePage() {
             suppressHydrationWarning
           >
             Know the moment{" "}
-            <span className="bg-gradient-to-r from-sky-500 via-cyan-500 to-indigo-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-cyan-200 dark:to-indigo-300">
+            <span suppressHydrationWarning className="bg-gradient-to-r from-sky-500 via-cyan-500 to-indigo-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-cyan-200 dark:to-indigo-300">
               pages you care about
             </span>{" "}
             change.

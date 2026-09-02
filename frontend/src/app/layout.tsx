@@ -54,6 +54,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Strip attributes injected by browser extensions (e.g. Retriever `rtrvr-ls`) before React hydrates */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){function s(n){if(n.nodeType!==1)return;for(var i=n.attributes.length-1;i>=0;i--){var a=n.attributes[i].name;if(a.startsWith('rtrvr'))n.removeAttribute(a)}for(var c=n.firstChild;c;c=c.nextSibling)s(c)}s(document.documentElement);new MutationObserver(function(m){m.forEach(function(x){if(x.type==='attributes'&&x.attributeName&&x.attributeName.startsWith('rtrvr'))x.target.removeAttribute(x.attributeName);x.addedNodes&&x.addedNodes.forEach(function(n){s(n)})})}).observe(document.documentElement,{attributes:true,childList:true,subtree:true})})();`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
         suppressHydrationWarning
