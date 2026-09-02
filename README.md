@@ -10,7 +10,7 @@ Web change-detection and alerting platform.
 
 ## Status
 
-**Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `011_add_alert_config` (post-roadmap work added a storage optimization, the alerts inbox, monitor watch notes, brand/workspace-key columns, referential-integrity fixes, and per-monitor conditional alert thresholds). Billing is optional (solo use: skip Stripe).
+**Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `012_add_ai_intelligence_fields` on Neon (post-roadmap work added storage optimization, the alerts inbox, monitor watch notes, brand/workspace-key columns, referential-integrity fixes, per-monitor conditional alert thresholds, natural-language semantic triggers, first-class AI impact/confidence triage, and distributed Redis dedup caching). Billing is optional (solo use: skip Stripe).
 
 Verified end-to-end: backend unit tests pass, the frontend type-checks, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
@@ -22,7 +22,7 @@ Verified end-to-end: backend unit tests pass, the frontend type-checks, and the 
 | [docs/resend-setup.md](docs/resend-setup.md) | Email alerts |
 | [docs/phase-3.md](docs/phase-3.md) | JS / Playwright / browser queue |
 | [docs/phase-4.md](docs/phase-4.md) | Structured + visual modes |
-| [docs/phase-5.md](docs/phase-5.md) | AI summaries, Slack/Discord, digests |
+| [docs/phase-5.md](docs/phase-5.md) | AI summaries, semantic triggers, Slack/Discord, digests |
 | [docs/phase-6-7.md](docs/phase-6-7.md) | Plans, webhooks, API keys, RBAC |
 | [docs/phase-0/](docs/phase-0/) | Discovery: scope, ERD, threat model, API outline |
 | [docs/adrs/](docs/adrs/) | Architecture decision records |

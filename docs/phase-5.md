@@ -10,11 +10,15 @@
 |---------|----------|
 | **AI summary** | After deterministic change; never detects alone |
 | **Category** | pricing, availability, legal, content, design, api, other |
+| **Title & Impact** | Short title + severity (`critical`, `high`, `medium`, `low`) + confidence (`0.0–1.0`) stored as first-class DB columns on `ChangeEvent` |
+| **Semantic Triggers** | Plain-English alert rules (`semantic_trigger` on `Monitor`); filters non-matching diffs as noise |
+| **Distributed Dedup** | Redis-backed TTL cache (`ai_dedup:<hash>`) with process-memory fallback to avoid redundant LLM invocations |
+| **AI Executive Digest** | Batch synthesis briefing included in daily / weekly workspace digests |
 | **Heuristic** | Always available without API keys |
-| **LLM** | Optional OpenAI-compatible chat completions |
+| **LLM** | Optional OpenAI-compatible chat completions (OpenAI, OpenRouter, Groq, Ollama) |
 | **Slack / Discord** | Webhook channels (`type=slack\|discord`) |
 | **Digest** | daily / weekly workspace digests via `digest` service |
-| **Noise feedback** | `POST .../changes/{id}/noise` excludes from digests |
+| **Noise feedback** | `POST .../changes/{id}/noise` excludes from notifications & digests |
 
 ## Env
 
@@ -24,19 +28,20 @@ LLM_API_KEY=           # empty => heuristic only
 LLM_API_BASE=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
 AI_MAX_DIFF_CHARS=6000
+REDIS_URL=redis://localhost:6379/0
 ```
 
 ## ADR
 
 See `docs/adrs/006-ai-provider.md`.
 
-## Safety
+## Safety & Hardening
 
-- Diff treated as untrusted input  
-- Size-capped prompts  
-- Fail-open to heuristic if LLM fails  
-- AI never suppresses change events  
+- **Prompt Injection Defense:** Diffs enclosed in `<untrusted_diff_content>...</untrusted_diff_content>` XML fences; system prompt explicitly instructed to ignore overrides inside diff text.
+- **Token Bounds:** Size-capped prompts (`AI_MAX_DIFF_CHARS`) and strict `max_tokens` limits.
+- **Fail-open Resilience:** Automatic fallback to heuristics if LLM times out or errors.
+- **Noise Non-Destruction:** Suppressed changes are marked `is_noise=true` for transparency in the Alerts inbox, never silently discarded.
 
 ## Migration
 
-`alembic upgrade head` → revision `003`
+`alembic upgrade head` → revision `012_add_ai_intelligence_fields` (adds `title`, `impact`, `confidence` to `change_events` and `semantic_trigger` to `monitors`).
