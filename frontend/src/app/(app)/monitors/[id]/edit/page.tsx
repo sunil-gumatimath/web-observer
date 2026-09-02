@@ -63,6 +63,7 @@ export default function EditMonitorPage() {
 	const [timezone, setTimezone] = useState("UTC");
 	const [jsRequired, setJsRequired] = useState(false);
 	const [watchNote, setWatchNote] = useState("");
+	const [semanticTrigger, setSemanticTrigger] = useState("");
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
 	const [cssSelector, setCssSelector] = useState<string | null>(null);
@@ -93,6 +94,7 @@ export default function EditMonitorPage() {
 				setTimezone(m.timezone);
 				setJsRequired(Boolean(m.js_required));
 				setWatchNote(m.watch_note ?? "");
+				setSemanticTrigger(m.semantic_trigger ?? "");
 				setIgnoreSelectors((m.ignore_selectors ?? []).join("\n"));
 				setIgnoreRegexes((m.ignore_regexes ?? []).join("\n"));
 				setCssSelector(m.css_selector ?? null);
@@ -192,6 +194,7 @@ export default function EditMonitorPage() {
 				timezone,
 				js_required: needsJs(mode) ? jsRequired : false,
 				watch_note: watchNote.trim() || null,
+				semantic_trigger: semanticTrigger.trim() || null,
 				ignore_selectors: ignore,
 				ignore_regexes: ignoreRegex,
 			});
@@ -367,6 +370,21 @@ export default function EditMonitorPage() {
 							onChange={(e) => setWatchNote(e.target.value)}
 							placeholder="e.g. Only care about pricing plan changes"
 						/>
+						<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+							Focuses AI summaries and helps you remember intent.
+						</p>
+					</div>
+					<div>
+						<Label htmlFor="semanticTrigger">Semantic alert condition (optional)</Label>
+						<Input
+							id="semanticTrigger"
+							value={semanticTrigger}
+							onChange={(e) => setSemanticTrigger(e.target.value)}
+							placeholder="e.g. Alert only if pricing increases or a new tier is added"
+						/>
+						<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+							Plain-English AI trigger. Changes that do not satisfy this condition are filtered out.
+						</p>
 					</div>
 {mode === "list_items" || mode === "json_field" ? (
 					<div>

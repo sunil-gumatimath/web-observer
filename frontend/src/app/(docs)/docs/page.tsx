@@ -257,6 +257,11 @@ export default function DocsPage() {
                 <strong className="text-slate-800 dark:text-slate-200">Alert email</strong> — optional
                 per-monitor override; workspace channels still apply when set in Settings.
               </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Semantic alert condition</strong> — optional
+                plain-English rule (e.g. “Alert only if pricing changes or a new tier is added”).
+                Changes not satisfying this condition are automatically triaged as noise to prevent notification fatigue.
+              </li>
             </ul>
             <p>
               After create, open the monitor detail page to <strong>Run now</strong>,{" "}
@@ -289,10 +294,10 @@ export default function DocsPage() {
                 <strong className="text-slate-800 dark:text-slate-200">Opt-in screenshots</strong> — when <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">screenshots_enabled</code> is on, every check captures a fresh Playwright screenshot (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">screenshots/{"{monitor_id}/{run_id}.png"}</code>) with aHash history — off by default to avoid forcing Playwright on text monitors.
               </li>
               <li>
-                <strong className="text-slate-800 dark:text-slate-200">AI change summaries</strong> — optional plain-language summaries per change (heuristic by default; enable OpenAI or Vercel AI Gateway via <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">LLM_API_BASE</code> and toggle per-workspace <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">ai_summaries_enabled</code>).
+                <strong className="text-slate-800 dark:text-slate-200">AI change summaries & impact</strong> — plain-language titles, summaries, impact rating (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">critical</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">high</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">medium</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">low</code>), and model confidence scores stored per change.
               </li>
               <li>
-                <strong className="text-slate-800 dark:text-slate-200">AI relevance filter</strong> — optional per-monitor <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">watch_note</code> triage; routine noise is held as <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_noise=true</code> in the dashboard (not deleted), excluded from notifications, fails open on LLM error.
+                <strong className="text-slate-800 dark:text-slate-200">AI semantic triage</strong> — optional per-monitor <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">semantic_trigger</code> and <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">watch_note</code>; non-matching changes are held as <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_noise=true</code> in the dashboard, excluded from alerts, and fail-open on LLM error.
               </li>
               <li>
                 <strong className="text-slate-800 dark:text-slate-200">Brand-aware dashboard</strong> — adding a website auto-fills logo/title/description/hero from HTML <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">og:*</code> meta and re-hosts via <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">brand-assets/</code> for dashboard + public share pages (no Context.dev).
@@ -335,7 +340,7 @@ export default function DocsPage() {
               detected (and the notifications worker is running). Noise-marked changes do not notify.
             </p>
             <p>
-              Optional <strong>digests</strong> (daily / weekly) summarize activity instead of only
+              Optional <strong>digests</strong> (daily / weekly) summarize activity with an <strong>AI Executive Briefing</strong> instead of only
               real-time pings — set cadence and UTC hour in Settings → Preferences.
             </p>
           </DocSection>

@@ -22,6 +22,7 @@ export type Monitor = {
   config_version: number;
   js_required?: boolean;
   watch_note?: string | null;
+  semantic_trigger?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
   alert_config?: Record<string, unknown> | null;
@@ -54,6 +55,9 @@ export type LatestChange = {
   change_category: string | null;
   ai_summary: string | null;
   diff_summary: string | null;
+  title?: string | null;
+  impact?: string | null;
+  confidence?: number | null;
   is_read: boolean;
   is_noise: boolean;
   created_at: string;
@@ -91,6 +95,9 @@ export type ChangeEvent = {
   diff_summary: string | null;
   ai_summary?: string | null;
   change_category?: string | null;
+  title?: string | null;
+  impact?: string | null;
+  confidence?: number | null;
   is_noise?: boolean;
   is_read?: boolean;
   created_at: string;
@@ -141,6 +148,7 @@ export type MonitorCreateInput = {
   notification_email?: string;
   js_required?: boolean;
   watch_note?: string | null;
+  semantic_trigger?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
   alert_config?: Record<string, unknown> | null;
@@ -158,6 +166,7 @@ export type MonitorUpdateInput = {
   enabled?: boolean;
   js_required?: boolean;
   watch_note?: string | null;
+  semantic_trigger?: string | null;
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
   alert_config?: Record<string, unknown> | null;

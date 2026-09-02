@@ -98,6 +98,7 @@ export default function NewMonitorPage() {
 	const [email, setEmail] = useState("");
 	const [jsRequired, setJsRequired] = useState(false);
 	const [watchNote, setWatchNote] = useState("");
+	const [semanticTrigger, setSemanticTrigger] = useState("");
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
 	const [cssSelector, setCssSelector] = useState<string | null>(null);
@@ -193,6 +194,7 @@ export default function NewMonitorPage() {
 				notification_email: email || undefined,
 				js_required: needsJs(mode) ? jsRequired : false,
 				watch_note: watchNote.trim() || null,
+				semantic_trigger: semanticTrigger.trim() || null,
 				ignore_selectors: ignore.length ? ignore : null,
 				ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
 				run_now: runNow,
@@ -458,6 +460,18 @@ export default function NewMonitorPage() {
 							/>
 							<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
 								Focuses AI summaries and helps you remember intent.
+							</p>
+						</div>
+						<div>
+							<Label htmlFor="semanticTrigger">Semantic alert condition (optional)</Label>
+							<Input
+								id="semanticTrigger"
+								value={semanticTrigger}
+								onChange={(e) => setSemanticTrigger(e.target.value)}
+								placeholder="e.g. Alert only if pricing increases or a new tier is added"
+							/>
+							<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+								Plain-English AI trigger. Changes that do not satisfy this condition are filtered out.
 							</p>
 						</div>
 {mode === "list_items" || mode === "json_field" ? (

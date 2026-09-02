@@ -169,22 +169,49 @@ export default function ChangeDetailPage() {
 			/>
 			{error ? <ErrorBox message={error} /> : null}
 
-			<div className="mb-5 flex flex-wrap gap-2">
+			<div className="mb-5 flex flex-wrap items-center gap-2">
 				<CategoryBadge category={change.change_category} />
 				{change.is_noise ? (
 					<Badge tone="warn">noise</Badge>
 				) : (
 					<Badge tone="success">signal</Badge>
 				)}
+				{change.impact ? (
+					<Badge
+						tone={
+							change.impact === "critical"
+								? "danger"
+								: change.impact === "high"
+								? "warn"
+								: change.impact === "medium"
+								? "info"
+								: "neutral"
+						}
+					>
+						impact: {change.impact}
+					</Badge>
+				) : null}
+				{change.confidence !== undefined && change.confidence !== null ? (
+					<span className="inline-flex items-center rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+						{Math.round(change.confidence * 100)}% confidence
+					</span>
+				) : null}
 			</div>
 
 			{change.ai_summary ? (
 				<div className="mb-5 overflow-hidden rounded-xl border border-sky-500/20 bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent p-4 shadow-sm dark:border-sky-500/30 dark:from-sky-950/40 dark:via-indigo-950/20">
-					<div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-400">
-						<svg className="h-4 w-4 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
-							<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/>
-						</svg>
-						<span>AI Change Summary</span>
+					<div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-400">
+						<div className="flex items-center gap-2">
+							<svg className="h-4 w-4 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/>
+							</svg>
+							<span>AI Change Summary</span>
+						</div>
+						{change.title ? (
+							<span className="font-semibold text-slate-800 dark:text-slate-200 normal-case tracking-normal">
+								{change.title}
+							</span>
+						) : null}
 					</div>
 					<p className="mt-2 text-sm leading-relaxed font-medium text-slate-900 dark:text-slate-100">
 						{change.ai_summary}
