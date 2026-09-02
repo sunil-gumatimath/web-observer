@@ -20,8 +20,10 @@ from app.models import Monitor, MonitorRun
 from app.models.entities import RunStatus
 from app.services.run_reaper import reap_stuck_runs
 from app.services.usage import QuotaExceeded, assert_can_run_check
+from app.services.webhooks import reap_stuck_webhook_deliveries
 from app.workers.broker import redis_broker  # noqa: F401
 from app.workers.enqueue import enqueue_check
+from app.workers.notifications import reap_stuck_outbox_messages
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("scheduler")
@@ -111,7 +113,7 @@ def claim_due_monitors(limit: int) -> list[tuple[uuid.UUID, bool]]:
             )
             db.add(run)
             db.flush()
-            needs_browser = bool(monitor.js_required)
+            needs_browser = bool(monitor.js_required or monitor.mode == "visual")
             claimed.append((run.id, needs_browser))
             logger.info(
                 "enqueued monitor_id=%s run_id=%s browser=%s next_run_at=%s",
@@ -149,6 +151,12 @@ def run_once() -> int:
         reaped = reap_stuck_runs(db)
         if reaped:
             logger.warning("reaped_stuck_runs count=%d", reaped)
+        reaped_outbox = reap_stuck_outbox_messages(db)
+        if reaped_outbox:
+            logger.warning("reaped_stuck_outbox count=%d", reaped_outbox)
+        reaped_webhooks = reap_stuck_webhook_deliveries(db)
+        if reaped_webhooks:
+            logger.warning("reaped_stuck_webhooks count=%d", reaped_webhooks)
     jobs = claim_due_monitors(settings.scheduler_batch_size)
     for run_id, needs_browser in jobs:
         enqueue_check(str(run_id), needs_browser=needs_browser)
@@ -175,11 +183,17 @@ def main() -> None:
         try:
             release_expired_logic()
 
-            # Recover stuck runs before scheduling new ones
+            # Recover stuck runs, outbox messages, and webhooks before scheduling new ones
             with SessionLocal() as db:
                 reaped = reap_stuck_runs(db)
                 if reaped:
                     logger.warning("reaped_stuck_runs count=%d", reaped)
+                reaped_outbox = reap_stuck_outbox_messages(db)
+                if reaped_outbox:
+                    logger.warning("reaped_stuck_outbox count=%d", reaped_outbox)
+                reaped_webhooks = reap_stuck_webhook_deliveries(db)
+                if reaped_webhooks:
+                    logger.warning("reaped_stuck_webhooks count=%d", reaped_webhooks)
 
             jobs = claim_due_monitors(settings.scheduler_batch_size)
             for run_id, needs_browser in jobs:

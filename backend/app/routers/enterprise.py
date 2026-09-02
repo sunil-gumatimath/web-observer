@@ -551,3 +551,42 @@ def update_member_role(
     db.commit()
     user = db.get(User, user_id)
     return MemberOut(user_id=user_id, email=user.email if user else None, role=body.role)
+
+
+@router.delete("/workspaces/{workspace_id}/members/{user_id}", status_code=204)
+def remove_member(
+    workspace_id: UUID,
+    user_id: UUID,
+    db: Db,
+    principal: Principal,
+    workspace: Workspace = Depends(require_role("owner")),
+) -> None:
+    membership = db.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+    )
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if membership.role == "owner":
+        owner_count = db.scalar(
+            select(func.count())
+            .select_from(WorkspaceMember)
+            .where(
+                WorkspaceMember.workspace_id == workspace_id,
+                WorkspaceMember.role == "owner",
+            )
+        ) or 0
+        if owner_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the last owner")
+    db.delete(membership)
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="member.removed",
+        resource_type="user",
+        resource_id=str(user_id),
+    )
+    db.commit()

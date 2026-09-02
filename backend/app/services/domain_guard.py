@@ -24,7 +24,12 @@ def _redis() -> redis.Redis:
 
 
 def domain_from_url(url: str) -> str:
-    host = urlparse(url).hostname or "unknown"
+    host = urlparse(url).hostname
+    if not host:
+        stripped = url.strip()
+        if "/" in stripped and not stripped.startswith(("http://", "https://")):
+            return "github.com"
+        host = "unknown"
     return host.lower().rstrip(".")
 
 
