@@ -256,23 +256,4 @@ Quick smoke test of a running stack (API + worker must be up):
 ./scripts/smoke.sh
 ```
 
-## Stack
 
-Python / FastAPI · Neon Postgres · Redis / Dramatiq · Next.js · Clerk · Resend · local disk snapshots · Playwright
-
-### webdog.ai-parity additions (post-roadmap)
-
-These extend the platform beyond the original roadmap:
-
-- **Brand-aware dashboard** — adding a website auto-fills title/description/logo/hero from HTML `<meta>` (no Context.dev) and re-hosts via `brand-assets/` for dashboard + public share pages. Also refreshable via per-monitor *Brand* action (`POST /workspaces/{id}/monitors/{id}/brand`).
-- **GitHub README & RSS monitoring** — dedicated `readme` mode for tracking repository documentation updates with GitHub Markdown styling and `rss_feed` mode for syndication feeds.
-- **Single-roundtrip monitor creation** — `run_now` flag batches monitor creation and initial check queuing into a single transaction and HTTP request.
-- **Managed or self-serve keys** — a workspace owner can set per-workspace LLM keys (`llm_api_key` / `llm_api_base` / `llm_model`) and Resend keys (`resend_api_key` / `email_from`) in **Settings → Workspace keys**. AI summaries and email alerts use the workspace keys when present, otherwise the global keys. Works with OpenAI or Vercel AI Gateway (set `LLM_API_BASE=https://ai-gateway.vercel.sh/v1`). Settings values are masked on read.
-- **Public share links** — from a monitor's detail page, *Share* creates an opaque-token link (`/share/{token}`) that anyone can open to view the monitor's change history. The token is hashed at rest (only its prefix is stored) and the link is revocable.
-- **Teams** — **Settings → Team** generates expiring multi-use invite links with role/max-uses. Switch workspaces via `GET /me` and `localStorage` (`web_observer_workspace_id`).
-- **Opt-in screenshots** — `screenshots_enabled` off by default; when enabled, every check captures a fresh Playwright screenshot (`screenshots/{monitor_id}/{run_id}.png`) with aHash history.
-
-> Database: apply schema changes with `alembic upgrade head` from `backend/`.
-> removed so there is only one schema-application path. In development the API
-> also runs `Base.metadata.create_all()` at startup; in production it does not,
-> so migrations are never silently bypassed.
