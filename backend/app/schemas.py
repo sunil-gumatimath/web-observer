@@ -74,6 +74,9 @@ class LatestChangeOut(BaseModel):
     change_category: str | None = None
     ai_summary: str | None = None
     diff_summary: str | None = None
+    title: str | None = None
+    impact: str | None = None
+    confidence: float | None = None
     is_read: bool = False
     is_noise: bool = False
     created_at: datetime
@@ -93,6 +96,7 @@ class MonitorCreate(BaseModel):
     notification_email: EmailStr | None = None
     js_required: bool = False
     watch_note: str | None = Field(default=None, max_length=2000)
+    semantic_trigger: str | None = Field(default=None, max_length=2000)
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
     screenshots_enabled: bool = False
@@ -205,6 +209,7 @@ class MonitorUpdate(BaseModel):
     enabled: bool | None = None
     js_required: bool | None = None
     watch_note: str | None = Field(default=None, max_length=2000)
+    semantic_trigger: str | None = Field(default=None, max_length=2000)
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
     screenshots_enabled: bool | None = None
@@ -310,6 +315,7 @@ class MonitorOut(BaseModel):
     config_version: int
     js_required: bool = False
     watch_note: str | None = None
+    semantic_trigger: str | None = None
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
     alert_config: dict | None = None
@@ -356,6 +362,9 @@ class ChangeEventOut(BaseModel):
     diff_summary: str | None
     ai_summary: str | None = None
     change_category: str | None = None
+    title: str | None = None
+    impact: str | None = None
+    confidence: float | None = None
     is_noise: bool = False
     is_read: bool = False
     created_at: datetime

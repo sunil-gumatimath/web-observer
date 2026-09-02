@@ -24,8 +24,8 @@ def main() -> None:
                 FROM information_schema.columns
                 WHERE table_schema = 'public'
                   AND (
-                    (table_name = 'change_events' AND column_name IN ('is_read', 'is_noise'))
-                    OR (table_name = 'monitors' AND column_name = 'watch_note')
+                    (table_name = 'change_events' AND column_name IN ('is_read', 'is_noise', 'title', 'impact', 'confidence'))
+                    OR (table_name = 'monitors' AND column_name IN ('watch_note', 'semantic_trigger', 'alert_config'))
                     OR (table_name = 'snapshots' AND column_name = 'text_object_key')
                   )
                 ORDER BY 1, 2
