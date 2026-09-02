@@ -30,7 +30,7 @@ def run_http_check(run_id: str) -> None:
         # Misrouted browser job. site_links/readme must stay on THIS worker even when
         # js_required is set: their fetch paths are plain HTTP, so handing them to
         # Playwright would snapshot the wrong content.
-        if monitor.js_required and monitor.mode not in (MODE_SITE_LINKS, MODE_README):
+        if (monitor.js_required or monitor.mode == "visual") and monitor.mode not in (MODE_SITE_LINKS, MODE_README):
             from app.workers.browser_checks import run_browser_check
 
             run.status = RunStatus.QUEUED.value

@@ -134,6 +134,9 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
 
         return normalize_text(result.text), None
 
+    if mode == "visual":
+        return (result.text or "").strip(), None
+
     # page_content (default): main content as markdown when detectable
     # (webdog `useMainContentOnly` parity — strips nav/boilerplate), falling
     # back to whole-body markdown for pages where detection fails.
@@ -471,7 +474,21 @@ def _detect_change(
 
     # Detect preview truncation: no text_object_key or storage miss, and DB preview indicates truncation
     preview_truncated = storage_miss and len(prev_text) >= SNAPSHOT_DB_PREVIEW_CHARS
-    if monitor.mode in LIST_DIFF_MODES:
+    if monitor.mode == "visual":
+        from app.services.visual import visual_diff_summary
+
+        v_summary, v_diff = visual_diff_summary(
+            prev_text, normalized, threshold=settings.visual_ahash_threshold
+        )
+        if "Visual similar" in v_summary:
+            from app.services.adaptive import note_check_outcome
+
+            note_check_outcome(monitor, changed=False, succeeded=True)
+            db.commit()
+            return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
+        ctx.summary = v_summary
+        ctx.diff_text = v_diff
+    elif monitor.mode in LIST_DIFF_MODES:
         # When the previous snapshot's full text is missing (storage miss) and
         # only the truncated DB preview survives, reconstructing items from a
         # cut-off line would fabricate added/removed entries. Emit an honest

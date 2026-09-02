@@ -184,6 +184,9 @@ class MonitorCreate(BaseModel):
 
     @model_validator(mode="after")
     def apply_mode_interval_default(self) -> MonitorCreate:
+        if self.mode == "visual":
+            self.js_required = True
+            self.screenshots_enabled = True
         if self.schedule_interval_minutes is None:
             # Product price checks default to daily; everything else is hourly.
             self.schedule_interval_minutes = 1440 if self.mode == "product_price" else 60

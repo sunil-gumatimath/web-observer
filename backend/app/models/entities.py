@@ -48,6 +48,7 @@ class MonitorMode(enum.StrEnum):
     JSON_FIELD = "json_field"
     RSS_FEED = "rss_feed"
     README = "readme"
+    VISUAL = "visual"
 
 
 # Single source of truth for valid mode strings. API schemas, bulk import,

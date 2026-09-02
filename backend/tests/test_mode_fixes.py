@@ -86,6 +86,7 @@ def test_monitor_modes_derived_from_enum() -> None:
         "json_field",
         "rss_feed",
         "readme",
+        "visual",
     }
 
 

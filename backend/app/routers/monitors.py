@@ -428,7 +428,7 @@ def create_monitor(
             db.add(run)
             db.commit()
             db.refresh(run)
-            enqueue_check(str(run.id), needs_browser=bool(monitor.js_required))
+            enqueue_check(str(run.id), needs_browser=bool(monitor.js_required or monitor.mode == "visual"))
         except Exception as exc:  # noqa: BLE001
             db.rollback()
             logger.warning("create_auto_run_enqueue_failed monitor_id=%s error=%s", monitor.id, exc)
@@ -627,6 +627,10 @@ def update_monitor(
 
     for key, value in data.items():
         setattr(monitor, key, value)
+
+    if "schedule_interval_minutes" in data and data["schedule_interval_minutes"] is not None:
+        monitor.base_interval_minutes = data["schedule_interval_minutes"]
+        monitor.consecutive_unchanged = 0
 
     if bumps_config:
         monitor.config_version += 1
@@ -847,7 +851,7 @@ def manual_run(
             raise HTTPException(status_code=429, detail=str(exc)) from exc
 
         now = datetime.now(UTC)
-        needs_browser = bool(monitor.js_required)
+        needs_browser = bool(monitor.js_required or monitor.mode == "visual")
 
         active = db.scalar(
             select(MonitorRun)

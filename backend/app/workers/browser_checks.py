@@ -72,11 +72,22 @@ def run_browser_check(run_id: str) -> None:
         return False
 
     def _fetch(monitor: Monitor, db):
-        result = fetch_url_browser(
-            monitor.url,
-            timeout_seconds=max(monitor.timeout_seconds, 45),
-            max_response_bytes=monitor.max_response_bytes,
-        )
+        if monitor.mode == "visual":
+            from app.services.visual import capture_screenshot, visual_to_fetch_result
+
+            capture = capture_screenshot(
+                monitor.url,
+                timeout_seconds=max(monitor.timeout_seconds, 45),
+                full_page=True,
+                clip_selector=monitor.css_selector,
+            )
+            result = visual_to_fetch_result(capture, url=monitor.url)
+        else:
+            result = fetch_url_browser(
+                monitor.url,
+                timeout_seconds=max(monitor.timeout_seconds, 45),
+                max_response_bytes=monitor.max_response_bytes,
+            )
         # Quota already reserved atomically in _pre_run_hook; just refresh expiry.
         try:
             day = datetime.now(UTC).strftime("%Y%m%d")
