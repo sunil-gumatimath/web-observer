@@ -53,10 +53,14 @@ app.add_exception_handler(
 
 
 def _cors_origins() -> list[str]:
+    import re
+
     raw = (getattr(settings, "cors_origins", "") or "").strip()
     if not raw:
         return ["http://localhost:3000", "http://127.0.0.1:3000"]
-    return [o.strip() for o in raw.split(",") if o.strip()]
+    # Split on commas AND any whitespace — gcloud Run flattens commas to
+    # spaces in env values, so space-separated must also work in prod.
+    return [o.strip() for o in re.split(r"[,\s]+", raw) if o.strip()]
 
 
 # Enumerated instead of "*": the wildcard is broader than the API needs, and it
