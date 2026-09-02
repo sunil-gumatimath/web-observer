@@ -1,5 +1,7 @@
 # Browser worker image with Playwright Chromium
-FROM mcr.microsoft.com/playwright/python:v1.49.1-jammy
+# noble (Ubuntu 24.04) ships Python 3.12 — required for enum.StrEnum (3.11+).
+# Keep image minor in sync with pip playwright (requirements: playwright>=1.49,<2).
+FROM mcr.microsoft.com/playwright/python:v1.62.0-noble
 
 WORKDIR /app
 

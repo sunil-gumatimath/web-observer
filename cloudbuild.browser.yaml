@@ -1,0 +1,20 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/web-observer/browser:latest"
+      - "-f"
+      - "backend/Dockerfile.browser"
+      - "backend"
+    id: build-browser
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "us-central1-docker.pkg.dev/$PROJECT_ID/web-observer/browser:latest"]
+    id: push-browser
+    waitFor: ["build-browser"]
+images:
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/web-observer/browser:latest"
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: 1800s

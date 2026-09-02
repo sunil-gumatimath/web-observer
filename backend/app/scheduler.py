@@ -142,7 +142,31 @@ def release_expired_logic() -> None:
         db.commit()
 
 
+def run_once() -> int:
+    """Single pass: release leases, reap stuck, claim due, enqueue. Returns jobs claimed."""
+    release_expired_logic()
+    with SessionLocal() as db:
+        reaped = reap_stuck_runs(db)
+        if reaped:
+            logger.warning("reaped_stuck_runs count=%d", reaped)
+    jobs = claim_due_monitors(settings.scheduler_batch_size)
+    for run_id, needs_browser in jobs:
+        enqueue_check(str(run_id), needs_browser=needs_browser)
+    return len(jobs)
+
+
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true", help="single pass then exit (for Cloud Run Jobs)")
+    args = parser.parse_args()
+
+    if args.once:
+        n = run_once()
+        logger.info("scheduler_once done jobs=%s", n)
+        return
+
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
     logger.info("scheduler_started instance=%s", _INSTANCE_ID)
