@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/logo.svg" alt="Web Observer logo" width="260" />
+  <img src="assets/web-observer.svg" alt="Web Observer logo" width="320" />
 </p>
 
 # Web Observer
