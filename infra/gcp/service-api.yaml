@@ -1,0 +1,45 @@
+# Cloud Run service — use with: gcloud run services replace infra/gcp/service-api.yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: web-observer-api
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: us-central1-docker.pkg.dev/PROJECT_ID/web-observer/api:latest
+          ports:
+            - containerPort: 8000
+          resources:
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          env:
+            - name: APP_ENV
+              value: production
+            - name: STORAGE_BACKEND
+              value: local
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          # Secrets mounted from Secret Manager (create first: gcloud secrets create ...)
+          # gcloud secrets create web-observer-db --data-file=- <<< "postgresql+psycopg://..."
+          envFrom:
+            - secretRef:
+                name: web-observer-db
+            - secretRef:
+                name: web-observer-redis
+            - secretRef:
+                name: web-observer-secret
+  traffic:
+    - percent: 100
+      latestRevision: true

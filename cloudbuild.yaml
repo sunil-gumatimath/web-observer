@@ -1,0 +1,72 @@
+# Google Cloud Build — deploys FastAPI + browser worker to Cloud Run
+# Trigger: GitHub connected → gcloud builds submit or Cloud Build trigger on push to main
+# Requires: APIs enabled: run.googleapis.com, artifactregistry.googleapis.com, cloudbuild.googleapis.com
+# Vars: _REGION=us-central1, _SERVICE=web-observer-api, _REPO=web-observer
+
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:$COMMIT_SHA"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest"
+      - "-f"
+      - "backend/Dockerfile"
+      - "backend"
+    id: build-api
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/browser:$COMMIT_SHA"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/browser:latest"
+      - "-f"
+      - "backend/Dockerfile.browser"
+      - "backend"
+    id: build-browser
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:$COMMIT_SHA"]
+    id: push-api
+    waitFor: ["build-api"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/browser:$COMMIT_SHA"]
+    id: push-browser
+    waitFor: ["build-browser"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:$COMMIT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+      - "--port=8000"
+      - "--memory=1Gi"
+      - "--cpu=1"
+      - "--min-instances=0"
+      - "--max-instances=3"
+      - "--set-env-vars=APP_ENV=production,STORAGE_BACKEND=local"
+      - "--update-secrets=DATABASE_URL=web-observer-db:latest,REDIS_URL=web-observer-redis:latest,SECRET_KEY=web-observer-secret:latest,INTERNAL_API_TOKEN=web-observer-internal:latest,CLERK_JWKS_URL=web-observer-clerk-jwks:latest,CLERK_ISSUER=web-observer-clerk-issuer:latest,CLERK_SECRET_KEY=web-observer-clerk-secret:latest,RESEND_API_KEY=web-observer-resend:latest"
+    id: deploy-api
+    waitFor: ["push-api"]
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:$COMMIT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/browser:$COMMIT_SHA"
+
+substitutions:
+  _REGION: us-central1
+  _SERVICE: web-observer-api
+  _REPO: web-observer
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s

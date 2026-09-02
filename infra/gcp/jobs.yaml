@@ -1,0 +1,11 @@
+# Cloud Run Jobs — workers. Compute Engine e2-micro Always Free is simpler for Dramatiq (no task timeout).
+# Apply after `gcloud builds submit`:
+#   gcloud run jobs create web-observer-worker --image us-central1-docker.pkg.dev/PROJECT/web-observer/api:latest --region us-central1 --command "dramatiq" --args "app.workers,--queues,http_checks notifications,--processes,1,--threads,2" --memory 1Gi --tasks 1
+#   gcloud run jobs create web-observer-browser --image us-central1-docker.pkg.dev/PROJECT/web-observer/browser:latest --region us-central1 --command "dramatiq" --args "app.workers,--queues,browser_checks,--processes,1,--threads,1" --memory 2Gi --tasks 1
+#   gcloud run jobs create web-observer-scheduler --image us-central1-docker.pkg.dev/PROJECT/web-observer/api:latest --region us-central1 --command "python" --args "-m,app.scheduler" --memory 256Mi --tasks 1
+# Then schedule via Cloud Scheduler (free: 3 jobs): gcloud scheduler jobs create http web-observer-tick --schedule "* * * * *" --uri https://.../api/v1/internal/tick --http-method POST
+
+# Alternative: single e2-micro VM (Always Free) running docker-compose.yml for all workers:
+#   gcloud compute instances create web-observer-vm --machine-type=e2-micro --zone=us-central1-a --image-family=cos-stable --image-project=cos-cloud --tags=http-server
+#   gcloud compute scp --zone us-central1-a ./docker-compose.yml web-observer-vm:~/
+#   gcloud compute ssh --zone us-central1-a web-observer-vm -- "docker compose up -d"
