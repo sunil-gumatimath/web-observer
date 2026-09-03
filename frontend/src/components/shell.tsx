@@ -7,6 +7,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Logo } from "@/components/logo";
 import { cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CommandPalette } from "@/components/command-palette";
 import { api } from "@/lib/api";
 import { config } from "@/lib/config";
 import { invalidateWorkspace, setStoredWorkspaceId } from "@/lib/workspace";
@@ -162,6 +163,19 @@ function ClerkWorkspaceSwitcher() {
 export function AppShell({ children }: { children: ReactNode }) {
 	const pathname = usePathname() || "";
 	const [open, setOpen] = useState(false);
+	const [paletteOpen, setPaletteOpen] = useState(false);
+
+	// Global ⌘K / Ctrl-K for the command palette.
+	useEffect(() => {
+		function onKey(e: KeyboardEvent) {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+				e.preventDefault();
+				setPaletteOpen((v) => !v);
+			}
+		}
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, []);
 
 	// Close the mobile menu on route change and on Escape.
 	useEffect(() => {
@@ -204,9 +218,19 @@ export function AppShell({ children }: { children: ReactNode }) {
 						</nav>
 					</div>
 
-					<div className="flex items-center gap-3" suppressHydrationWarning>
-						<WorkspaceSwitcher />
-						<ThemeToggle />
+				<div className="flex items-center gap-3" suppressHydrationWarning>
+					<button
+						type="button"
+						onClick={() => setPaletteOpen(true)}
+						className="hidden h-9 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)] sm:inline-flex"
+						aria-label="Open command palette"
+					>
+						<span aria-hidden>⌕</span>
+						<span>Search…</span>
+						<kbd className="rounded border border-[var(--border)] px-1 py-0.5 text-[10px]">⌘K</kbd>
+					</button>
+					<WorkspaceSwitcher />
+					<ThemeToggle />
 						<div className="hidden items-center border-l border-[var(--border)] pl-3 sm:flex" suppressHydrationWarning>
 							<ClerkAuthControls />
 						</div>
@@ -282,12 +306,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 				) : null}
 			</header>
 
-			<main
-				className="mx-auto max-w-6xl px-4 py-8 animate-fade-in-up"
-				suppressHydrationWarning
-			>
-				{children}
-			</main>
-		</div>
+		<main
+			className="mx-auto max-w-6xl px-4 py-8 animate-fade-in-up"
+			suppressHydrationWarning
+		>
+			{children}
+		</main>
+		<CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+	</div>
 	);
 }
