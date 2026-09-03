@@ -13,6 +13,7 @@ import {
 	Spinner,
 	Textarea,
 } from "@/components/ui";
+import { ThresholdEditor } from "@/components/threshold-editor";
 import { api, brandAssetUrl } from "@/lib/api";
 import type { BrandInfo, Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
@@ -67,6 +68,7 @@ export default function EditMonitorPage() {
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
 	const [cssSelector, setCssSelector] = useState<string | null>(null);
+	const [alertConfig, setAlertConfig] = useState<Record<string, unknown> | null>(null);
 	const [brand, setBrand] = useState<{
 		title?: string | null;
 		description?: string | null;
@@ -98,6 +100,7 @@ export default function EditMonitorPage() {
 				setIgnoreSelectors((m.ignore_selectors ?? []).join("\n"));
 				setIgnoreRegexes((m.ignore_regexes ?? []).join("\n"));
 				setCssSelector(m.css_selector ?? null);
+				setAlertConfig((m.alert_config as Record<string, unknown> | null) ?? null);
 				if (m.brand) {
 					setBrand({
 						title: m.brand.title,
@@ -197,6 +200,9 @@ export default function EditMonitorPage() {
 				semantic_trigger: semanticTrigger.trim() || null,
 				ignore_selectors: ignore,
 				ignore_regexes: ignoreRegex,
+				...(alertConfig && Object.keys(alertConfig).length > 0
+					? { alert_config: alertConfig }
+					: {}),
 			});
 			router.push(`/monitors/${monitorId}`);
 		} catch (err) {
@@ -386,6 +392,7 @@ export default function EditMonitorPage() {
 							Plain-English AI trigger. Changes that do not satisfy this condition are filtered out.
 						</p>
 					</div>
+					<ThresholdEditor mode={mode} value={alertConfig} onChange={setAlertConfig} />
 {mode === "list_items" || mode === "json_field" ? (
 					<div>
 						<Label htmlFor="listSelector">

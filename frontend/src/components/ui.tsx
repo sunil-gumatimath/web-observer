@@ -435,22 +435,25 @@ export function DataTable({
 }) {
 	return (
 		<div className="surface overflow-hidden">
-			<div className="overflow-x-auto">
-				<table className="w-full text-left text-sm">
-					<thead>
-						<tr className="border-b border-[var(--border)] bg-[var(--surface-bg)]">
-							{headers.map((h) => (
-								<th
-									key={h}
-									className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]"
-								>
-									{h}
-								</th>
-							))}
-						</tr>
-					</thead>
-					<tbody className="divide-y divide-[var(--border)]">{children}</tbody>
-				</table>
+			<div className="relative">
+				<div className="datatable-scroll overflow-x-auto">
+					<table className="w-full text-left text-sm">
+						<thead>
+							<tr className="border-b border-[var(--border)] bg-[var(--surface-bg)]">
+								{headers.map((h) => (
+									<th
+										key={h}
+										className="whitespace-nowrap px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]"
+									>
+										{h}
+									</th>
+								))}
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-[var(--border)]">{children}</tbody>
+					</table>
+				</div>
+				<div aria-hidden className="datatable-edge md:hidden" />
 			</div>
 			{empty}
 		</div>

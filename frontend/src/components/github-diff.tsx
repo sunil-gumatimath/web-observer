@@ -231,13 +231,6 @@ export function GithubDiff({
 	);
 
 	const hasContent = Boolean(before || after);
-	if (!hasContent) {
-		return (
-			<p className="text-sm text-slate-500 dark:text-slate-400">
-				No text content.
-			</p>
-		);
-	}
 
 	const added = rows.filter(
 		(r) => r.kind === "add" || r.kind === "replace",
@@ -295,8 +288,14 @@ export function GithubDiff({
 				}
 			}
 		}
-		return items;
+	return items;
 	}, [rows, scope, expandedSections]);
+
+	if (!hasContent) {
+		return (
+			<p className="text-sm text-slate-500 dark:text-slate-400">No text content.</p>
+		);
+	}
 
 	function expandHunk(startIdx: number, endIdx: number) {
 		setExpandedSections((prev) => {

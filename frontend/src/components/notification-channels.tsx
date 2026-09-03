@@ -13,6 +13,7 @@ import {
 	SuccessBox,
 } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/toasts";
 import type { NotificationChannel } from "@/lib/types";
 
 export function NotificationChannelsPanel({
@@ -20,6 +21,7 @@ export function NotificationChannelsPanel({
 }: {
 	workspaceId: string;
 }) {
+	const toast = useToast();
 	const [channels, setChannels] = useState<NotificationChannel[]>([]);
 	const [type, setType] = useState<"email" | "slack" | "discord">("email");
 	const [address, setAddress] = useState("");
@@ -86,8 +88,11 @@ export function NotificationChannelsPanel({
 		try {
 			const res = await api.testNotificationChannel(workspaceId, channel.id);
 			setTestMsg(res.detail);
+			toast.success("Test sent", res.detail);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to send test");
+			const msg = err instanceof Error ? err.message : "Failed to send test";
+			setError(msg);
+			toast.error("Failed to send test", msg);
 		} finally {
 			setBusyId(null);
 		}
@@ -151,7 +156,7 @@ export function NotificationChannelsPanel({
 									disabled={busyId === c.id}
 									onClick={() => test(c)}
 								>
-									Send test
+									{busyId === c.id ? "Sending…" : "Send test"}
 								</Button>
 								<ConfirmButton
 									variant="danger"
