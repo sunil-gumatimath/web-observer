@@ -1,5 +1,6 @@
 "use client";
 
+import { ToastProvider } from "@/components/toasts";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, type ReactNode } from "react";
 import { setAuthTokenGetter } from "@/lib/auth-token";
@@ -41,10 +42,11 @@ function ClerkTokenBridge({ children }: { children: ReactNode }) {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
-  // Always wrap with the token bridge when Clerk auth is in use (configured, or
-  // any non-dev build) so API calls send a Bearer JWT and never the internal token.
-  if (config.clerkEnabled) {
-    return <ClerkTokenBridge>{children}</ClerkTokenBridge>;
-  }
-  return <>{children}</>;
+  const inner = config.clerkEnabled ? (
+    <ClerkTokenBridge>{children}</ClerkTokenBridge>
+  ) : (
+    <>{children}</>
+  );
+  // Toasts are global — mounted once so any page can call useToast().
+  return <ToastProvider>{inner}</ToastProvider>;
 }

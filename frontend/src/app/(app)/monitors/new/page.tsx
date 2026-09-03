@@ -13,6 +13,7 @@ import {
 	Select,
 	Textarea,
 } from "@/components/ui";
+import { ThresholdEditor } from "@/components/threshold-editor";
 import { api } from "@/lib/api";
 import type {
 	BrandInfo,
@@ -102,6 +103,7 @@ export default function NewMonitorPage() {
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
 	const [cssSelector, setCssSelector] = useState<string | null>(null);
+	const [alertConfig, setAlertConfig] = useState<Record<string, unknown> | null>(null);
 	const [runNow, setRunNow] = useState(true);
 	const [brand, setBrand] = useState<BrandInfo | null>(null);
 	const [brandLoading, setBrandLoading] = useState(false);
@@ -197,6 +199,9 @@ export default function NewMonitorPage() {
 				semantic_trigger: semanticTrigger.trim() || null,
 				ignore_selectors: ignore.length ? ignore : null,
 				ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
+				...(alertConfig && Object.keys(alertConfig).length > 0
+					? { alert_config: alertConfig }
+					: {}),
 				run_now: runNow,
 			});
 			// run_now is handled server-side in the same POST to avoid a second
@@ -474,6 +479,7 @@ export default function NewMonitorPage() {
 								Plain-English AI trigger. Changes that do not satisfy this condition are filtered out.
 							</p>
 						</div>
+						<ThresholdEditor mode={mode} value={alertConfig} onChange={setAlertConfig} />
 {mode === "list_items" || mode === "json_field" ? (
 					<div>
 						<Label htmlFor="listSelector">

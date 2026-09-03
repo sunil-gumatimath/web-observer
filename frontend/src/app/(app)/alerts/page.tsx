@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Badge,
@@ -18,6 +17,7 @@ import {
 } from "@/components/ui";
 import { BrandLogo } from "@/components/brand-logo";
 import { GithubDiff } from "@/components/github-diff";
+import { useToast } from "@/components/toasts";
 import { api } from "@/lib/api";
 import type { AlertInboxItem, AlertsSummary, ChangeEventDetail } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -49,7 +49,6 @@ function triageReason(summary: string | null): string | null {
 
 export default function AlertsPage() {
 	usePageTitle("Alerts");
-	const router = useRouter();
 	const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 	const [alerts, setAlerts] = useState<AlertInboxItem[]>([]);
 	const [summary, setSummary] = useState<AlertsSummary | null>(null);
@@ -144,31 +143,42 @@ export default function AlertsPage() {
 			return true;
 		});
 	}, [alerts, query, monitorFilter, dateFrom, dateTo]);
+	const toast = useToast();
 
 	async function markRead(alert: AlertInboxItem, isRead = true) {
 		if (!workspaceId) return;
-		setBusy(true);
+		const prev = alerts;
+		setAlerts((list) => list.map((a) => (a.id === alert.id ? { ...a, is_read: isRead } : a)));
 		setError(null);
 		try {
 			await api.markChangeRead(workspaceId, alert.id, isRead);
-			await load(workspaceId, filter, limit);
+			toast.success(isRead ? "Marked as read" : "Marked as unread", alert.monitor_name);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Failed to update read state");
-		} finally {
-			setBusy(false);
+			setAlerts(prev);
+			const msg = e instanceof Error ? e.message : "Failed to update read state";
+			setError(msg);
+			toast.error("Could not update alert", msg);
 		}
 	}
 
 	async function markAllRead() {
 		if (!workspaceId) return;
+		const prev = alerts;
+		const prevSummary = summary;
+		setAlerts((list) => list.map((a) => ({ ...a, is_read: true })));
 		setBusy(true);
 		setError(null);
 		try {
 			const sum = await api.markAllAlertsRead(workspaceId);
 			setSummary(sum);
 			await load(workspaceId, filter, limit);
+			toast.success("Inbox cleared", "All alerts marked as read.");
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Failed to mark all read");
+			setAlerts(prev);
+			if (prevSummary) setSummary(prevSummary);
+			const msg = e instanceof Error ? e.message : "Failed to mark all read";
+			setError(msg);
+			toast.error("Could not mark all read", msg);
 		} finally {
 			setBusy(false);
 		}
@@ -176,15 +186,19 @@ export default function AlertsPage() {
 
 	async function toggleNoise(alert: AlertInboxItem) {
 		if (!workspaceId) return;
-		setBusy(true);
+		const prev = alerts;
+		const nextNoise = !alert.is_noise;
+		setAlerts((list) => list.map((a) => (a.id === alert.id ? { ...a, is_noise: nextNoise } : a)));
 		setError(null);
 		try {
-			await api.markChangeNoise(workspaceId, alert.id, !alert.is_noise);
+			await api.markChangeNoise(workspaceId, alert.id, nextNoise);
+			toast.success(nextNoise ? "Moved to noise" : "Restored to signal", alert.monitor_name);
 			await load(workspaceId, filter, limit);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Failed to update noise");
-		} finally {
-			setBusy(false);
+			setAlerts(prev);
+			const msg = e instanceof Error ? e.message : "Failed to update noise";
+			setError(msg);
+			toast.error("Could not update alert", msg);
 		}
 	}
 
@@ -206,7 +220,13 @@ export default function AlertsPage() {
 			const detail = await api.getChange(workspaceId, alert.id);
 			setExpandedDiffs((prev) => ({ ...prev, [alert.id]: detail }));
 			if (!alert.is_read) {
-				await markRead(alert, true);
+				// Silent auto-read on expand — no toast, revert silently on failure.
+				setAlerts((list) => list.map((a) => (a.id === alert.id ? { ...a, is_read: true } : a)));
+				try {
+					await api.markChangeRead(workspaceId, alert.id, true);
+				} catch {
+					setAlerts((list) => list.map((a) => (a.id === alert.id ? { ...a, is_read: false } : a)));
+				}
 			}
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Failed to load diff");

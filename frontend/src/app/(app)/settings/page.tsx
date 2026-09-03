@@ -20,7 +20,8 @@ import {
   SuccessBox,
 } from "@/components/ui";
 import { api, type MeResponse } from "@/lib/api";
-import type { ApiKeyRow, WebhookDelivery, WebhookOut } from "@/lib/types";
+import { useToast } from "@/components/toasts";
+import type { ApiKeyRow, WebhookDelivery, WebhookOut, WorkspaceSettings } from "@/lib/types";
 import { config } from "@/lib/config";
 import { ensureWorkspace, getStoredWorkspaceId, setStoredWorkspaceId } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -28,6 +29,7 @@ import { usePageTitle } from "@/lib/use-page-title";
 export default function SettingsPage() {
   usePageTitle("Settings");
 
+  const toast = useToast();
   const [workspaceId, setWorkspaceId] = useState("");
   const [me, setMe] = useState<MeResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -37,7 +39,8 @@ export default function SettingsPage() {
   const [digestHour, setDigestHour] = useState(14);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [savingPrefs, setSavingPrefs] = useState(false);
-
+  const [prefsSaved, setPrefsSaved] = useState(false);
+  const [keySettings, setKeySettings] = useState<WorkspaceSettings | null>(null);
   useEffect(() => {
     api
       .health()
@@ -60,6 +63,10 @@ export default function SettingsPage() {
         } catch {
           /* ignore */
         }
+        api
+          .getWorkspaceSettings(id)
+          .then(setKeySettings)
+          .catch(() => setKeySettings(null));
       })
       .catch(() => {
         /* keep stored id */
@@ -84,10 +91,10 @@ export default function SettingsPage() {
     setStoredWorkspaceId(workspaceId.trim());
     setMessage("Workspace ID saved in this browser.");
   }
-
   async function savePrefs() {
     if (!workspaceId) return;
     setSavingPrefs(true);
+    setPrefsSaved(false);
     setError(null);
     try {
       await api.updateWorkspace(workspaceId, {
@@ -96,8 +103,12 @@ export default function SettingsPage() {
         ai_summaries_enabled: aiEnabled,
       });
       setMessage("Workspace preferences saved.");
+      setPrefsSaved(true);
+      toast.success("Preferences saved");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save preferences");
+      const msg = e instanceof Error ? e.message : "Failed to save preferences";
+      setError(msg);
+      toast.error("Failed to save preferences", msg);
     } finally {
       setSavingPrefs(false);
     }
@@ -207,12 +218,21 @@ export default function SettingsPage() {
               <Select
                 id="digest"
                 value={digestCadence}
-                onChange={(e) => setDigestCadence(e.target.value)}
+                disabled={savingPrefs}
+                onChange={(e) => {
+                  setDigestCadence(e.target.value);
+                  setPrefsSaved(false);
+                }}
               >
                 <option value="none">Off</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly (Mondays)</option>
               </Select>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                {keySettings?.as_resend_api_key
+                  ? "Digest emails send from your workspace sender (Bring-your-own keys above)."
+                  : "Digest emails send from the global default sender — set a workspace Resend key above to use your own domain."}
+              </p>
             </div>
             <div>
               <Label htmlFor="hour">Digest hour (UTC)</Label>
@@ -222,20 +242,33 @@ export default function SettingsPage() {
                 min={0}
                 max={23}
                 value={digestHour}
-                onChange={(e) => setDigestHour(Number(e.target.value))}
+                disabled={savingPrefs}
+                onChange={(e) => {
+                  setDigestHour(Number(e.target.value));
+                  setPrefsSaved(false);
+                }}
               />
             </div>
             <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-400 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-white/10">
               <input
                 type="checkbox"
                 checked={aiEnabled}
-                onChange={(e) => setAiEnabled(e.target.checked)}
+                disabled={savingPrefs}
+                onChange={(e) => {
+                  setAiEnabled(e.target.checked);
+                  setPrefsSaved(false);
+                }}
                 className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
               />
               AI summaries & categories (optional LLM; heuristic if no key)
             </label>
+            <p className="text-xs text-slate-500 dark:text-slate-500">
+              {keySettings?.as_llm_api_key
+                ? `AI summaries use your workspace key (${keySettings.llm_model || "custom model"} via Bring-your-own keys above).`
+                : "AI summaries use the global workspace key — set your own LLM key above to override it."}
+            </p>
             <Button type="button" disabled={savingPrefs} onClick={savePrefs}>
-              {savingPrefs ? "Saving…" : "Save preferences"}
+              {savingPrefs ? "Saving…" : prefsSaved ? "Saved ✓" : "Save preferences"}
             </Button>
           </Card>
         ) : null}

@@ -15,8 +15,10 @@ import {
 } from "@/components/ui";
 import { SkeletonStats, SkeletonCard } from "@/components/skeleton";
 import { BrandLogo } from "@/components/brand-logo";
+import { ActivityBars, Sparkline } from "@/components/sparkline";
 import { api } from "@/lib/api";
-import type { AlertsSummary, Monitor, Usage } from "@/lib/types";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
+import type { AlertsSummary, Monitor, NotificationChannel, Usage } from "@/lib/types";
 import { ImpactBadge, parseImpact, stripImpact } from "@/components/ui";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -53,6 +55,7 @@ export default function DashboardPage() {
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [alerts, setAlerts] = useState<AlertsSummary | null>(null);
+  const [channels, setChannels] = useState<NotificationChannel[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -61,15 +64,17 @@ export default function DashboardPage() {
     (async () => {
       try {
         const ws = await ensureWorkspace();
-        const [m, u, a] = await Promise.all([
+        const [m, u, a, c] = await Promise.all([
           api.listMonitors(ws),
           api.getUsage(ws),
           api.alertsSummary(ws).catch(() => null),
+          api.listNotificationChannels(ws).catch(() => []),
         ]);
         if (!cancelled) {
           setMonitors(m);
           setUsage(u);
           setAlerts(a);
+          setChannels(c);
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load dashboard");
@@ -95,6 +100,25 @@ export default function DashboardPage() {
     );
 
   const active = monitors.filter((m) => m.enabled).length;
+  // 14-day change activity from latest_change timestamps (no extra API call).
+  const activity = (() => {
+    const days = 14;
+    const counts = Array<number>(days).fill(0);
+    const labels: string[] = [];
+    const now = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      labels.push(d.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+    }
+    for (const m of monitors) {
+      const ts = m.latest_change?.created_at;
+      if (!ts) continue;
+      const diffDays = Math.floor((now.getTime() - new Date(ts).getTime()) / 86400000);
+      if (diffDays >= 0 && diffDays < days) counts[days - 1 - diffDays] += 1;
+    }
+    return { counts, labels, total: counts.reduce((a, b) => a + b, 0) };
+  })();
   const checksPct =
     usage?.checks_limit && usage.checks_limit > 0
       ? (100 * (usage.checks_count ?? 0)) / usage.checks_limit
@@ -103,6 +127,10 @@ export default function DashboardPage() {
     usage?.max_monitors && usage.max_monitors > 0
       ? (100 * monitors.length) / usage.max_monitors
       : null;
+  const hasMonitor = monitors.length > 0;
+  const hasBaseline = monitors.some((m) => m.latest_change);
+  const hasChannel = channels.some((c) => c.enabled);
+  const showChecklist = monitors.length === 0 || !hasBaseline;
 
   return (
     <div>
@@ -150,6 +178,36 @@ export default function DashboardPage() {
           hint="Change alerts sent"
         />
       </div>
+
+      <Card className="mb-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="section-label">Change activity</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              {activity.total === 0
+                ? "No changes detected in the last 14 days."
+                : `${activity.total} change${activity.total === 1 ? "" : "s"} in the last 14 days.`}
+            </p>
+          </div>
+          <Sparkline values={activity.counts} label="Changes per day, last 14 days" />
+        </div>
+        <div className="mt-4">
+          <ActivityBars values={activity.counts} labels={activity.labels} />
+          <div className="mt-1.5 flex justify-between text-[10px] text-[var(--muted)]">
+            <span>{activity.labels[0]}</span>
+            <span>{activity.labels[activity.labels.length - 1]}</span>
+          </div>
+        </div>
+      </Card>
+
+      {showChecklist ? (
+        <OnboardingChecklist
+          hasMonitor={hasMonitor}
+          hasBaseline={hasBaseline}
+          hasChannel={hasChannel}
+          firstMonitorId={monitors[0]?.id ?? null}
+        />
+      ) : null}
 
       <SectionTitle
         action={

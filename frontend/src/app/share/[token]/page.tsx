@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Badge, Card } from "@/components/ui";
+import { Badge, Card, SectionTitle } from "@/components/ui";
 import { api, brandAssetUrl } from "@/lib/api";
 import type { PublicShare } from "@/lib/types";
 
@@ -80,6 +80,17 @@ export default function PublicSharePage() {
       {hero ? (
         <img src={hero} alt={`${data.monitor.name} screenshot`} className="mt-5 w-full rounded-2xl border border-[var(--border)]" />
       ) : null}
+      {/* Gap: PublicShare exposes no screenshot URLs or run ids, so the
+          VisualDiff slider cannot mount here. Screenshot blobs are reachable
+          via the public asset endpoint only with a known object key
+          (screenshots/{monitor_id}/{run_id}.png), which the public share
+          payload does not include. Keep this page auth-free: summaries only. */}
+      <div className="mt-8">
+        <SectionTitle>Visual comparison</SectionTitle>
+        <Card className="text-sm text-slate-500 dark:text-slate-400">
+          Screenshot comparisons are available in the app. This public link shares change summaries only.
+        </Card>
+      </div>
 
       <div className="mt-8">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

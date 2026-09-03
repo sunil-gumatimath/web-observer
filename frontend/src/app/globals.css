@@ -41,7 +41,7 @@
   --accent: #38bdf8;
   --accent-strong: #0ea5e9;
   --text: #e2e8f0;
-  --muted: #94a3b8;
+  --muted: #a2b2c6;
   --ring: rgba(56, 189, 248, 0.35);
   --field-bg: rgba(2, 6, 23, 0.7);
   --field-border: rgba(255, 255, 255, 0.10);
@@ -274,5 +274,48 @@ mark.hl-del {
   *::before,
   *::after {
     scroll-behavior: auto !important;
+  }
+}
+
+/* DataTable mobile scrolling — used by ui.tsx DataTable. Desktop unchanged. */
+.datatable-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.datatable-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1.5rem;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, rgba(15, 23, 42, 0.10));
+}
+
+.dark .datatable-edge {
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.35));
+}
+
+@media (max-width: 767px) {
+  /* Force horizontal scroll inside the wrapper instead of page overflow. */
+  .datatable-scroll table {
+    min-width: 40rem;
+  }
+
+  /* Sticky first column so row identity stays visible while scrolling. */
+  .datatable-scroll thead th:first-child,
+  .datatable-scroll tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+
+  .datatable-scroll thead th:first-child {
+    background: var(--bg-elevated);
+  }
+
+  .datatable-scroll tbody td:first-child {
+    background: var(--bg-elevated);
+    box-shadow: 1px 0 0 var(--border);
   }
 }
