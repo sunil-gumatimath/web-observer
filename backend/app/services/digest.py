@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def generate_ai_digest_summary(workspace: Workspace, event_bullets: list[str]) -> str | None:
     """Generate a concise executive briefing summarizing all changes in this digest period."""
     from app.config import get_settings
-    from app.services.ai_summary import _effective_llm, _post_with_retries
+    from app.services.ai_summary import _effective_llm, _request_chat_with_failover
     from app.services.crypto import decrypt_secret
 
     settings = get_settings()
@@ -47,27 +47,20 @@ def generate_ai_digest_summary(workspace: Workspace, event_bullets: list[str]) -
     )
 
     try:
-        resp = _post_with_retries(
-            f"{base}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {cfg['api_key']}",
-                "Content-Type": "application/json",
-            },
-            payload={
-                "model": cfg["model"],
-                "temperature": 0.3,
-                "max_tokens": 250,
-                "messages": [
-                    {"role": "system", "content": "You are an executive intelligence analyst. Deliver concise, high-value briefings."},
-                    {"role": "user", "content": prompt},
-                ],
-            },
+        content, _, used_model = _request_chat_with_failover(
+            base=base,
+            api_key=cfg["api_key"],
+            primary_model=cfg["model"],
+            messages=[
+                {"role": "system", "content": "You are an executive intelligence analyst. Deliver concise, high-value briefings."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=250,
             timeout=20.0,
-            max_attempts=2,
         )
-        data = resp.json()
-        content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
-        return content or None
+        logger.debug("digest_ai_summary_ok model=%s", used_model)
+        return content.strip() or None
     except Exception as exc:  # noqa: BLE001
         logger.warning("digest_ai_summary_failed workspace_id=%s error=%s", workspace.id, exc)
         return None

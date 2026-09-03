@@ -1317,17 +1317,15 @@ def get_snapshot(
         if stored is not None:
             full_text = stored.decode("utf-8")
         else:
-            logger.warning(
-                "snapshot_text_storage_miss key=%s snapshot_id=%s falling_back_to_db_preview_snapshot",
-                snap_key,
-                snap.id,
-            )
-            # full_text already holds DB preview (500 chars); mark truncated
-            if full_text and len(full_text) >= 500:
+            from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS
+
+            if full_text and len(full_text) >= SNAPSHOT_DB_PREVIEW_CHARS:
                 storage_miss = True
                 full_text = full_text + "\n…[preview truncated – full content unavailable]"
     else:
-        if full_text and len(full_text) >= 500:
+        from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS
+
+        if full_text and len(full_text) >= SNAPSHOT_DB_PREVIEW_CHARS:
             storage_miss = True
             full_text = full_text + "\n…[preview truncated – full content unavailable]"
 

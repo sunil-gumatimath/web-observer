@@ -9,12 +9,17 @@
     "lint": "tsc --noEmit && eslint ."
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.57",
+    "@ai-sdk/react": "^4.0.94",
     "@clerk/nextjs": "^7.5.16",
+    "ai": "^7.0.91",
     "lucide-react": "^1.37.0",
     "next": "^16.2.10",
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

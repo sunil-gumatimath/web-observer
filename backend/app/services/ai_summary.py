@@ -627,6 +627,171 @@ def _parse_llm_content(
     return cat, summary, is_noise, noise_reason, title, impact, confidence
 
 
+_DEFAULT_FALLBACK_MODELS = (
+    "minimax/minimax-m3:free",
+    "nvidia/nemotron-3-super:free",
+    "google/gemma-4-26b-a4b:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+)
+
+
+def _parse_fallback_setting(raw: str | None) -> list[str]:
+    if raw is None:
+        return list(_DEFAULT_FALLBACK_MODELS)
+    raw = raw.strip()
+    if not raw:
+        return []
+    seen: list[str] = []
+    for part in raw.split(","):
+        name = part.strip()
+        if name and name not in seen:
+            seen.append(name)
+    return seen
+
+
+def _candidate_models(primary: str | None, api_base: str | None) -> list[str]:
+    """Ordered model list: primary first, then configured fallbacks.
+
+    Skips OpenRouter-style (``vendor/model:free``) fallbacks when talking to
+    first-party OpenAI — they would 404 and only add latency. The primary is
+    always kept even if it looks cross-provider (explicit user choice).
+    """
+    settings = get_settings()
+    primary_model = (primary or "").strip() or "minimax/minimax-m3:free"
+    candidates = [primary_model]
+    base = (api_base or "").lower()
+    first_party_openai = "api.openai.com" in base
+    for name in _parse_fallback_setting(getattr(settings, "llm_fallback_models", None)):
+        if name in candidates:
+            continue
+        if first_party_openai and ("/" in name or ":free" in name) and name != primary_model:
+            logger.debug("llm_failover_skip model=%s base=%s", name, api_base)
+            continue
+        candidates.append(name)
+    return candidates
+
+
+def _is_auth_error(exc: BaseException) -> bool:
+    resp = getattr(exc, "response", None)
+    return getattr(resp, "status_code", None) in (401, 403)
+
+
+def _extract_content(data: object) -> str:
+    try:
+        if not isinstance(data, dict):
+            return ""
+        choices = data.get("choices")
+        if not choices:
+            return ""
+        return (choices[0].get("message", {}).get("content") or "").strip()
+    except Exception:
+        return ""
+
+
+def _request_chat_with_failover(
+    *,
+    base: str,
+    api_key: str,
+    primary_model: str,
+    messages: list[dict],
+    temperature: float,
+    max_tokens: int,
+    timeout: float = 30.0,
+) -> tuple[str, int, str]:
+    """POST /chat/completions with per-model failover.
+
+    Returns (content, tokens_used, used_model). Raises the last error (or
+    an auth error immediately) when every candidate fails. A 2xx with empty
+    or missing content counts as failure and moves to the next candidate.
+    """
+    candidates = _candidate_models(primary_model, base)
+    last_exc: Exception | None = None
+
+    for idx, model_candidate in enumerate(candidates):
+        first_exc: Exception | None = None
+        use_json = True
+        for attempt in ("json", "plain"):
+            payload: dict = {
+                "model": model_candidate,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "messages": messages,
+            }
+            if use_json:
+                payload["response_format"] = {"type": "json_object"}
+            try:
+                resp = _post_with_retries(
+                    f"{base}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    payload=payload,
+                    timeout=timeout,
+                )
+            except Exception as exc:
+                if use_json:
+                    if _is_auth_error(exc):
+                        logger.warning("llm_failover_abort_auth model=%s", model_candidate)
+                        raise
+                    first_exc = exc
+                    logger.debug(
+                        "llm_candidate_json_mode_rejected model=%s error=%s; "
+                        "retrying without response_format",
+                        model_candidate,
+                        exc,
+                    )
+                    use_json = False
+                    continue
+                logger.warning(
+                    "llm_candidate_failed model=%s first_error=%s error=%s; "
+                    "trying next candidate",
+                    model_candidate,
+                    first_exc,
+                    exc,
+                )
+                last_exc = exc
+                if _is_auth_error(exc) or (first_exc is not None and _is_auth_error(first_exc)):
+                    logger.warning("llm_failover_abort_auth model=%s", model_candidate)
+                    raise
+                break
+            try:
+                data = resp.json()
+            except Exception as exc:
+                logger.warning(
+                    "llm_candidate_bad_json model=%s error=%s; trying next step",
+                    model_candidate,
+                    exc,
+                )
+                last_exc = exc  # type: ignore[assignment]
+                if use_json:
+                    use_json = False
+                    continue
+                break
+            content = _extract_content(data)
+            if not content:
+                last_exc = RuntimeError(f"empty LLM content from {model_candidate}")
+                logger.warning(
+                    "llm_candidate_empty model=%s attempt=%s; trying next step",
+                    model_candidate,
+                    attempt,
+                )
+                if use_json:
+                    use_json = False
+                    continue
+                break
+            tokens = _extract_usage(data) if isinstance(data, dict) else 0
+            if idx > 0:
+                logger.info(
+                    "llm_failover_success primary=%s used=%s",
+                    candidates[0],
+                    model_candidate,
+                )
+            return content, tokens, model_candidate
+
+    raise last_exc or RuntimeError("All candidate models failed")
+
+
 def _call_llm_combined(
     *,
     monitor_name: str,
@@ -639,10 +804,11 @@ def _call_llm_combined(
     llm: dict | None = None,
     brand: dict | None = None,
     semantic_trigger: str | None = None,
-) -> tuple[str, str, bool, str | None, int, str | None, str | None, float | None]:
-    """Single LLM call returning (summary, category, is_noise, noise_reason, tokens, title, impact, confidence).
+) -> tuple[str, str, bool, str | None, int, str | None, str | None, float | None, str]:
+    """Single LLM call with failover.
 
-    Uses JSON mode with retry. Fails open via caller. Extra fields gracefully fallback to None.
+    Returns (summary, category, is_noise, reason, tokens, title, impact,
+    confidence, used_model). Fails open via caller.
     """
     cfg = _effective_llm(llm)
     base = (cfg["api_base"] or "https://api.openai.com/v1").rstrip("/")
@@ -661,50 +827,18 @@ def _call_llm_combined(
         semantic_trigger=semantic_trigger,
     )
 
-    payload: dict = {
-        "model": cfg["model"],
-        "temperature": 0.2,
-        "max_tokens": cfg["max_output_tokens"] + (100 if has_watch else 0),
-        "messages": [
+    content, tokens, used_model = _request_chat_with_failover(
+        base=base,
+        api_key=cfg["api_key"],
+        primary_model=cfg["model"],
+        messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-    }
-    # Ask for JSON mode where supported (OpenAI/Kilo). Non-supporting providers ignore it.
-    # Use conditional to avoid breaking providers that reject unknown keys: we include it
-    # but fall back on line-parse anyway.
-    payload["response_format"] = {"type": "json_object"}
-
-    try:
-        resp = _post_with_retries(
-            f"{base}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {cfg['api_key']}",
-                "Content-Type": "application/json",
-            },
-            payload=payload,
-            timeout=30.0,
-        )
-    except Exception:
-        # Retry once without response_format for providers that reject it (e.g. some Gemini gates)
-        payload.pop("response_format", None)
-        resp = _post_with_retries(
-            f"{base}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {cfg['api_key']}",
-                "Content-Type": "application/json",
-            },
-            payload=payload,
-            timeout=30.0,
-        )
-
-    data = resp.json()
-    content = ""
-    try:
-        content = data["choices"][0]["message"]["content"] or ""
-    except Exception:
-        content = ""
-    tokens = _extract_usage(data)
+        temperature=0.2,
+        max_tokens=cfg["max_output_tokens"] + (100 if has_watch else 0),
+        timeout=30.0,
+    )
     category, summary, is_noise, noise_reason, title, impact, confidence = _parse_llm_content(
         content, suggested_category
     )
@@ -712,7 +846,7 @@ def _call_llm_combined(
     if not has_watch and not has_semantic:
         is_noise = False
         noise_reason = None
-    return summary, category, is_noise, noise_reason, tokens, title, impact, confidence
+    return summary, category, is_noise, noise_reason, tokens, title, impact, confidence, used_model
 
 
 def triage_change(
@@ -861,7 +995,17 @@ def enrich_change(
         return cached
 
     try:
-        summary, model_cat, is_noise, noise_reason, tokens, title, impact, confidence = _call_llm_combined(
+        (
+            summary,
+            model_cat,
+            is_noise,
+            noise_reason,
+            tokens,
+            title,
+            impact,
+            confidence,
+            used_model,
+        ) = _call_llm_combined(
             monitor_name=monitor_name,
             url=url,
             mode=mode or "unknown",
@@ -904,7 +1048,7 @@ def enrich_change(
             summary=display_summary,
             category=cat,
             provider="llm",
-            model=cfg["model"],
+            model=used_model,
             is_noise=is_noise,
             noise_reason=noise_reason,
             tokens_used=tokens,

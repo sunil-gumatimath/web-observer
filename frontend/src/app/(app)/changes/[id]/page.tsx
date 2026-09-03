@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { BrandLogo } from "@/components/brand-logo";
 import { GithubDiff } from "@/components/github-diff";
+import { DiffAiAssistant } from "@/components/diff-ai-assistant";
 import { api } from "@/lib/api";
 import type {
 	ChangeEventDetail,
@@ -218,6 +219,16 @@ export default function ChangeDetailPage() {
 					</p>
 				</div>
 			) : null}
+
+			<div className="mb-6">
+				<DiffAiAssistant
+					monitorName={monitor?.name}
+					changeTitle={change.title}
+					impact={change.impact}
+					category={change.change_category}
+					diffText={change.diff || change.diff_summary}
+				/>
+			</div>
 
 			<div className="mb-4 grid gap-3 sm:grid-cols-2">
 				<Card className="!p-4">

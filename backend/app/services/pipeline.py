@@ -59,8 +59,9 @@ MODE_PRODUCT_PRICE = MonitorMode.PRODUCT_PRICE.value
 PRICE_REMOVED_MARKER = "(price removed)"
 
 # Length cap applied to the Snapshot.normalized_text DB preview (full text goes
-# to object storage). A preview at/above this length may be truncated.
-SNAPSHOT_DB_PREVIEW_CHARS = 500
+# to object storage). Generous cap (50k chars ~8k words) guarantees that in cloud/Postgres
+# deployments, the complete content is preserved without relying exclusively on local disk.
+SNAPSHOT_DB_PREVIEW_CHARS = 50_000
 
 
 @dataclass
@@ -357,8 +358,8 @@ def _extract_and_store_snapshot(
             logger.warning("snapshot_text_storage_failed run_id=%s error=%s", run.id, exc)
             text_key = None
 
-    # Truncate normalized_text for the Postgres column to save space
-    db_normalized = normalized[:500] if normalized else ""
+    # Store up to SNAPSHOT_DB_PREVIEW_CHARS in the Postgres column to prevent truncated captures
+    db_normalized = normalized[:SNAPSHOT_DB_PREVIEW_CHARS] if normalized else ""
 
     snapshot = Snapshot(
         workspace_id=monitor.workspace_id,

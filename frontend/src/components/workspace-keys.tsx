@@ -6,11 +6,12 @@ import { api } from "@/lib/api";
 import type { WorkspaceSettings } from "@/lib/types";
 
 const FREE_MODELS: Array<{ value: string; label: string }> = [
+  { value: "minimax/minimax-m3:free", label: "MiniMax M3 (free) — MiniMax · 1M ctx ★ Newest" },
   { value: "tencent/hy3:free", label: "Hy3 (free) — Tencent · 47.6% KiloBench ★ Best" },
   { value: "nvidia/nemotron-3-super:free", label: "Nemotron 3 Super (free) — NVIDIA · 120B" },
   { value: "nvidia/nemotron-3-ultra:free", label: "Nemotron 3 Ultra (free) — NVIDIA · 550B · 1M ctx" },
   { value: "google/gemma-4-26b-a4b:free", label: "Gemma 4 26B A4B (free) — Google · MoE" },
-  { value: "inclusionai/ling-3.0-flash:free", label: "Ling-3.0-flash (free) — inclusionAI · 124B MoE ★ Newest" },
+  { value: "inclusionai/ling-3.0-flash:free", label: "Ling-3.0-flash (free) — inclusionAI · 124B MoE" },
   { value: "inclusionai/ling-2.6-flash:free", label: "Ling-2.6-flash (free) — inclusionAI · 104B" },
   { value: "inclusionai/ling-2.6-1t:free", label: "Ling-2.6-1T (free) — inclusionAI · 1T" },
   { value: "inclusionai/ring-2.6-1t:free", label: "Ring-2.6-1T (free) — inclusionAI · 1T" },

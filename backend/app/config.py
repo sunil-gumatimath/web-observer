@@ -78,7 +78,15 @@ class Settings(BaseSettings):
     ai_summaries_enabled: bool = True
     llm_api_key: str | None = None
     llm_api_base: str = "https://api.kilo.ai/api/gateway"
-    llm_model: str = "tencent/hy3:free"
+    llm_model: str = "minimax/minimax-m3:free"
+    # Comma-separated server-level fallback models tried in order after the
+    # primary. Empty string disables failover (primary only).
+    llm_fallback_models: str = (
+        "minimax/minimax-m3:free,"
+        "nvidia/nemotron-3-super:free,"
+        "google/gemma-4-26b-a4b:free,"
+        "meta-llama/llama-3.3-70b-instruct:free"
+    )
     ai_max_diff_chars: int = 6000
     ai_max_output_tokens: int = 200
     ai_async_enrichment: bool = False  # if true, LLM runs in background worker

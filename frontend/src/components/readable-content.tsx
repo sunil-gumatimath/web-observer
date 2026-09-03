@@ -33,12 +33,12 @@ export function prepareReadableText(raw: string): string {
     .replace(/<img\s+[^>]*src=['"]?([^'"\s>]+)['"]?[^>]*\/?>/gi, "![]($1)")
     // Match a with single, double or unquoted href
     .replace(/<a\s+[^>]*href=['"]?([^'"\s>]+)['"]?[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
-    .replace(/<[^>]+>/g, "") // strip remaining raw html wrappers
-    .replace(/\u00a0/g, " ")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
-
   t = decodeHtmlEntities(t);
+  // Strip known HTML tags while preserving text angle brackets (e.g. <3, ->, 1 < 2)
+  t = t.replace(
+    /<\/?(?:div|span|p|b|i|strong|em|ul|ol|li|table|tr|td|th|tbody|thead|tfoot|header|footer|nav|section|article|aside|main|br|hr|h[1-6]|form|input|button|label)\b[^>]*>/gi,
+    ""
+  );
   // collapse excess blank lines
   t = t.replace(/\n{3,}/g, "\n\n").trim();
   return t;
@@ -302,7 +302,7 @@ function parseBlocks(raw: string): Block[] {
       paraLines.push(nextTrimmed);
       i++;
     }
-    blocks.push({ type: "paragraph", text: paraLines.join(" ") });
+    blocks.push({ type: "paragraph", text: paraLines.join("\n") });
   }
 
   return blocks;
@@ -310,42 +310,39 @@ function parseBlocks(raw: string): Block[] {
 
 export function ReadableContent({
   text,
-  maxChars = 4000,
+  maxChars = 25000,
   title,
   emptyLabel = "No text content.",
   baseUrl,
-  aiChangeSummary,
-  changeCategory,
-  isNoise,
 }: {
   text: string;
   maxChars?: number;
   title?: string;
   emptyLabel?: string;
   baseUrl?: string;
-  aiChangeSummary?: string | null;
-  changeCategory?: string | null;
-  isNoise?: boolean | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<"formatted" | "raw">("formatted");
 
-  const prepared = useMemo(() => prepareReadableText(text || ""), [text]);
+  const rawText = text || "";
+  const prepared = useMemo(() => prepareReadableText(rawText), [rawText]);
   const needsTruncate = prepared.length > maxChars;
   const displayText = expanded || !needsTruncate ? prepared : prepared.slice(0, maxChars).trimEnd();
+  const rawDisplayText = expanded || rawText.length <= maxChars ? rawText : rawText.slice(0, maxChars).trimEnd();
   const blocks = useMemo(() => parseBlocks(displayText), [displayText]);
   const wordCount = prepared.split(/\s+/).filter(Boolean).length;
 
   function handleCopy() {
-    if (!prepared) return;
-    navigator.clipboard?.writeText(prepared).then(() => {
+    const toCopy = viewMode === "raw" ? rawText : prepared;
+    if (!toCopy) return;
+    navigator.clipboard?.writeText(toCopy).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   }
 
-  if (!prepared) {
+  if (!prepared && !rawText) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">{emptyLabel}</p>;
   }
 
@@ -403,32 +400,7 @@ export function ReadableContent({
         </div>
       </div>
 
-      {/* AI Change Summary Banner */}
-      {aiChangeSummary ? (
-        <div className="border-b border-[var(--border)] bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent px-5 py-3.5 dark:from-sky-950/30 dark:via-indigo-950/15">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-400">
-            <span className="inline-flex items-center gap-1.5 font-bold">
-              <svg className="h-3.5 w-3.5 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
-              </svg>
-              AI Change Summary
-            </span>
-            {changeCategory ? (
-              <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-500/25 dark:text-sky-300">
-                {changeCategory}
-              </span>
-            ) : null}
-            {isNoise ? (
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/25 dark:text-amber-300">
-                Noise
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-800 dark:text-slate-200">
-            {aiChangeSummary}
-          </p>
-        </div>
-      ) : null}
+
 
       {/* Content Body */}
       <div
@@ -440,7 +412,7 @@ export function ReadableContent({
       >
         {viewMode === "raw" ? (
           <pre className="font-mono text-xs leading-relaxed text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
-            {displayText}
+            {rawDisplayText}
           </pre>
         ) : (
           <div className="space-y-4 text-[14.5px] leading-relaxed text-slate-800 dark:text-slate-200">
@@ -557,7 +529,7 @@ export function ReadableContent({
 
               // Paragraph
               return (
-                <p key={i} className="leading-relaxed">
+                <p key={i} className="leading-relaxed whitespace-pre-line">
                   {renderInlineMarkdown(block.text, baseUrl)}
                 </p>
               );

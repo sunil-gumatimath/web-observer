@@ -696,40 +696,74 @@ function MonitorDetailInner() {
 					) : null}
 				</div>
 
-				{latestChange ? (
-					<div className="overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-50/70 via-white to-indigo-50/30 p-5 shadow-sm dark:border-sky-500/30 dark:from-sky-950/30 dark:via-slate-950 dark:to-indigo-950/20">
-						<div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-500/15 pb-3 dark:border-sky-500/25">
-							<div className="flex flex-wrap items-center gap-2">
-								<CategoryBadge category={latestChange.change_category} />
-								<ImpactBadge impact={parseImpact(latestChange.ai_summary)} />
-								{latestChange.is_noise ? (
-									<Badge tone="warn">noise held</Badge>
-								) : (
-									<Badge tone="success">signal</Badge>
-								)}
-								<span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-									{new Date(latestChange.created_at).toLocaleString()}
-								</span>
+				{latestChange ? (() => {
+					const rawSummary = stripImpact(latestChange.ai_summary || "");
+					const title = latestChange.title || (rawSummary.includes(":") && !rawSummary.startsWith("Content changed") && !rawSummary.toLowerCase().includes("likely") ? rawSummary.split(":", 1)[0].trim() : null);
+					const summaryBody = title && rawSummary.startsWith(title + ":") 
+						? rawSummary.slice(title.length + 1).trim() 
+						: rawSummary || latestChange.diff_summary || "Page content changed.";
+					const isHeuristic = !latestChange.title && (rawSummary.toLowerCase().includes("likely") || rawSummary.startsWith("Content changed"));
+					const impact = latestChange.impact || parseImpact(latestChange.ai_summary);
+					const hasDiffTelemetry = Boolean(latestChange.diff_summary && latestChange.diff_summary !== rawSummary && latestChange.diff_summary !== summaryBody);
+
+					return (
+						<div className="overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-50/70 via-white to-indigo-50/30 p-5 shadow-sm dark:border-sky-500/30 dark:from-sky-950/30 dark:via-slate-950 dark:to-indigo-950/20">
+							<div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-500/15 pb-3 dark:border-sky-500/25">
+								<div className="flex flex-wrap items-center gap-2">
+									<span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">
+										<svg className="size-3.5" viewBox="0 0 24 24" fill="currentColor">
+											<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
+										</svg>
+										AI Intelligence
+									</span>
+									<CategoryBadge category={latestChange.change_category} />
+									<ImpactBadge impact={impact} />
+									{typeof latestChange.confidence === "number" ? (
+										<span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+											✦ {Math.round(latestChange.confidence <= 1 ? latestChange.confidence * 100 : latestChange.confidence)}% confidence
+										</span>
+									) : null}
+									{latestChange.is_noise ? (
+										<Badge tone="warn">noise held</Badge>
+									) : (
+										<Badge tone="success">signal</Badge>
+									)}
+									{isHeuristic ? (
+										<span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+											Heuristic preview
+										</span>
+									) : null}
+									<span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+										{new Date(latestChange.created_at).toLocaleString()}
+									</span>
+								</div>
+								<Link
+									href={`/changes/${latestChange.id}`}
+									className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5"
+								>
+									Inspect Diff →
+								</Link>
 							</div>
-							<Link
-								href={`/changes/${latestChange.id}`}
-								className="rounded-lg border border-[var(--border)] bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5"
-							>
-								Inspect Diff
-							</Link>
-						</div>
-						<div className="mt-3.5">
-							<p className="text-sm font-medium leading-relaxed text-slate-900 dark:text-slate-100">
-								{stripImpact(latestChange.ai_summary || "") || latestChange.diff_summary || "Page content changed."}
-							</p>
-							{latestChange.diff_summary && latestChange.ai_summary ? (
-								<p className="mt-2 text-xs font-mono text-slate-600 dark:text-slate-400">
-									{latestChange.diff_summary}
+
+							<div className="mt-3.5">
+								{title ? (
+									<h3 className="text-base font-bold text-slate-950 dark:text-white">
+										{title}
+									</h3>
+								) : null}
+								<p className={`text-sm leading-relaxed text-slate-800 dark:text-slate-200 ${title ? "mt-1.5" : "font-medium"}`}>
+									{summaryBody}
 								</p>
-							) : null}
+								{hasDiffTelemetry ? (
+									<div className="mt-3 flex items-center gap-2 pt-2.5 border-t border-sky-500/10 dark:border-sky-500/15 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+										<span className="text-slate-400 dark:text-slate-500">Diff telemetry:</span>
+										<span>{latestChange.diff_summary}</span>
+									</div>
+								) : null}
+							</div>
 						</div>
-					</div>
-				) : hasSuccessfulSnapshot && latestTerminal?.status === "succeeded" ? (
+					);
+				})() : hasSuccessfulSnapshot && latestTerminal?.status === "succeeded" ? (
 					<div className="rounded-2xl border border-emerald-500/20 bg-emerald-50/40 p-5 shadow-sm dark:border-emerald-500/20 dark:bg-emerald-950/20">
 						<div className="flex items-start gap-3">
 							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
@@ -797,17 +831,26 @@ function MonitorDetailInner() {
 					) : previewText != null && previewText.length > 0 ? (
 						<ReadableContent
 							text={previewText}
-							maxChars={4000}
+							maxChars={25000}
 							baseUrl={monitor?.url}
-							aiChangeSummary={latestChange?.ai_summary}
-							changeCategory={latestChange?.change_category}
-							isNoise={latestChange?.is_noise}
 						/>
 					) : previewText === "" ? (
 						<Card>
-							<p className="text-sm text-slate-500 dark:text-slate-400">
-								Captured snapshot is empty — page had no extractable text. Try enabling JavaScript rendering or check the URL.
-							</p>
+							<div className="flex flex-wrap items-center justify-between gap-3">
+								<p className="text-sm text-slate-500 dark:text-slate-400">
+									Captured snapshot is empty — page had no extractable text. If this is a Single-Page App (SPA) or client-rendered site, enable JavaScript rendering.
+								</p>
+								{!monitor.js_required ? (
+									<Button
+										size="sm"
+										variant="secondary"
+										onClick={() => router.push(`/monitors/${monitor.id}/edit`)}
+										className="shrink-0 text-xs"
+									>
+										Enable JS rendering
+									</Button>
+								) : null}
+							</div>
 						</Card>
 					) : (
 						<Card>
