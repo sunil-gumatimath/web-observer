@@ -26,8 +26,12 @@ flowchart TB
         BROWW["run_browser_check (browser_checks)\nPlaywright"]
         NOTIFW["deliver_outbox_message (notifications)"]
         WEBHW["deliver_webhook_message (notifications)"]
-        DIGEST["digest_job"]
-        RETENT["retention_job"]
+        AIEW["enrich_change_event (ai_enrich)"]
+        BRANDW["enrich_monitor_brand (http_checks)"]
+    end
+    subgraph LoopProc["Standalone loop processes (not dramatiq)"]
+        DIGEST["python -m app.digest_job [--loop]\npoll digest_poll_seconds=300s"]
+        RETENT["python -m app.retention_job\nsnapshot_retention_days=30 / run_retention_days=90"]
     end
     subgraph External
         CLERK["Clerk (auth + JWKS)"]
@@ -51,20 +55,22 @@ flowchart TB
     REDIS -->|"browser_checks"| BROWW
     REDIS -->|"notifications"| NOTIFW
     REDIS -->|"notifications"| WEBHW
+    REDIS -->|"http_checks"| AIEW
+    REDIS -->|"http_checks"| BRANDW
     HTTPW -->|"fetch_url"| TARGET
     BROWW -->|"fetch_url_browser / screenshot"| TARGET
     HTTPW --> NEO
     BROWW --> NEO
+    AIEW --> NEO
+    BRANDW --> NEO
     HTTPW --> OBJ
     BROWW --> OBJ
-    NOTIFW --> NEO
-    NOTIFW --> RESEND
-    NOTIFW --> CHAT
-    WEBHW --> TARGET
+    BRANDW --> OBJ
     DIGEST --> NEO
-    DIGEST --> REDIS
+    DIGEST --> RESEND
     RETENT --> NEO
     RETENT --> OBJ
+    API -->|"GET /public/assets/{object_key}\n(brand-assets/ + screenshots/ only)"| OBJ
 ```
 
 ## 2. Backend Module Structure (Package Diagram)
@@ -124,7 +130,14 @@ classDiagram
         +UUID id
         +UUID workspace_id
         +String url
-        +String mode  page_content|site_links|product_price|list_items|json_field
+        +String mode  page_content|site_links|product_price|list_items|json_field|visual|rss_feed|readme
+        +String css_selector  (list_items/json_field selector or JSONPath)
+        +bool js_required  (true routes to browser_checks queue)
+        +bool screenshots_enabled  (capture screenshot on signal)
+        +String watch_note  (AI triage hint)
+        +String semantic_trigger  (plain-English alert rule)
+        +JSON alert_config  (conditional thresholds, migration 011)
+        +JSON brand  (title/description/logo_url/hero_url)
         +int schedule_interval_minutes
         +bool enabled
         +int config_version
@@ -159,8 +172,12 @@ classDiagram
         +UUID new_snapshot_id
         +UUID previous_snapshot_id
         +String diff_summary
-        +String ai_summary
+        +String ai_summary  (noise_reason surfaced here as [Conditional]/[AI triage] prefix)
+        +String title  (migration 012)
+        +String impact  critical|high|medium|low (012)
+        +float confidence  0.0-1.0 (012)
         +bool is_noise
+        +String noise_reason  (triage reason in ai_summary text, no dedicated column)
         +bool is_read
     }
     class NotificationChannel {
@@ -196,6 +213,22 @@ classDiagram
         +UUID workspace_id
         +String key_hash
         +String key_prefix
+    class ShareLink {
+        +UUID id
+        +UUID workspace_id
+        +UUID monitor_id
+        +String token_hash  (opaque token in URL, hash stored)
+        +String token_prefix
+        +bool enabled
+    }
+    class WorkspaceInvite {
+        +UUID id
+        +UUID workspace_id
+        +String token_hash
+        +String token_prefix
+        +String role
+        +int max_uses
+        +int use_count
     }
     class AuditLog {
         +UUID id
@@ -218,6 +251,9 @@ classDiagram
     Workspace "1" --> "*" ApiKey
     Workspace "1" --> "*" AuditLog
     Workspace "1" --> "*" UsageCounter
+    Workspace "1" --> "*" ShareLink
+    Workspace "1" --> "*" WorkspaceInvite
+    Monitor "1" --> "*" ShareLink
     Monitor "1" --> "*" MonitorConfigVersion
     Monitor "1" --> "*" MonitorRun
     MonitorRun "1" --> "0..1" Snapshot
@@ -259,17 +295,29 @@ sequenceDiagram
     P->>DB: find prev SUCCEEDED run (same config_version)
     alt no prev run
         P-->>W: PipelineResult(is_baseline=true)
-    else same hash / similar ahash
+    else content_hash equal, or visual mode aHash within visual_ahash_threshold
         P-->>W: PipelineResult(unchanged=true)
-    else change detected
-        P->>DB: insert ChangeEvent (+ AI summary)
-        P->>DB: insert NotificationOutbox per channel
-        P->>DB: insert WebhookDelivery per endpoint
-        W->>R: deliver_outbox_message.send(oid)
-        W->>R: deliver_webhook_message.send(wid)
-        R->>N: deliver email/slack/discord
-        N->>EXT: send via Resend/Slack/Discord
-        R->>WH: POST signed (X-MTW-Signature) payload
+    else content differs
+        P->>P: should_alert() (conditional.py:26) over alert_config
+        alt threshold not met (conditional suppression)
+            P->>DB: insert ChangeEvent (is_noise=true, ai_summary=[Conditional] reason)
+            P-->>W: PipelineResult(noise early-return, pipeline.py:743-744 — no outbox/webhook)
+        else threshold met
+            P->>P: enrich_change with watch_note triage + semantic_trigger
+            P->>DB: insert ChangeEvent (+ AI summary, title/impact/confidence)
+            alt AI-triaged noise
+                P-->>W: PipelineResult(noise early-return — no outbox/webhook)
+            else signal
+                P->>OBJ: capture screenshot when screenshots_enabled
+                P->>DB: insert NotificationOutbox per channel
+                P->>DB: insert WebhookDelivery per endpoint
+                W->>R: deliver_outbox_message.send(oid)
+                W->>R: deliver_webhook_message.send(wid)
+                R->>N: deliver email/slack/discord
+                N->>EXT: send via Resend/Slack/Discord
+                R->>WH: POST signed (X-MTW-Signature) payload
+            end
+        end
     end
     W->>DB: RunStatus = succeeded/failed + run_guard outcome
     W->>G: release_domain_slot
@@ -311,11 +359,16 @@ flowchart TD
     D -->|yes| E[content_hash + store raw + Snapshot]
     E --> G{prev SUCCEEDED run\nsame config_version?}
     G -->|none| H[(BASELINE\nset, no alert)]
-    G -->|exists| I{hash equal\nor ahash similar?}
+    G -->|exists| I{content_hash equal?\nvisual: aHash within visual_ahash_threshold?}
     I -->|yes| J[(UNCHANGED\nno alert)]
     I -->|no| K[compute diff / list diff / value diff]
-    K --> L[enrich_change -> AI summary\ninsert ChangeEvent]
-    L --> M[queue NotificationOutbox\nper enabled channel]
+    K --> T{should_alert?\nconditional.py:26 over alert_config}
+    T -->|threshold not met| S[(NOISE — ChangeEvent is_noise=true\n[Conditional] reason, no notify\nnoise early-return pipeline.py:743-744)]
+    T -->|met| L[enrich_change — AI summary + title/impact/confidence\nwatch_note triage + semantic_trigger]
+    L --> Q{AI-triaged noise?}
+    Q -->|yes| S
+    Q -->|no signal| V[capture screenshot when screenshots_enabled\nscreenshots/{monitor_id}/{run_id}.png]
+    V --> M[queue NotificationOutbox\nper enabled channel]
     M --> N[enqueue WebhookDelivery\nper enabled endpoint]
     N --> O[(CHANGE DETECTED\nnotify out)]
 ```

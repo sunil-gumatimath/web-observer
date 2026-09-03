@@ -15,7 +15,7 @@
 | **Distributed Dedup** | Redis-backed TTL cache (`ai_dedup:<hash>`) with process-memory fallback to avoid redundant LLM invocations |
 | **AI Executive Digest** | Batch synthesis briefing included in daily / weekly workspace digests |
 | **Heuristic** | Always available without API keys |
-| **LLM** | Optional OpenAI-compatible chat completions (OpenAI, OpenRouter, Groq, Ollama) |
+| **LLM** | Optional OpenAI-compatible chat completions (default `LLM_API_BASE=https://api.kilo.ai/api/gateway`, `LLM_MODEL=minimax/minimax-m3:free`; `LLM_FALLBACK_MODELS` tried in order, empty disables failover) |
 | **Slack / Discord** | Webhook channels (`type=slack\|discord`) |
 | **Digest** | daily / weekly workspace digests via `digest` service |
 | **Noise feedback** | `POST .../changes/{id}/noise` excludes from notifications & digests |
@@ -25,9 +25,13 @@
 ```env
 AI_SUMMARIES_ENABLED=true
 LLM_API_KEY=           # empty => heuristic only
-LLM_API_BASE=https://api.openai.com/v1
-LLM_MODEL=gpt-4o-mini
+LLM_API_BASE=https://api.kilo.ai/api/gateway
+LLM_MODEL=minimax/minimax-m3:free
+LLM_FALLBACK_MODELS=minimax/minimax-m3:free,nvidia/nemotron-3-super:free,google/gemma-4-26b-a4b:free,meta-llama/llama-3.3-70b-instruct:free
 AI_MAX_DIFF_CHARS=6000
+AI_MAX_OUTPUT_TOKENS=200
+AI_ASYNC_ENRICHMENT=false   # true => heuristic row now, LLM upgrade in ai_enrich worker
+AI_DEDUP_TTL_SECONDS=600    # Redis ai_dedup:<hash> TTL, process-memory fallback
 REDIS_URL=redis://localhost:6379/0
 ```
 

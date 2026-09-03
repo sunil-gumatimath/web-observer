@@ -9,9 +9,11 @@ const toc = [
   { id: "how-it-works", label: "How it works" },
   { id: "quick-start", label: "Quick start" },
   { id: "modes", label: "Monitor modes" },
+  { id: "thresholds", label: "Alert thresholds" },
   { id: "create", label: "Create a monitor" },
   { id: "runs-changes", label: "Runs & changes" },
   { id: "alerts", label: "Alerts & channels" },
+  { id: "share", label: "Share links" },
   { id: "settings", label: "Settings" },
   { id: "import", label: "Bulk import" },
   { id: "tips", label: "Tips & FAQ" },
@@ -113,8 +115,9 @@ export default function DocsPage() {
           <DocSection id="how-it-works" title="How it works">
             <ol className="space-y-4">
               <Step n={1} title="You create a monitor">
-                Pick a URL, a mode (page content, site links, product price, or list
-                items), and how often to check.
+                Pick a URL, a mode (page content, site links, product price, list
+                items, JSON field, RSS feed, GitHub README, or visual diff),
+                and how often to check.
               </Step>
               <Step n={2} title="A worker fetches the page">
                 The backend pulls the page (HTTP or Playwright if JavaScript is required) and
@@ -212,13 +215,42 @@ export default function DocsPage() {
                     <td className="px-3 py-3">A CSS-selector link list on a page</td>
                     <td className="px-3 py-3">Added or removed items as clickable links</td>
                   </tr>
+                  <tr>
+                    <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
+                      RSS feed
+                    </td>
+                    <td className="px-3 py-3">An RSS/Atom feed URL, read over plain HTTP</td>
+                    <td className="px-3 py-3">Added or removed entries (matched on GUID/link)</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
+                      GitHub README
+                    </td>
+                    <td className="px-3 py-3">A repo&apos;s README.md on its default branch — enter <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">owner/repo</code> or the full GitHub URL</td>
+                    <td className="px-3 py-3">Documentation changes, with a markdown diff</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
+                      JSON field
+                    </td>
+                    <td className="px-3 py-3">A single value in a JSON endpoint, addressed by a JSONPath-style query in <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code> (e.g. <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">$.data.price</code>)</td>
+                    <td className="px-3 py-3">Value changes at that path</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-3 font-medium text-slate-800 dark:text-slate-200">
+                      Visual diff
+                    </td>
+                    <td className="px-3 py-3">A page rendered in a real browser, compared by screenshot</td>
+                    <td className="px-3 py-3">Visible changes between screenshots</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
             <p>
               <strong className="text-slate-800 dark:text-slate-200">JavaScript rendering</strong> —
               enable Playwright when the page only shows content after client-side render.
-              Site links reads the sitemap over HTTP; the other modes can use Playwright when
+              Site links, RSS feed, and GitHub README always fetch over plain HTTP
+              (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">js_required</code> is rejected for those modes); the other modes can use Playwright when
               <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">js_required</code> is enabled.
             </p>
             <p>
@@ -227,6 +259,28 @@ export default function DocsPage() {
               ads, or timestamps that would otherwise create noise. List items uses its own{" "}
               <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>.
             </p>
+          </DocSection>
+
+          <DocSection id="thresholds" title="Alert thresholds">
+            <p>
+              Each monitor can set per-mode <strong className="text-slate-800 dark:text-slate-200">alert thresholds</strong> (stored as <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">alert_config</code>) in the New and Edit monitor forms.
+              Leave every field empty to alert on <strong className="text-slate-800 dark:text-slate-200">any change</strong>.
+              A change that does not meet its thresholds is kept as <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_noise=true</code> with a reason — stored and viewable, but excluded from notifications and digests.
+            </p>
+            <ul className="list-disc space-y-1.5 pl-5">
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Product price</strong> — <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">price_below</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">price_above</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">percent_change</code> (minimum % move).
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">JSON field / page content</strong> — <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">percent_change</code> (minimum % move of the numeric value).
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">List items / site links / RSS feed</strong> — <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">list_min_added</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">list_min_removed</code> (minimum added/removed items).
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">All modes</strong> — <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">min_diff_chars</code> (minimum changed characters), <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">regex_must_match</code> / <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">regex_must_not_match</code> (new content must / must not match).
+              </li>
+            </ul>
           </DocSection>
 
           <DocSection id="create" title="Create a monitor">
@@ -256,6 +310,12 @@ export default function DocsPage() {
               <li>
                 <strong className="text-slate-800 dark:text-slate-200">Alert email</strong> — optional
                 per-monitor override; workspace channels still apply when set in Settings.
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Mode-specific input</strong> — list items needs a CSS selector; JSON field needs a JSON path (e.g. <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">$.data.price</code>); GitHub README accepts <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">owner/repo</code> or the full GitHub URL; RSS feed takes the feed URL.
+              </li>
+              <li>
+                <strong className="text-slate-800 dark:text-slate-200">Alert thresholds</strong> — optional per-mode limits (see <a href="#thresholds" className="text-sky-600 hover:text-sky-500 dark:text-sky-400">Alert thresholds</a>); blank means alert on any change. Editable in the New and Edit monitor forms.
               </li>
               <li>
                 <strong className="text-slate-800 dark:text-slate-200">Semantic alert condition</strong> — optional
@@ -338,10 +398,18 @@ export default function DocsPage() {
             <p>
               Enable only the channels you want. Alerts fire when a non-baseline content change is
               detected (and the notifications worker is running). Noise-marked changes do not notify.
+              Each channel has a <strong className="text-slate-800 dark:text-slate-200">Send test</strong> button so you can verify delivery before a real change arrives.
             </p>
             <p>
               Optional <strong>digests</strong> (daily / weekly) summarize activity with an <strong>AI Executive Briefing</strong> instead of only
-              real-time pings — set cadence and UTC hour in Settings → Preferences.
+              real-time pings — set cadence and UTC hour in Settings → Preferences. The hour preference is a <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">digest_hour_utc</code> hour-of-day (UTC), so a daily digest arrives at the same UTC time each day.
+            </p>
+          </DocSection>
+
+          <DocSection id="share" title="Share links">
+            <p>
+              Generate a read-only public page per monitor (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/share/{"{token}"}</code> — unguessable, hashed at rest, no login required).
+              The public page is <strong className="text-slate-800 dark:text-slate-200">summaries only</strong>: it shows change summaries, never screenshots (screenshot comparison stays inside the app). The monitor&apos;s <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">watch_note</code> is shown (“Watching: …”) so viewers know what is being watched.
             </p>
           </DocSection>
 
@@ -366,7 +434,7 @@ export default function DocsPage() {
                 <strong className="text-slate-800 dark:text-slate-200">Teams</strong> — invite members with expiring multi-use links (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/invite/{"{token}"}</code>) and switch between workspaces you belong to.
               </li>
               <li>
-                <strong className="text-slate-800 dark:text-slate-200">Public share links</strong> — generate a read-only public page per monitor (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/share/{"{token}"}</code> — unguessable, hashed at rest, no login required).
+                <strong className="text-slate-800 dark:text-slate-200">Public share links</strong> — generate a read-only public page per monitor (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/share/{"{token}"}</code> — unguessable, hashed at rest, no login required). Summaries only — see <a href="#share" className="text-sky-600 hover:text-sky-500 dark:text-sky-400">Share links</a>.
               </li>
               <li>
                 <strong className="text-slate-800 dark:text-slate-200">API keys & webhooks</strong> —

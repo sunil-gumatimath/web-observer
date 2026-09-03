@@ -83,9 +83,17 @@ Playwright Chromium is **required** for `js_required` monitors (checks routed to
 
 ---
 
-## 4. Start backend (4 windows) + frontend
+## 4. Start the stack (5 processes)
 
-Load env from `backend/.env` (or set variables). Working directory: `backend`.
+Preferred on Windows — one command launches all 5 processes hidden (API :8002, HTTP+notifications worker, browser worker, scheduler, frontend :3000):
+
+```powershell
+powershell -File .\scripts\restart-stack.ps1
+```
+
+Relaunch kills anything on ports `8002`/`3000` first; per-process logs go to `data\logs` (`api.log`, `worker-http.log`, `worker-browser.log`, `scheduler.log`, `frontend.log`, plus `*_err.log`).
+
+Or start each process manually (working directory: `backend`, except frontend):
 
 ```powershell
 # 1 — API (port must match frontend NEXT_PUBLIC_API_BASE_URL)
@@ -106,22 +114,19 @@ Load env from `backend/.env` (or set variables). Working directory: `backend`.
 
 `Screenshot failed: [Errno 9] Bad file descriptor`
 
-### Helper scripts
+Digest and retention loops are **not** part of the launcher — run them manually when needed:
 
 ```powershell
-# Preferred on Windows: kill stuck ports, load backend\.env, API :8002, dual workers
-powershell -File .\scripts\restart-stack.ps1
-
-# Older: hardcodes local Postgres + port 8000 (edit if using Neon / 8002)
-.\scripts\run-local.ps1
+.\.venv\Scripts\python -m app.digest_job --loop
+.\.venv\Scripts\python -m app.retention_job
 ```
 
-Then frontend:
+Then frontend (if not using the launcher):
 
 ```powershell
 cd frontend
 # NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8002
-npm run dev
+bun run dev --port 3000
 ```
 
 | URL | What |
@@ -141,6 +146,8 @@ Tables are auto-created only when APP_ENV is development/test/testing (see app/m
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8002
 NEXT_PUBLIC_INTERNAL_API_TOKEN=dev-internal-token
+# Optional: preselect a dev/seed workspace in the UI (internal-token mode only)
+# NEXT_PUBLIC_DEV_WORKSPACE_ID=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 ```

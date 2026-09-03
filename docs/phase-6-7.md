@@ -9,13 +9,13 @@
 | Feature | Endpoint / notes |
 |---------|------------------|
 | Bulk import JSON/CSV | `POST /api/v1/workspaces/{id}/monitors/import` |
-| Export monitors | `GET .../export/monitors?format=json\|csv` |
-| Export changes | `GET .../export/changes` |
-| API keys | `GET/POST/DELETE .../api-keys` (`mtw_...` Bearer) |
-| Signed webhooks | `POST .../webhooks` + `X-MTW-Signature` |
-| Webhook deliveries | `GET .../webhook-deliveries` |
+| Export monitors | `GET /api/v1/workspaces/{id}/export/monitors?format=json\|csv` |
+| Export changes | `GET /api/v1/workspaces/{id}/export/changes` |
+| API keys | `GET/POST/DELETE /api/v1/workspaces/{id}/api-keys` (`mtw_...` Bearer) |
+| Signed webhooks | `POST /api/v1/workspaces/{id}/webhooks` + `X-MTW-Signature` |
+| Webhook deliveries | `GET /api/v1/workspaces/{id}/webhook-deliveries` |
 | Plans | `GET /api/v1/billing/plans` |
-| Checkout (sim/Stripe) | `POST .../billing/checkout` |
+| Checkout (sim/Stripe) | `POST /api/v1/workspaces/{id}/billing/checkout` |
 
 ### Plans (defaults)
 
@@ -41,14 +41,14 @@ See `docs/integrations/n8n-zapier.md`.
 | Feature | Notes |
 |---------|--------|
 | RBAC | roles: owner, admin, member, viewer (`require_role`) |
-| Member role update | `PATCH .../members/{user_id}` (owner) |
-| Audit log | `GET .../audit-logs` |
+| Member role update | `PATCH /api/v1/workspaces/{id}/members/{user_id}` (owner) |
+| Audit log | `GET /api/v1/workspaces/{id}/audit-logs` |
 | Adaptive scheduling | stretches interval after quiet runs |
 | Scale path | separate queues/workers already; K8s/Kafka deferred |
 
 ## Migration
 
-`alembic upgrade head` (Phase 6–7 schema is introduced in revision `004_phase6_7_enterprise`; project head is `011_add_alert_config`).
+`alembic upgrade head` (Phase 6–7 schema is introduced in revision `004_phase6_7_enterprise`; project head is `012_add_ai_intelligence_fields`).
 
 ## Conditional alerting (migration `011`, post-roadmap)
 

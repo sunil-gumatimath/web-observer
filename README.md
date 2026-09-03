@@ -184,11 +184,8 @@ These are separate processes (the Docker Compose `digest` service runs the loop 
 **Helpers:**
 
 ```powershell
-# Full stack (loads backend\.env, API :8002, opens WO-* windows)
+# Full stack (loads backend\.env, API :8002; processes launch with -WindowStyle Hidden, logs to data\logs)
 powershell -File .\scripts\restart-stack.ps1
-
-# Older helper (hardcodes local Postgres + port 8000 — prefer restart-stack or manual)
-.\scripts\run-local.ps1
 ```
 
 | URL | What |
@@ -217,7 +214,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | AI relevance filter | Optional per-monitor `watch_note` triage — LLM scores each diff vs. watch note; routine noise (cookie banners, ads, counters) is marked `is_noise=true`, held in dashboard (not deleted), excluded from notifications/digests, fails open on LLM error |
 | Conditional alerting | Optional per-monitor `alert_config` JSONB (migration `011`) — thresholds evaluated in `backend/app/services/conditional.py:26` before notify: `price_below`/`price_above` + `percent_change` (`product_price`), `percent_change` (`json_field`, `page_content`), `list_min_added`/`list_min_removed` (`list_items`/`site_links`/`rss_feed`), `min_diff_chars`, `regex_must_match`/`regex_must_not_match`. Unmet thresholds mark the change `is_noise=true` with reason (stored, excluded from notifications/digests); empty config = alert on any hash difference. Set via `POST/PATCH /monitors` body or bulk import CSV/JSON `alert_config` column |
 | Diffs | GitHub-style added/removed line views for every content change (unified diff + split view) via `GithubDiff` and readable markdown views |
-| Screenshots | Opt-in per-monitor `screenshots_enabled`: when enabled, every check captures a fresh Playwright screenshot (`brand-assets/` + `screenshots/` storage) with aHash history and side-by-side comparison |
+| Screenshots | Opt-in per-monitor `screenshots_enabled`: capture happens only on non-noise (signal) changes (`backend/app/services/pipeline.py:743-756`), stored at `screenshots/{monitor_id}/{change.run_id}.png`; needs 2 signal changes for before/after comparison |
 | Outbound webhooks | Signed (`X-MTW-Signature`) deliveries on change events + delivery log with exponential backoff |
 | API keys | `mtw_...` bearer tokens for programmatic access |
 | Bulk workflows | CSV / JSON import + export of monitors and changes, plus sitemap URL discovery and batch creation |
@@ -233,9 +230,16 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Managed or self-serve keys | Server provides global `LLM_API_*`/`RESEND_API_KEY`; or each workspace brings its own keys in Settings → Workspace keys (overrides global) |
 | Public share links | Opaque-token read-only public page per monitor (`/share/{token}` — unguessable, hashed at rest, expiring, no login required) |
 | Teams | Expiring multi-use invite links (`/invite/{token}`) + switch between workspaces you belong to (`GET /me` + localStorage) |
-| Opt-in screenshots | `screenshots_enabled` (off by default) — when enabled, every check captures a fresh screenshot at a glance |
+| Command palette | Ctrl+K / Cmd-K jump to pages + monitors |
+| Toast notifications | Optimistic inbox feedback on read/noise/archive actions |
+| Dashboard activity | 14-day Change-activity card on the dashboard |
+| Threshold editor | `ThresholdEditor` alert_config form on New/Edit monitor (thresholds preview) |
+| Monitor list | Search, mode-filter, status-tabs, and sorting on the monitors list |
+| Onboarding checklist | First monitor → baseline → channel guided checklist |
+| Channel test | Per-channel Send-test button in Settings → Alert channels |
+| Visual comparison | Before/after drag slider on changes with screenshots (needs 2 signal changes) |
 
-The web UI (Next.js) exposes: **Dashboard**, **Monitors** (list / new / edit / detail), **Changes** (per-change diff), **Alerts** (inbox), **Import** (bulk CSV/JSON), **Settings** (channels, workspace, billing), and an in-app **Docs** page.
+The web UI (Next.js) exposes: **Dashboard** (with 14-day Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
 ## Tests
 
 ```powershell
@@ -245,10 +249,7 @@ cd backend
 
 Quick smoke test of a running stack (API + worker must be up):
 
-```powershell
-# Windows
-.\scripts\smoke.ps1
-# Linux / macOS
+```sh
 ./scripts/smoke.sh
 ```
 

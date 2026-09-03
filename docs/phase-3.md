@@ -43,7 +43,7 @@ docker compose up --build
 # Includes worker-browser if defined in compose
 ```
 
-Create a monitor with **JavaScript rendering required** or **Visual** mode in the UI.
+Create a monitor with **JavaScript rendering required** in the UI (screenshots are a separate opt-in via `screenshots_enabled` — there is no separate Visual mode).
 
 ## Migration
 
