@@ -866,10 +866,28 @@ function MonitorDetailInner() {
 				<section className="mb-8">
 					<SectionTitle>Visual diff</SectionTitle>
 					{(() => {
-						const okRuns = runs.filter((r) => r.status === "succeeded" && r.snapshot_id).slice(0, 2);
-						const after = okRuns[0] ? brandAssetUrl(`screenshots/${monitor.id}/${okRuns[0].id}.png`) : null;
-						const before = okRuns[1] ? brandAssetUrl(`screenshots/${monitor.id}/${okRuns[1].id}.png`) : null;
-						return <VisualDiff before={before} after={after} />;
+						// Screenshots are captured only when a non-noise change is recorded
+						// (backend _queue_notifications), keyed by that change's run_id —
+						// not by arbitrary successful runs, which usually have no file.
+						const shotChanges = changes.filter((c) => !c.is_noise).slice(0, 2);
+						const after = shotChanges[0]
+							? brandAssetUrl(`screenshots/${monitor.id}/${shotChanges[0].run_id}.png`)
+							: null;
+						const before = shotChanges[1]
+							? brandAssetUrl(`screenshots/${monitor.id}/${shotChanges[1].run_id}.png`)
+							: null;
+						return (
+							<>
+								<VisualDiff before={before} after={after} />
+								{shotChanges.length < 2 ? (
+									<p className="mt-2 text-xs text-[var(--muted)]">
+										{shotChanges.length === 0
+											? "Screenshots attach to detected changes — none recorded yet. They appear here after the first two signal changes."
+											: "One change captured so far — the comparison appears after the next signal change."}
+									</p>
+								) : null}
+							</>
+						);
 					})()}
 				</section>
 			) : null}
