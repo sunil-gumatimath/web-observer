@@ -58,6 +58,36 @@ flowchart LR
     ALERTS --> YOU
 ```
 
+```mermaid
+sequenceDiagram
+    actor You
+    participant UI as Next.js UI
+    participant API as FastAPI
+    participant DB as Postgres
+    participant S as Scheduler
+    participant Q as Redis queue
+    participant W as Check worker
+    participant P as Web page
+
+    You->>UI: Create monitor (URL + mode)
+    UI->>API: POST /monitors
+    API->>DB: Save monitor
+    S->>DB: Claim due monitors
+    S->>Q: Enqueue check
+    Q->>W: Run check
+    W->>P: Fetch page
+    P-->>W: HTML
+    W->>DB: Compare hash + save snapshot
+    alt First success
+        W->>DB: Save baseline (no alert)
+    else Content changed
+        W->>DB: Save diff + AI summary
+        W->>Q: Enqueue notify
+        Q->>W: Send alert
+        W-->>You: Email · Slack · Discord · Webhook
+    end
+```
+
 **In plain English:**
 
 1. **You create a monitor** (URL + what to watch) in the UI. The API saves it to Postgres.
