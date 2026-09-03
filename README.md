@@ -43,22 +43,6 @@ Verified end-to-end: backend unit tests pass, the frontend type-checks, and the 
 One idea: **you watch pages, workers do the checking, you get told only when something matters.**
 
 ```mermaid
-flowchart LR
-    YOU[You<br/>Next.js UI] --> API[API<br/>FastAPI]
-    API --> DB[(Postgres<br/>monitors, snapshots,<br/>changes)]
-    SCHED[Scheduler] --> DB
-    SCHED --> Q[[Redis queue]]
-    Q --> CHECK[Check workers<br/>fetch the page]
-    CHECK --> PAGE((Web page))
-    PAGE --> CHECK
-    CHECK --> DB
-    CHECK --> Q
-    Q --> NOTIFY[Notify workers]
-    NOTIFY --> ALERTS[Email · Slack<br/>Discord · Webhooks]
-    ALERTS --> YOU
-```
-
-```mermaid
 sequenceDiagram
     actor You
     participant UI as Next.js UI
