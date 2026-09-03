@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { clampIndex, filterMonitors, filterRoutes } from "@/lib/palette";
 import { ensureWorkspace } from "@/lib/workspace";
 import { cn } from "@/components/ui";
 import type { Monitor } from "@/lib/types";
@@ -56,19 +57,12 @@ export function CommandPalette({ open, onClose }: Props) {
       return () => window.clearTimeout(t);
     }
   }, [open ]);
+  const matchedMonitors = useMemo(
+    () => filterMonitors(monitors, query),
+    [monitors, query],
+  );
 
-  const q = query.trim().toLowerCase();
-  const matchedMonitors = useMemo(() => {
-    if (!q) return monitors.slice(0, 6);
-    return monitors
-      .filter((m) => `${m.name} ${m.url} ${m.mode}`.toLowerCase().includes(q))
-      .slice(0, 6);
-  }, [monitors, q]);
-
-  const matchedRoutes = useMemo(() => {
-    if (!q) return ROUTES;
-    return ROUTES.filter((r) => `${r.label} ${r.hint}`.toLowerCase().includes(q));
-  }, [q ]);
+  const matchedRoutes = useMemo(() => filterRoutes(ROUTES, query), [query]);
 
   type Item = { key: string; label: string; sub?: string; run: () => void };
   const items: Item[] = useMemo(
@@ -113,13 +107,13 @@ export function CommandPalette({ open, onClose }: Props) {
         close();
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActive((a) => Math.min(a + 1, Math.max(0, items.length - 1)));
+        setActive((a) => clampIndex(a + 1, items.length));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setActive((a) => Math.max(0, a - 1));
+        setActive((a) => clampIndex(a - 1, items.length));
       } else if (e.key === "Enter") {
         e.preventDefault();
-        const item = items[Math.min(active, Math.max(0, items.length - 1))];
+        const item = items[clampIndex(active, items.length)];
         if (item) go(item);
       }
     }

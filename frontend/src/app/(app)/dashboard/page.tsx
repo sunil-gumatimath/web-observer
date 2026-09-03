@@ -16,10 +16,20 @@ import {
 import { SkeletonStats, SkeletonCard } from "@/components/skeleton";
 import { BrandLogo } from "@/components/brand-logo";
 import { ActivityBars, Sparkline } from "@/components/sparkline";
-import { api } from "@/lib/api";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
-import type { AlertsSummary, Monitor, NotificationChannel, Usage } from "@/lib/types";
-import { ImpactBadge, parseImpact, stripImpact } from "@/components/ui";
+import { bucketActivity } from "@/lib/activity";
+import { api } from "@/lib/api";
+import type {
+  AlertsSummary,
+  Monitor,
+  NotificationChannel,
+  Usage,
+} from "@/lib/types";
+import {
+  ImpactBadge,
+  parseImpact,
+  stripImpact,
+} from "@/components/ui";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
@@ -101,24 +111,7 @@ export default function DashboardPage() {
 
   const active = monitors.filter((m) => m.enabled).length;
   // 14-day change activity from latest_change timestamps (no extra API call).
-  const activity = (() => {
-    const days = 14;
-    const counts = Array<number>(days).fill(0);
-    const labels: string[] = [];
-    const now = new Date();
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      labels.push(d.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
-    }
-    for (const m of monitors) {
-      const ts = m.latest_change?.created_at;
-      if (!ts) continue;
-      const diffDays = Math.floor((now.getTime() - new Date(ts).getTime()) / 86400000);
-      if (diffDays >= 0 && diffDays < days) counts[days - 1 - diffDays] += 1;
-    }
-    return { counts, labels, total: counts.reduce((a, b) => a + b, 0) };
-  })();
+  const activity = bucketActivity(monitors, new Date());
   const checksPct =
     usage?.checks_limit && usage.checks_limit > 0
       ? (100 * (usage.checks_count ?? 0)) / usage.checks_limit

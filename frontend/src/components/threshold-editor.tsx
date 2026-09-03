@@ -2,19 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Input, Label, SectionTitle } from "@/components/ui";
+import {
+	applyNumericDraft,
+	applyPatternDraft,
+	isValidRegex,
+	keysForMode,
+	parseNumericDraft,
+	toDrafts,
+} from "@/lib/thresholds";
+import type { ThresholdConfig, ThresholdKey } from "@/lib/thresholds";
 import type { MonitorMode } from "@/lib/types";
-
-export type ThresholdConfig = Record<string, unknown>;
-
-type ThresholdKey =
-	| "price_below"
-	| "price_above"
-	| "percent_change"
-	| "list_min_added"
-	| "list_min_removed"
-	| "min_diff_chars"
-	| "regex_must_match"
-	| "regex_must_not_match";
 
 type FieldKind = "float" | "int" | "regex";
 
@@ -27,17 +24,6 @@ interface FieldMeta {
 	min?: string;
 	step?: string;
 }
-
-const ALL_KEYS: ThresholdKey[] = [
-	"price_below",
-	"price_above",
-	"percent_change",
-	"list_min_added",
-	"list_min_removed",
-	"min_diff_chars",
-	"regex_must_match",
-	"regex_must_not_match",
-];
 
 const FIELD_META: Record<ThresholdKey, FieldMeta> = {
 	price_below: {
@@ -113,55 +99,6 @@ const FIELD_META: Record<ThresholdKey, FieldMeta> = {
 	},
 };
 
-/** Fields valid for each mode — mirrors backend/app/services/conditional.py. */
-function keysForMode(mode: MonitorMode): ThresholdKey[] {
-	const keys: ThresholdKey[] = [];
-	if (mode === "product_price") {
-		keys.push("price_below", "price_above", "percent_change");
-	} else if (mode === "json_field" || mode === "page_content") {
-		keys.push("percent_change");
-	} else if (
-		mode === "list_items" ||
-		mode === "site_links" ||
-		mode === "rss_feed"
-	) {
-		keys.push("list_min_added", "list_min_removed");
-	}
-	// Common to every mode.
-	keys.push("min_diff_chars", "regex_must_match", "regex_must_not_match");
-	return keys;
-}
-
-function toDrafts(value: ThresholdConfig | null): Record<ThresholdKey, string> {
-	const drafts = {} as Record<ThresholdKey, string>;
-	for (const key of ALL_KEYS) {
-		const v = value?.[key];
-		drafts[key] = v === undefined || v === null ? "" : String(v);
-	}
-	return drafts;
-}
-
-function fingerprint(value: ThresholdConfig | null): string {
-	return JSON.stringify(value ?? null);
-}
-
-function isValidRegex(pattern: string): boolean {
-	try {
-		new RegExp(pattern);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-/** Returns the number for a draft, or null when it is not a usable value. */
-function parseNumericDraft(raw: string, integer: boolean): number | null {
-	const n = Number(raw.trim());
-	if (!Number.isFinite(n)) return null;
-	if (integer && !Number.isInteger(n)) return null;
-	return n;
-}
-
 function helpFor(meta: FieldMeta, mode: MonitorMode): string {
 	return typeof meta.help === "function" ? meta.help(mode) : meta.help;
 }
@@ -188,7 +125,7 @@ export function ThresholdEditor({
 	// Resync drafts when the parent value changes externally (e.g. the
 	// monitor finished loading). Echoes of our own onChange calls (tracked
 	// via lastEmitted) are skipped so in-progress typing like "1." is kept.
-	const fingerprintValue = fingerprint(value);
+	const fingerprintValue = JSON.stringify(value ?? null);
 	useEffect(() => {
 		if (fingerprintValue !== lastEmitted.current) {
 			setDrafts(toDrafts(value));
@@ -203,31 +140,14 @@ export function ThresholdEditor({
 
 	function setNumeric(key: ThresholdKey, raw: string, integer: boolean) {
 		setDrafts((d) => (d[key] === raw ? d : { ...d, [key]: raw }));
-		if (raw.trim() === "") {
-			if (value && key in value) {
-				const next = { ...value };
-				delete next[key];
-				commit(next);
-			}
-			return;
-		}
-		const n = parseNumericDraft(raw, integer);
-		if (n === null) return; // intermediate input stays local until valid
-		if (value?.[key] !== n) commit({ ...(value ?? {}), [key]: n });
+		const next = applyNumericDraft(key, raw, integer, value);
+		if (next) commit(next);
 	}
 
 	function setPattern(key: ThresholdKey, raw: string) {
 		setDrafts((d) => (d[key] === raw ? d : { ...d, [key]: raw }));
-		if (raw === "") {
-			if (value && key in value) {
-				const next = { ...value };
-				delete next[key];
-				commit(next);
-			}
-			return;
-		}
-		if (!isValidRegex(raw)) return; // invalid regex never propagates
-		if (value?.[key] !== raw) commit({ ...(value ?? {}), [key]: raw });
+		const next = applyPatternDraft(key, raw, value);
+		if (next) commit(next);
 	}
 
 	function numericError(key: ThresholdKey, integer: boolean): string | null {
