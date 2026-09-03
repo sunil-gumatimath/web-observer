@@ -38,8 +38,6 @@ Verified end-to-end: backend unit tests pass, the frontend type-checks, and the 
 
 ## Architecture
 
-## Architecture
-
 One idea: **you watch pages, workers do the checking, you get told only when something matters.**
 
 ```mermaid
@@ -164,9 +162,8 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-# required for Visual / JS monitors:
+# required for JS rendering / screenshots:
 python -m playwright install chromium
-
 cd ..\frontend
 bun install # or npm install
 ```
@@ -254,6 +251,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Visual comparison | Before/after drag slider on changes with screenshots (needs 2 signal changes) |
 
 The web UI (Next.js) exposes: **Dashboard** (with 14-day Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
+
 ## Tests
 
 ```powershell
