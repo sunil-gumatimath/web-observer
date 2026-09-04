@@ -217,14 +217,15 @@ To expand from developer-centric change detection into an all-in-one web intelli
 
 ## 7. Operational & Performance Hardening
 
-Based on architectural reviews, the following foundational optimizations will keep the platform robust as user volume grows:
+Based on architectural reviews, the following foundational optimizations keep the platform robust as user volume grows.
+All four are **implemented** — statuses verified against code 2026-09-04:
 
-| Enhancement | Problem Solved | Architectural Strategy |
-|---|---|---|
-| **Asynchronous Brand Fetching** | Creating a monitor currently blocks the uvicorn HTTP worker while fetching external page metadata. | Return the created monitor immediately (`201 Created`); enqueue brand metadata extraction to the background Dramatiq queue. |
-| **Bounded Dashboard Query** | `list_monitors` performs an unbounded scan of `ChangeEvent` across workspace history. | Refactor with a PostgreSQL `DISTINCT ON (monitor_id)` index or window function bounded to the monitor list. |
-| **Outbox Conflict Safety** | Outbox insertion uses a bare `db.add()`, which can poison retry workers on race conditions. | Refactor outbox queuing to `INSERT ... ON CONFLICT (idempotency_key) DO NOTHING`. |
-| **Cloudflare R2 / S3 Storage** | Local disk storage (`STORAGE_BACKEND=local`) does not scale across distributed worker nodes. | Add zero-egress Cloudflare R2 / AWS S3 storage adapters with pre-signed read URLs. |
+| Enhancement | Problem Solved | Architectural Strategy | Status |
+|---|---|---|---|
+| **Asynchronous Brand Fetching** | Creating a monitor blocked the uvicorn HTTP worker while fetching external page metadata. | `201 Created` returns immediately; brand metadata extraction runs in the background Dramatiq queue (`app/workers/branding.py:enrich_monitor_brand`, enqueued at `routers/monitors.py:create_monitor`). | Done |
+| **Bounded Dashboard Query** | `list_monitors` performed an unbounded scan of `ChangeEvent` across workspace history. | LATERAL join — one index walk per monitor via `ix_change_events_monitor_created` (`routers/monitors.py:list_monitors`). | Done |
+| **Outbox Conflict Safety** | Outbox insertion used a bare `db.add()`, which poisoned retry workers on race conditions. | `pg_insert(...).on_conflict_do_nothing(index_elements=["idempotency_key"])` keyed on `run:{run_id}:change:channel:{channel_id}` (`services/pipeline.py:_queue_notifications`). | Done |
+| **Cloudflare R2 / S3 Storage** | Local disk storage (`STORAGE_BACKEND=local`) does not scale across distributed worker nodes. | `app/services/storage.py` supports `local` / `s3` (R2-compatible via `s3_endpoint_url`) backends with path-traversal guards. | Done (local default; set `STORAGE_BACKEND=s3` + endpoint/keys for R2) |
 
 ---
 
@@ -257,7 +258,7 @@ gantt
 | Feature | User Impact | Implementation Effort | Recommended Order |
 |---|---|---|---|
 | **Telegram Bot Alerting** | High | Low (1–2 days) | 1 |
-| **Async Brand Fetch & Query Hardening** | High (Stability) | Low (1 day) | 2 |
+| **Async Brand Fetch & Query Hardening** | Done 2026-09 (all 4 items verified in code) | — | Done, skip |
 | **Visual Element Selector (Point-and-Click)** | Very High | Medium (3–4 days) | 3 |
 | **Visual Bounding-Box Crop** | High | Low-Medium (2 days) | 4 |
 | **Diff Heatmap + Flicker (4.1 remainder)** | Medium-High | Low (1–2 days) | 5 |
