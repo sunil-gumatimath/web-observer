@@ -50,6 +50,17 @@ See `docs/integrations/n8n-zapier.md`.
 
 `alembic upgrade head` (Phase 6–7 schema is introduced in revision `004_phase6_7_enterprise`; project head is `012_add_ai_intelligence_fields`).
 
+## Post-Phase-7 endpoints (shipped after this doc was written)
+
+| Feature | Endpoint |
+|---------|----------|
+| Change activity (dashboard card) | `GET /api/v1/workspaces/{id}/changes/activity?days=14&include_noise=false` |
+| Bulk pause / resume | `POST /api/v1/workspaces/{id}/monitors/pause-all`, `.../resume-all` |
+| Selector preview (point-and-click picker) | `POST /api/v1/workspaces/{id}/monitors/selector-preview` |
+| Brand info auto-fill | `POST /api/v1/workspaces/{id}/monitors/brand-info` |
+| Mark all alerts read | `POST /api/v1/workspaces/{id}/alerts/read-all` |
+| Snapshot download | `GET /api/v1/workspaces/{id}/snapshots/{snapshot_id}` |
+
 ## Conditional alerting (migration `011`, post-roadmap)
 
 Per-monitor `alert_config` JSONB — evaluated by `should_alert()` (`backend/app/services/conditional.py:26`) after diff, before notify. Unmet thresholds mark the change `is_noise=true` with a reason (kept in dashboard, excluded from notifications/digests). Empty/missing config = alert on any hash difference. Changing `alert_config` does not bump `config_version` (thresholds don't affect the baseline).

@@ -9,7 +9,7 @@
 | Capability | Implementation |
 |------------|----------------|
 | JS monitors | `monitors.js_required` → `browser_checks` queue |
-| Opt-in screenshots | `monitors.screenshots_enabled` → full-page screenshot attached to checks/alerts (any mode); no separate visual mode exists |
+| Opt-in screenshots | `monitors.screenshots_enabled` → full-page screenshot attached to checks/alerts (any mode); a first-class `visual` monitor mode was added later (perceptual aHash comparison) — see `docs/phase-4.md` |
 | Playwright fetch | `app/services/browser_fetch.py` |
 | Playwright screenshot | `app/services/visual.py` |
 | Isolated jobs | `app/services/playwright_job.py` (subprocess; avoids Windows EBADF) |
@@ -43,7 +43,7 @@ docker compose up --build
 # Includes worker-browser if defined in compose
 ```
 
-Create a monitor with **JavaScript rendering required** in the UI (screenshots are a separate opt-in via `screenshots_enabled` — there is no separate Visual mode).
+Create a monitor with **JavaScript rendering required** in the UI (screenshots are a separate opt-in via `screenshots_enabled`; a first-class `visual` mode also exists now — see `docs/phase-4.md`).
 
 ## Migration
 

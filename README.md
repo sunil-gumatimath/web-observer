@@ -14,7 +14,7 @@ Web change-detection and alerting platform.
 
 **Latest:** the frontend was re-themed to the Cohere design system (white canvas, 22px signature cards, ghost buttons, `#1863dc` interaction blue, Space Grotesk/Inter, charcoal dark mode), the alerts inbox now carries monitor brand logos with a domain-favicon fallback, and the app nav has an animated active indicator with a page fade on tab switches.
 
-Verified end-to-end: backend unit tests pass, the frontend type-checks (`tsc`), `vitest` is green (32 tests), `next build` compiles all routes, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
+Verified end-to-end: backend unit tests pass (140 passed, 2 skipped, 8 integration deselected), the frontend type-checks (`tsc`), `vitest` is green (40 tests), `next build` compiles all routes, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
 | Doc | Topic |
 |-----|--------|
@@ -221,7 +221,8 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 
 | Area | What's included |
 |------|-----------------|
-| Monitoring modes | `page_content` (whole page text; `js_required` for SPAs), `readme` (GitHub repository README changes via `owner/repo` or full URL, renders GitHub-style markdown diffs), `site_links` (sitemap URL changes), `rss_feed` (RSS/Atom feed updates), `product_price` (price/currency, defaults to a daily schedule), `list_items` (CSS-selector link list), `json_field` (single value via JSONPath-style query, e.g. `$.data.price`, from a JSON endpoint) — list modes (`site_links`/`list_items`) fetch over plain HTTP only |
+| Monitoring modes | `page_content` (whole page text; `js_required` for SPAs), `readme` (GitHub repository README changes via `owner/repo` or full URL, renders GitHub-style markdown diffs), `site_links` (sitemap URL changes), `rss_feed` (RSS/Atom feed updates), `product_price` (price/currency, defaults to a daily schedule), `list_items` (CSS-selector link list), `json_field` (single value via JSONPath-style query, e.g. `$.data.price`, from a JSON endpoint), `visual` (perceptual screenshot comparison via aHash, `VISUAL_AHASH_THRESHOLD=5`) — `site_links`/`rss_feed`/`readme` fetch over plain HTTP only (`js_required` rejected at the schema layer); other modes can use the Playwright browser queue |
+| Visual element picker | Point-and-click selector picker on New/Edit monitor: proxied `POST /monitors/selector-preview` renders a sanitized preview, clicking an element synthesizes the most resilient CSS selector (`frontend/src/components/selector-picker.tsx`, `frontend/src/lib/selector.ts`); brand info auto-fill via `POST /monitors/brand-info` |
 | Alert channels | Email (Resend), Slack webhook, Discord webhook |
 | AI change summaries | Optional plain-language summaries per change (heuristic by default; enable OpenAI-compatible LLM via `LLM_API_BASE` — works with OpenAI or Vercel AI Gateway — and toggle per-workspace via `ai_summaries_enabled`) |
 | AI relevance filter | Optional per-monitor `watch_note` triage — LLM scores each diff vs. watch note; routine noise (cookie banners, ads, counters) is marked `is_noise=true`, held in dashboard (not deleted), excluded from notifications/digests, fails open on LLM error |
@@ -231,6 +232,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Outbound webhooks | Signed (`X-MTW-Signature`) deliveries on change events + delivery log with exponential backoff |
 | API keys | `mtw_...` bearer tokens for programmatic access |
 | Bulk workflows | CSV / JSON import + export of monitors and changes, plus sitemap URL discovery and batch creation |
+| Bulk pause / resume | Dashboard **Pause all** / **Resume all** (`POST /monitors/pause-all`, `POST /monitors/resume-all`) with confirm dialog and optimistic UI; resume re-schedules `next_run_at` promptly |
 | Instant first check | Single-request `run_now` on monitor creation immediately queues an initial run and baseline check without extra round-trips |
 | Alerts inbox | Every change stored in-app with `is_read`/`is_noise` state, independent of external notifications — filter Signal/Unread/Noise |
 | Watch notes | Free-text `watch_note` per monitor drives AI relevance filter |
@@ -246,12 +248,13 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Teams | Expiring multi-use invite links (`/invite/{token}`) + switch between workspaces you belong to (`GET /me` + localStorage) |
 | Command palette | Ctrl+K / Cmd-K jump to pages + monitors |
 | Toast notifications | Optimistic inbox feedback on read/noise/archive actions |
-| Dashboard activity | Change-activity card on the dashboard (7/14/30-day ranges, trend vs prior period, stacked bars by category) |
+| Dashboard activity | Change-activity card on the dashboard (7/14/30-day ranges, trend vs prior period, stacked bars by category). Backed by `GET /changes/activity?days=14&include_noise=false` (`days` 1–90, counts every event, noise excluded by default, capped at 20k rows, null category bucketed as `uncategorized`); UTC-safe client fallback buckets at most 1 per monitor when the endpoint is unreachable |
 | Threshold editor | `ThresholdEditor` alert_config form on New/Edit monitor (thresholds preview) |
 | Monitor list | Search, mode-filter, status-tabs, and sorting on the monitors list |
 | Onboarding checklist | First monitor → baseline → channel guided checklist |
 | Channel test | Per-channel Send-test button in Settings → Alert channels |
 | Visual comparison | Before/after drag slider on changes with screenshots (needs 2 signal changes) |
+| Fetch resilience | SSRF-pinned fetcher tries **every** validated IP in turn (`_pinned_get`), so one dead CDN PoP can't fail a check; only connect-level errors trigger failover. README monitors hit the GitHub API first (1 request, resolves the default branch) with capped raw fallbacks. LLM summaries fail over across `LLM_FALLBACK_MODELS` |
 
 The web UI (Next.js) exposes: **Dashboard** (with Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
 

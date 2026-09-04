@@ -19,6 +19,7 @@
 | **Slack / Discord** | Webhook channels (`type=slack\|discord`) |
 | **Digest** | daily / weekly workspace digests via `digest` service |
 | **Noise feedback** | `POST .../changes/{id}/noise` excludes from notifications & digests |
+| **Change categories → dashboard** | `change_category` (pricing, availability, legal, content, design, api, other) drives the dashboard activity card's stacked bars via `GET .../changes/activity` |
 
 ## Env
 

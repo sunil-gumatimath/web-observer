@@ -160,6 +160,35 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 
 ---
 
+## 5b. Notable endpoints & behavior (post-roadmap additions)
+
+| Capability | Endpoint / notes |
+|------------|------------------|
+| Change activity | `GET /api/v1/workspaces/{id}/changes/activity?days=14&include_noise=false` — per-day counts + per-category breakdown for the dashboard card (`days` 1–90, noise excluded by default, 20k-row cap, null category → `uncategorized`) |
+| Bulk pause / resume | `POST /api/v1/workspaces/{id}/monitors/pause-all`, `.../resume-all` (resume re-schedules `next_run_at`) |
+| Selector preview | `POST /api/v1/workspaces/{id}/monitors/selector-preview` — sanitized HTML for the point-and-click picker |
+| Brand info | `POST /api/v1/workspaces/{id}/monitors/brand-info` — logo/title/description auto-fill |
+| Mark all read | `POST /api/v1/workspaces/{id}/alerts/read-all` |
+| Snapshot download | `GET /api/v1/workspaces/{id}/snapshots/{snapshot_id}` |
+
+Fetch behavior worth knowing while debugging:
+
+- The SSRF-pinned fetcher tries **every** validated IP in turn — one dead CDN PoP won't fail a check; only connect-level errors trigger failover (`backend/app/services/fetcher.py:_pinned_get`).
+- `readme` monitors hit the GitHub API first (resolves the default branch in 1 request), then fall back to capped raw probes.
+- LLM summaries fail over across `LLM_FALLBACK_MODELS`; empty disables failover (see `docs/phase-5.md` env).
+
+Optional env (defaults work locally):
+
+```env
+LLM_API_KEY=            # empty => heuristic summaries only
+LLM_API_BASE=https://api.kilo.ai/api/gateway
+LLM_MODEL=minimax/minimax-m3:free
+LLM_FALLBACK_MODELS=
+STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storage
+```
+
+---
+
 ## 6. Minimum set
 
 | Process | Required? |
@@ -187,7 +216,7 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 | Visual: Bad file descriptor | Browser worker `--threads 1`; restart workers; Playwright install chromium |
 | Visual: Executable doesn't exist | `python -m playwright install chromium` |
 | Snapshot storage errors | `STORAGE_BACKEND=local` |
-| Frontend CORS | API allows `localhost:3000` and `127.0.0.1:3000` |
+| Frontend CORS | API allows `localhost:3000` and `127.0.0.1:3000` (dev only — prod uses an explicit allow-list, see `production.md`) |
 
 ---
 

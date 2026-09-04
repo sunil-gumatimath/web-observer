@@ -31,9 +31,11 @@ To expand from developer-centric change detection into an all-in-one web intelli
 
 ## 2. Advanced Monitoring & Extraction Engines
 
-### 2.1 Interactive Point-and-Click Visual Element Selector
+### 2.1 Interactive Point-and-Click Visual Element Selector `[Status: Partially Implemented]`
 * **Problem:** Users currently must inspect browser DevTools, locate DOM classes or IDs, and manually paste CSS selectors or JSONPaths into the form.
-* **Proposed Solution:**
+* **Shipped (2026-09):** proxied `POST /monitors/selector-preview` (sanitized HTML) + `SelectorPicker` overlay (`frontend/src/components/selector-picker.tsx`) with resilient selector synthesis (`frontend/src/lib/selector.ts`) on New/Edit monitor.
+* **Remaining:** pre-fill from the browser-extension flow (§6.1), saved-selector confidence scoring.
+* **Proposed Solution (original):**
   * In the **New Monitor** flow, adding a URL loads a proxied interactive preview inside the frontend.
   * Headless Chromium retrieves the page DOM and stylesheet snapshot.
   * When hovering over elements, an interactive overlay outlines elements in real-time.
@@ -138,9 +140,11 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * A timeline calendar / scrubbing bar on the Monitor Detail page.
   * Allows selecting any two arbitrary historical snapshots (e.g., "Compare 2026-06-01 baseline against 2026-09-01") to analyze cumulative drift over weeks or months.
 
-### 4.4 Folders, Tags & Bulk Fleet Management
+### 4.4 Folders, Tags & Bulk Fleet Management `[Status: Partially Implemented]`
+* **Done (2026-09):** bulk pause/resume — `POST /monitors/pause-all` + `POST /monitors/resume-all` (`backend/app/routers/monitors.py`) with dashboard Pause-all/Resume-all controls (confirm dialog, optimistic `enabled` flip).
+* **Remaining:** `tags`/`folder_id` organization, multi-select *Change Check Interval*, *Assign Channel*, *Batch Export*.
 * **Problem:** When a workspace tracks 50+ monitors, the flat list becomes disorganized.
-* **Proposed Solution:**
+* **Proposed Solution (original):**
   * Add `tags` (array of strings) and `folder_id` (nested categories) to `monitors`.
   * Enable multi-select bulk operations: *Bulk Pause*, *Bulk Resume*, *Change Check Interval*, *Assign Channel*, and *Batch Export*.
 
@@ -174,7 +178,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * Recycle the master browser process every $N$ runs to guarantee zero memory or handle leaks.
 
 ### 5.4 Real-Time Streaming via Server-Sent Events (SSE)
-* **Problem:** The frontend currently polls the backend every 1,500ms (`POLL_MS`) while checks execute.
+* **Problem:** Long-running checks historically had the frontend poll for status; newer surfaces (e.g. the dashboard activity card) fetch on interaction (range change) rather than polling.
 * **Proposed Solution:**
   * Add a FastAPI SSE endpoint: `GET /api/v1/workspaces/{ws}/monitors/{id}/stream`.
   * Streams real-time pipeline events (`QUEUED` → `CONNECTING` → `RENDERED` → `DIFF_CALCULATED` → `ALERT_DISPATCHED`).
@@ -259,7 +263,7 @@ gantt
 |---|---|---|---|
 | **Telegram Bot Alerting** | High | Low (1–2 days) | 1 |
 | **Async Brand Fetch & Query Hardening** | Done 2026-09 (all 4 items verified in code) | — | Done, skip |
-| **Visual Element Selector (Point-and-Click)** | Very High | Medium (3–4 days) | 3 |
+| **Visual Element Selector (Point-and-Click)** | Partially done 2026-09 (preview + picker shipped; extension flow left) | — | Partial, see 2.1 |
 | **Visual Bounding-Box Crop** | High | Low-Medium (2 days) | 4 |
 | **Diff Heatmap + Flicker (4.1 remainder)** | Medium-High | Low (1–2 days) | 5 |
 | **Multi-Step Journeys (Logins, Clicks)** | Very High | Medium (4–5 days) | 6 |
@@ -273,4 +277,4 @@ gantt
 
 ---
 
-*Document created for pair-programming and roadmap tracking. Last reviewed 2026-09-04: marked 3.3 + 4.1-base done, re-sequenced Phase 8 (Telegram first), deferred paid proxy/extension to Phase 10. Deploy path: see `production.md`. Review or update as feature requirements evolve.*
+*Document created for pair-programming and roadmap tracking. Last reviewed 2026-09-04: marked 3.3 + 4.1-base + bulk pause/resume (4.4) done, 2.1 partially implemented (selector-preview + picker shipped), re-sequenced Phase 8 (Telegram first), deferred paid proxy/extension to Phase 10. Deploy path: see `production.md`. Review or update as feature requirements evolve.*

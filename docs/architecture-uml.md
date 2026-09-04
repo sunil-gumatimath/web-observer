@@ -5,7 +5,7 @@
 # Web Observer — Architecture as UML
 
 Generated from a code review of the `backend/` and `frontend/` trees.
-Stack: FastAPI + Dramatiq/Redis workers, Next.js, Neon Postgres, Clerk, Resend, local-disk object storage, optional Playwright.
+Stack: FastAPI + Dramatiq/Redis workers, Next.js, Neon Postgres, Clerk, Resend, local-disk (or S3-compatible) object storage, optional Playwright.
 
 ## 1. Component / Deployment Diagram
 
@@ -42,7 +42,7 @@ flowchart TB
 
     NEO[("Neon Postgres")]
     REDIS[("Redis\nDramatiq broker")]
-    OBJ[("Object storage\nlocal disk snapshots")]
+    OBJ[("Object storage\nlocal disk or S3 snapshots")]
 
     UI -->|"HTTPS + Bearer/JWT"| API
     API --> AUTH
@@ -413,7 +413,8 @@ flowchart TB
 * **Auth modes** (`auth.py`): Clerk JWT (`Authorization: Bearer`), workspace API keys (`mtw_...`), and internal token (`X-Internal-Token`) for dev/smoke tests. RBAC via `require_workspace_member` / `require_role(min_role)`.
 * **Mode routing** (`workers/enqueue.py`): monitors with the `js_required` flag route to the `browser_checks` queue (Playwright); everything else goes to `http_checks`. (`site_links` rejects `js_required` at the schema layer since sitemaps are fetched over plain HTTP.)
 * **Outbox pattern**: change detection writes `NotificationOutbox` + `WebhookDelivery` rows, then workers fan out. This decouples detection from delivery and gives at-least-once send with retry (`max_retries=5`).
-* **SSRF guard** (`security/ssrf.py`): blocks private/loopback/link-local/metadata IPs and credentialed URLs before any fetch; redirects are re-validated in the fetcher.
+* **SSRF guard** (`security/ssrf.py`): blocks private/loopback/link-local/metadata IPs and credentialed URLs before any fetch; redirects are re-validated in the fetcher. The pinned fetcher (`services/fetcher.py:_pinned_get`) tries every validated IP in turn, so one dead CDN PoP can't fail a check — only connect-level errors trigger failover. `readme` monitors hit the GitHub API first (default-branch aware), then capped raw probes.
+* **Newer endpoints not in the diagrams above**: `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`.
 * **Quotas/plans** (`services/usage.py`, `services/plans.py`): daily check/notification/storage counters per workspace, gated by plan.
 * **Lease + reaper**: scheduler claims monitors with a 60s lease; `run_reaper` recovers stuck runs so HA scheduler/workers don't double-run.
 * **Branding pipeline**: `assets/` is the source of truth; `frontend/public/` is the static fallback; `frontend/src/app/icon.svg` etc are Next.js metadata routes (generates `/icon.svg`, `/manifest.webmanifest`). `LogoIcon` is inline SVG (not `<img>`) so it inherits Tailwind theming and scales via `size` prop (`shell.tsx:49` `iconSize={36}`). OG image `opengraph-image.svg` (1200×630) is served from both `src/app` and `public` and referenced in `layout.tsx:40`.

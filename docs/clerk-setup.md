@@ -13,13 +13,13 @@ Frontend API host: `suited-emu-70.clerk.accounts.dev` (development)
 |-------|------|
 | **Frontend** | `@clerk/nextjs`, `ClerkProvider` in layout, middleware protect, sign-in/up pages |
 | **frontend/.env.local** | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` (via `clerk env pull`) |
-| **Backend .env** | `CLERK_JWKS_URL`, `CLERK_ISSUER`, `CLERK_SECRET_KEY` for FastAPI JWT verify (set in `backend/.env` or root `.env`) |
+| **Backend .env** | `CLERK_JWKS_URL`, `CLERK_ISSUER`, `CLERK_SECRET_KEY` for FastAPI JWT verify (set in `backend/.env`) |
 | **UI** | Sign in / Sign up / UserButton in nav |
 
 ## Run with Clerk
 
 1. Start Postgres + Redis + API + worker (see `docs/local-dev.md`)  
-2. Restart API so it loads root `.env` Clerk vars  
+2. Restart API so it loads `backend/.env` Clerk vars  
 3. Frontend:
 
 ```powershell

@@ -28,7 +28,7 @@ Stack: `FastAPI + Neon Postgres + Upstash Redis/Dramatiq + Next.js + Clerk + Res
    ```
 3. Deploy. Frontend at `https://web-observer.vercel.app`.
 
-> Preview deployments (`https://*.vercel.app`) are accepted by the API via `allow_origin_regex` (`backend/app/main.py:81`) on top of the explicit `CORS_ORIGINS` list — no per-preview env change needed. Enumerated methods/headers only; `X-Internal-Token` is the dev/no-Clerk auth header.
+> Preview deployments (`https://*.vercel.app`) are **not** admitted by `allow_origin_regex` (`backend/app/main.py:81`) — verified by preflight in `production.md`. Every frontend origin must be added to `CORS_ORIGINS` explicitly; no per-preview env change is possible, so point previews at a staging API or test locally. Enumerated methods/headers only; `X-Internal-Token` is the dev/no-Clerk auth header.
 
 ## Upstash Redis — 1 min
 

@@ -43,3 +43,8 @@ Authorization: Bearer mtw_...
 
 1. Trigger: Catch Hook (MTW webhook)  
 2. Action: Slack / Email / Google Sheet row  
+
+## More automation hooks
+
+- Bulk pause/resume: `POST /api/v1/workspaces/{workspace_id}/monitors/pause-all` (and `.../resume-all`) with `Authorization: Bearer mtw_...`.
+- Change activity for reports: `GET /api/v1/workspaces/{workspace_id}/changes/activity?days=30` returns per-day counts plus a per-category breakdown (`by_category`, null → `uncategorized`).

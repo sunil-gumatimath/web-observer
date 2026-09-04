@@ -1,6 +1,6 @@
 # Production
 
-Live ops runbook for the deployed stack. Last verified: 2026-09-03 (API rev `00014-qf4`, image `:729ac5b`).
+Live ops runbook for the deployed stack. Last verified: 2026-09-03 (API rev `00014-qf4`, image `:729ac5b`). Docs refreshed 2026-09-04 (no redeploy; rev pins below still refer to the 09-03 deploy).
 
 ## Live endpoints
 
@@ -56,6 +56,8 @@ Cloud SQL / Memorystore are deliberately **not** used (no free tier). No Compute
 | `web-observer-worker` | `dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2` | `web-observer-worker-tick`, `*/10 * * * *` |
 | `web-observer-browser` | `dramatiq app.workers --queues browser_checks --processes 1 --threads 1` (image `browser`, 2Gi) | `web-observer-browser-tick`, `5,15,25,35,45,55 * * * *` |
 | `web-observer-migrate` | `alembic upgrade head` | manual only |
+
+Digest (`digest_job --loop`) and retention (`retention_job`) loops run locally / via Compose only — there is no Cloud Scheduler entry for them in prod, so digests and snapshot purges do not run on the live stack yet.
 
 **Auth design (important):** Scheduler targets the v2 Jobs API —
 `https://run.googleapis.com/v2/projects/<id>/locations/us-central1/jobs/<job>:run` — with an **OAuth** token (`--oauth-service-account-email=<projnum>-compute@developer.gserviceaccount.com`). Google APIs on `*.googleapis.com` expect OAuth, **not** OIDC: the original OIDC-based ticks failed 100% with `401 UNAUTHENTICATED` (fixed 2026-09-03). Do not switch back to OIDC.
@@ -122,7 +124,7 @@ Healthy baseline (2026-09-03): 22 monitors, ~188 runs/24h, outbox + webhooks pen
 
 ## Known limits / debt
 
-1. **Snapshots are ephemeral** (`STORAGE_BACKEND=local`): `snapshot_text_storage_miss … falling_back_to_db_preview_snapshot` warnings are expected; files vanish on redeploy. Move to GCS if snapshot durability matters.
+1. **Snapshots are ephemeral** (`STORAGE_BACKEND=local`): `snapshot_text_storage_miss … falling_back_to_db_preview_snapshot` warnings are expected; files vanish on redeploy. The code already supports `STORAGE_BACKEND=s3` (GCS/R2-compatible via `s3_endpoint_url`, see `app/services/storage.py`) — it just isn't enabled in prod. Move to GCS/R2 if snapshot durability matters.
 2. **Artifact Registry is ~3.2 GB vs 0.5 GB free quota** — prune old digests (`gcloud artifacts docker images delete …`) or expect a small charge.
 3. `GET /api/v1/public/assets/…/logo.svg → 404` — missing brand asset (cosmetic).
 4. No staging environment; `cloudbuild.yaml` deploys straight to prod on submit.
