@@ -121,6 +121,22 @@ export type AlertsSummary = {
   noise: number;
 };
 
+export type ChangeActivityDay = {
+  date: string; // YYYY-MM-DD (UTC)
+  count: number;
+  by_category?: Record<string, number>;
+};
+
+export type ChangeActivity = {
+  days: number;
+  total: number;
+  start_date: string;
+  end_date: string;
+  counts: number[];
+  buckets: ChangeActivityDay[];
+  categories?: string[];
+};
+
 export type ChangeEventDetail = ChangeEvent & {
   diff: string | null;
   previous_text: string | null;

@@ -14,10 +14,10 @@ import {
   StatCard,
 } from "@/components/ui";
 import { SkeletonStats, SkeletonCard } from "@/components/skeleton";
+import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
-import { ActivityBars, Sparkline } from "@/components/sparkline";
+import { ActivityCard } from "@/components/activity-card";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
-import { bucketActivity } from "@/lib/activity";
 import { api } from "@/lib/api";
 import type {
   AlertsSummary,
@@ -68,6 +68,8 @@ export default function DashboardPage() {
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [workspaceId, setWorkspaceId] = useState<string>("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +83,7 @@ export default function DashboardPage() {
           api.listNotificationChannels(ws).catch(() => []),
         ]);
         if (!cancelled) {
+          setWorkspaceId(ws);
           setMonitors(m);
           setUsage(u);
           setAlerts(a);
@@ -97,6 +100,32 @@ export default function DashboardPage() {
     };
   }, []);
 
+  async function handlePauseAll() {
+    if (!workspaceId || bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      await api.pauseAllMonitors(workspaceId);
+      setMonitors((prev) => prev.map((m) => ({ ...m, enabled: false })));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to pause monitors");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleResumeAll() {
+    if (!workspaceId || bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      await api.resumeAllMonitors(workspaceId);
+      setMonitors((prev) => prev.map((m) => ({ ...m, enabled: true })));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to resume monitors");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   if (loading)
     return (
       <div suppressHydrationWarning className="space-y-4">
@@ -110,8 +139,6 @@ export default function DashboardPage() {
     );
 
   const active = monitors.filter((m) => m.enabled).length;
-  // 14-day change activity from latest_change timestamps (no extra API call).
-  const activity = bucketActivity(monitors, new Date());
   const checksPct =
     usage?.checks_limit && usage.checks_limit > 0
       ? (100 * (usage.checks_count ?? 0)) / usage.checks_limit
@@ -131,14 +158,33 @@ export default function DashboardPage() {
         title="Overview"
         description="Workspace health, usage for today, and your latest monitors."
         actions={
-          <Link href="/monitors/new">
-            <Button type="button">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              New monitor
-            </Button>
-          </Link>
+          <>
+            {monitors.length > 0 && active > 0 ? (
+              <ConfirmButton
+                title="Pause all monitors?"
+                body={`This pauses ${active} active monitor${active === 1 ? "" : "s"}. Scheduled checks stop until you resume them.`}
+                confirmLabel="Pause all"
+                variant="secondary"
+                busy={bulkBusy}
+                onConfirm={handlePauseAll}
+              >
+                Pause all
+              </ConfirmButton>
+            ) : null}
+            {monitors.length > 0 && active === 0 ? (
+              <Button type="button" variant="secondary" disabled={bulkBusy} onClick={handleResumeAll}>
+                Resume all
+              </Button>
+            ) : null}
+            <Link href="/monitors/new">
+              <Button type="button">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                New monitor
+              </Button>
+            </Link>
+          </>
         }
       />
       {error ? <ErrorBox message={error} /> : null}
@@ -172,26 +218,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <Card className="mb-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="section-label">Change activity</p>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              {activity.total === 0
-                ? "No changes detected in the last 14 days."
-                : `${activity.total} change${activity.total === 1 ? "" : "s"} in the last 14 days.`}
-            </p>
-          </div>
-          <Sparkline values={activity.counts} label="Changes per day, last 14 days" />
-        </div>
-        <div className="mt-4">
-          <ActivityBars values={activity.counts} labels={activity.labels} />
-          <div className="mt-1.5 flex justify-between text-[10px] text-[var(--muted)]">
-            <span>{activity.labels[0]}</span>
-            <span>{activity.labels[activity.labels.length - 1]}</span>
-          </div>
-        </div>
-      </Card>
+      <ActivityCard workspaceId={workspaceId} monitors={monitors} />
 
       {showChecklist ? (
         <OnboardingChecklist

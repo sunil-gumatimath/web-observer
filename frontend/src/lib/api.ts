@@ -8,6 +8,7 @@ import type {
   AuditLogRow,
   BrandInfo,
   BulkImportResponse,
+  ChangeActivity,
   ChangeEvent,
   ChangeEventDetail,
   InviteCreated,
@@ -273,6 +274,18 @@ export const api = {
       method: "POST",
     }),
 
+  pauseAllMonitors: (workspaceId: string) =>
+    request<{ updated: number }>(
+      `/api/v1/workspaces/${workspaceId}/monitors/pause-all`,
+      { method: "POST" },
+    ),
+
+  resumeAllMonitors: (workspaceId: string) =>
+    request<{ updated: number }>(
+      `/api/v1/workspaces/${workspaceId}/monitors/resume-all`,
+      { method: "POST" },
+    ),
+
   deleteMonitor: (workspaceId: string, monitorId: string) =>
     request<void>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}`, {
       method: "DELETE",
@@ -315,6 +328,16 @@ export const api = {
 
   alertsSummary: (workspaceId: string) =>
     request<AlertsSummary>(`/api/v1/workspaces/${workspaceId}/alerts/summary`),
+
+  getChangeActivity: (workspaceId: string, opts?: { days?: number; include_noise?: boolean }) => {
+    const q = new URLSearchParams();
+    if (opts?.days) q.set("days", String(opts.days));
+    if (opts?.include_noise) q.set("include_noise", "true");
+    const qs = q.toString();
+    return request<ChangeActivity>(
+      `/api/v1/workspaces/${workspaceId}/changes/activity${qs ? `?${qs}` : ""}`,
+    );
+  },
 
   markChangeRead: (workspaceId: string, changeId: string, isRead = true) =>
     request<ChangeEvent>(`/api/v1/workspaces/${workspaceId}/changes/${changeId}/read`, {
