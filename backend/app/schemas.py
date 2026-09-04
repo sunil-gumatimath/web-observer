@@ -393,6 +393,22 @@ class AlertsSummary(BaseModel):
     noise: int
 
 
+class ChangeActivityDay(BaseModel):
+    date: str  # YYYY-MM-DD (UTC)
+    count: int
+    by_category: dict[str, int] = {}  # category -> count; null maps to "uncategorized"
+
+
+class ChangeActivityOut(BaseModel):
+    days: int
+    total: int
+    start_date: str  # YYYY-MM-DD (UTC)
+    end_date: str  # YYYY-MM-DD (UTC)
+    counts: list[int]  # oldest-first, len == days
+    buckets: list[ChangeActivityDay]  # oldest-first, len == days
+    categories: list[str] = []  # categories present, by total desc ("uncategorized" last)
+
+
 class NoiseFeedbackIn(BaseModel):
     is_noise: bool
 

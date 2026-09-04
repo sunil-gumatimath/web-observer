@@ -37,6 +37,7 @@ from app.schemas import (
     AlertsSummary,
     BrandInfoOut,
     BrandInfoRequest,
+    ChangeActivityOut,
     ChangeEventDetail,
     ChangeEventOut,
     LatestChangeOut,
@@ -879,6 +880,39 @@ def bulk_action(
     return {"deleted": len(monitors), "missing": missing}
 
 
+@router.post("/workspaces/{workspace_id}/monitors/pause-all")
+def pause_all_monitors(
+    workspace_id: UUID,
+    db: Db,
+    _workspace: MemberWs,
+) -> dict:
+    """Disable every monitor in the workspace (bulk pause, persisted to the DB)."""
+    res = db.execute(
+        sa_update(Monitor)
+        .where(Monitor.workspace_id == workspace_id, Monitor.enabled.is_(True))
+        .values(enabled=False)
+    )
+    db.commit()
+    return {"updated": res.rowcount}
+
+
+@router.post("/workspaces/{workspace_id}/monitors/resume-all")
+def resume_all_monitors(
+    workspace_id: UUID,
+    db: Db,
+    _workspace: MemberWs,
+) -> dict:
+    """Re-enable every paused monitor and schedule their next run promptly."""
+    now = datetime.now(UTC) + timedelta(seconds=5)
+    res = db.execute(
+        sa_update(Monitor)
+        .where(Monitor.workspace_id == workspace_id, Monitor.enabled.is_(False))
+        .values(enabled=True, next_run_at=now)
+    )
+    db.commit()
+    return {"updated": res.rowcount}
+
+
 @router.post(
     "/workspaces/{workspace_id}/monitors/{monitor_id}/run",
     response_model=ManualRunOut,
@@ -1044,6 +1078,96 @@ def list_changes(
             .order_by(ChangeEvent.created_at.desc())
             .limit(limit)
         ).all()
+    )
+
+
+UNCATEGORIZED_ACTIVITY = "uncategorized"
+
+
+def _bucket_activity(
+    rows: list[tuple[datetime | None, str | None]],
+    start_day,
+    days: int,
+) -> tuple[list[int], list[dict[str, int]]]:
+    """Bucket (created_at, category) rows into per-day counts + per-day category
+    maps (oldest first). Pure — unit-testable."""
+    counts = [0] * days
+    per_day: list[dict[str, int]] = [{} for _ in range(days)]
+    for ts, cat in rows:
+        if ts is None:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        day_index = (ts.date() - start_day).days
+        if 0 <= day_index < days:
+            counts[day_index] += 1
+            key = cat or UNCATEGORIZED_ACTIVITY
+            per_day[day_index][key] = per_day[day_index].get(key, 0) + 1
+    return counts, per_day
+
+
+@router.get(
+    "/workspaces/{workspace_id}/changes/activity",
+    response_model=ChangeActivityOut,
+)
+def change_activity(
+    workspace_id: UUID,
+    db: Db,
+    _workspace: AnyWs,
+    days: int = Query(default=14, ge=1, le=90),
+    include_noise: bool = Query(default=False),
+) -> ChangeActivityOut:
+    """Per-day change counts for the trailing `days` UTC days (oldest first).
+
+    Counts every change event in range — unlike the dashboard's old
+    latest-change-only client bucketing which capped at 1 per monitor.
+    Noise is excluded unless `include_noise=true` (parity with the alerts inbox).
+    Each bucket also carries a per-category breakdown for stacked bars.
+    """
+    from app.schemas import ChangeActivityDay
+
+    now = datetime.now(UTC)
+    today = now.date()
+    start_day = today - timedelta(days=days - 1)
+    start_dt = datetime(start_day.year, start_day.month, start_day.day, tzinfo=UTC)
+
+    q = select(ChangeEvent.created_at, ChangeEvent.change_category).where(
+        ChangeEvent.workspace_id == workspace_id,
+        ChangeEvent.created_at >= start_dt,
+    )
+    if not include_noise:
+        q = q.where(ChangeEvent.is_noise.is_(False))
+    # Bound the payload: even a busy workspace rarely exceeds this in 90 days;
+    # the count query stays cheap (indexed workspace + created_at scan).
+    q = q.order_by(ChangeEvent.created_at.desc()).limit(20_000)
+    rows = [(r[0], r[1]) for r in db.execute(q).all()]
+
+    counts, per_day = _bucket_activity(rows, start_day, days)
+    totals: dict[str, int] = {}
+    for day_map in per_day:
+        for key, value in day_map.items():
+            totals[key] = totals.get(key, 0) + value
+    categories = sorted(
+        totals,
+        key=lambda k: (k == UNCATEGORIZED_ACTIVITY, -totals[k], k),
+    )
+
+    buckets = [
+        ChangeActivityDay(
+            date=(start_day + timedelta(days=i)).isoformat(),
+            count=counts[i],
+            by_category=per_day[i],
+        )
+        for i in range(days)
+    ]
+    return ChangeActivityOut(
+        days=days,
+        total=sum(counts),
+        start_date=start_day.isoformat(),
+        end_date=today.isoformat(),
+        counts=counts,
+        buckets=buckets,
+        categories=categories,
     )
 
 
