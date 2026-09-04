@@ -53,6 +53,7 @@ from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.branding import fetch_brand_info, store_brand_assets
 from app.services.bulk_import import import_monitors
 from app.services.diffing import unified_diff
+from app.services.selector_preview import PreviewError, fetch_selector_preview
 from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_url
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
 from app.services.structured import diff_lists, items_from_normalized
@@ -551,6 +552,54 @@ def monitor_brand_info(
         logo_url=next(iter(meta.logo_candidates), None),
         hero_url=next(iter(meta.hero_candidates), None),
         assets_available=True,
+    )
+
+
+class SelectorPreviewIn(BaseModel):
+    url: str
+
+
+class SelectorPreviewOut(BaseModel):
+    final_url: str
+    html: str
+    truncated: bool
+
+
+@router.post(
+    "/workspaces/{workspace_id}/monitors/selector-preview",
+    response_model=SelectorPreviewOut,
+)
+# Rate-limited: each call is an outbound fetch to a user-supplied URL.
+@limiter.limit("10/minute")
+def selector_preview(
+    request: Request,
+    workspace_id: UUID,
+    body: SelectorPreviewIn,
+    db: Db,
+    _workspace: AnyWs,
+) -> SelectorPreviewOut:
+    """Fetch a URL server-side and return sanitized HTML for element picking.
+
+    The frontend cannot fetch arbitrary targets directly (CORS), so the
+    backend proxies: same SSRF-pinned fetcher as checks, scripts/frames and
+    event handlers stripped, ``<base href>`` injected. The client renders
+    the HTML inertly (no script execution, clicks intercepted) and lets the
+    user click an element to synthesize a resilient CSS selector.
+    """
+    try:
+        validate_url_for_fetch(body.url, resolve_dns=True)
+    except SSRFError as exc:
+        raise HTTPException(
+            status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+        ) from exc
+    try:
+        preview = fetch_selector_preview(body.url)
+    except PreviewError as exc:
+        raise HTTPException(
+            status_code=400, detail={"error_code": exc.code, "message": str(exc)}
+        ) from exc
+    return SelectorPreviewOut(
+        final_url=preview.final_url, html=preview.html, truncated=preview.truncated
     )
 
 
