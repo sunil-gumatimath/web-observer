@@ -246,14 +246,14 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Teams | Expiring multi-use invite links (`/invite/{token}`) + switch between workspaces you belong to (`GET /me` + localStorage) |
 | Command palette | Ctrl+K / Cmd-K jump to pages + monitors |
 | Toast notifications | Optimistic inbox feedback on read/noise/archive actions |
-| Dashboard activity | 14-day Change-activity card on the dashboard |
+| Dashboard activity | Change-activity card on the dashboard (7/14/30-day ranges, trend vs prior period, stacked bars by category) |
 | Threshold editor | `ThresholdEditor` alert_config form on New/Edit monitor (thresholds preview) |
 | Monitor list | Search, mode-filter, status-tabs, and sorting on the monitors list |
 | Onboarding checklist | First monitor → baseline → channel guided checklist |
 | Channel test | Per-channel Send-test button in Settings → Alert channels |
 | Visual comparison | Before/after drag slider on changes with screenshots (needs 2 signal changes) |
 
-The web UI (Next.js) exposes: **Dashboard** (with 14-day Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
+The web UI (Next.js) exposes: **Dashboard** (with Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
 
 ## Tests
 
