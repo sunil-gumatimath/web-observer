@@ -138,7 +138,7 @@ export function CommandPalette({ open, onClose }: Props) {
       aria-modal="true"
       aria-label="Command palette"
     >
-      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl animate-fade-in-up">
+      <div className="w-full max-w-lg overflow-hidden rounded-[22px] border border-[var(--border-soft)] bg-[var(--bg)] animate-fade-in-up">
         <div className="flex items-center gap-2 border-b border-[var(--border)] px-4">
           <span className="text-sm text-[var(--muted)]" aria-hidden>
             ⌘K
@@ -152,7 +152,7 @@ export function CommandPalette({ open, onClose }: Props) {
             }}
             placeholder="Jump to monitor, page, or action…"
             aria-label="Search monitors and pages"
-            className="h-12 w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
+            className="h-12 w-full bg-transparent text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)]"
           />
           <kbd className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
             esc
@@ -172,14 +172,14 @@ export function CommandPalette({ open, onClose }: Props) {
                 onMouseEnter={() => setActive(i)}
                 onClick={() => go(item)}
                 className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition",
+                  "flex w-full items-center justify-between gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm transition",
                   i === active
-                    ? "bg-sky-500/15 text-[var(--text)]"
-                    : "text-[var(--muted)] hover:bg-[var(--nav-active-bg)]",
+                    ? "bg-[var(--accent)]/10 text-[var(--fg)]"
+                    : "text-[var(--muted)] hover:text-[var(--accent)]",
                 )}
               >
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-[var(--text)]">
+                  <span className="block truncate font-medium text-[var(--fg)]">
                     {item.label}
                   </span>
                   {item.sub ? (

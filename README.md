@@ -12,7 +12,9 @@ Web change-detection and alerting platform.
 
 **Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `012_add_ai_intelligence_fields` on Neon (post-roadmap work added storage optimization, the alerts inbox, monitor watch notes, brand/workspace-key columns, referential-integrity fixes, per-monitor conditional alert thresholds, natural-language semantic triggers, first-class AI impact/confidence triage, and distributed Redis dedup caching). Billing is optional (solo use: skip Stripe).
 
-Verified end-to-end: backend unit tests pass, the frontend type-checks, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
+**Latest:** the frontend was re-themed to the Cohere design system (white canvas, 22px signature cards, ghost buttons, `#1863dc` interaction blue, Space Grotesk/Inter, charcoal dark mode), the alerts inbox now carries monitor brand logos with a domain-favicon fallback, and the app nav has an animated active indicator with a page fade on tab switches.
+
+Verified end-to-end: backend unit tests pass, the frontend type-checks (`tsc`), `vitest` is green (32 tests), `next build` compiles all routes, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
 | Doc | Topic |
 |-----|--------|
@@ -237,7 +239,8 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Plans / billing | free / pro / business / enterprise tiers; Stripe or simulated checkout (solo: skip Stripe) |
 | Adaptive scheduling | Interval auto-stretches after quiet runs |
 | Retention | Background `retention_job` purges old runs / snapshots (default 90 days) |
-| Brand-aware dashboard | Adding a website auto-fills logo/title/description/hero from page `<meta>` (`og:*`, favicon) and re-hosts via `brand-assets/` for dashboard + public share pages (no external Context.dev dependency) |
+| Brand-aware dashboard | Adding a website auto-fills logo/title/description/hero from page `<meta>` (`og:*`, favicon) and re-hosts via `brand-assets/` for dashboard + public share pages (no external Context.dev dependency). Alert inbox items carry `monitor_brand`; `BrandLogo` falls back to the domain favicon before initials, so a real mark shows even before enrichment runs |
+| Design system | Cohere-inspired tokens (`frontend/src/app/globals.css`): 22px cards, pill buttons (dark solid primary, ghost secondary), `#1863dc` hover/focus blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator + page fade on tab switch |
 | Managed or self-serve keys | Server provides global `LLM_API_*`/`RESEND_API_KEY`; or each workspace brings its own keys in Settings → Workspace keys (overrides global) |
 | Public share links | Opaque-token read-only public page per monitor (`/share/{token}` — unguessable, hashed at rest, expiring, no login required) |
 | Teams | Expiring multi-use invite links (`/invite/{token}`) + switch between workspaces you belong to (`GET /me` + localStorage) |

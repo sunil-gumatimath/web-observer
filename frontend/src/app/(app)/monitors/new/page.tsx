@@ -257,7 +257,7 @@ export default function NewMonitorPage() {
 							<div className="flex items-center justify-between">
 								<Label htmlFor="url">URL</Label>
 								{brandLoading ? (
-									<span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-sky-600 dark:text-sky-400">
+									<span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--accent)]">
 										<svg className="size-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 											<circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
 											<path d="M12 2a10 10 0 0 1 10 10" />
@@ -282,7 +282,7 @@ export default function NewMonitorPage() {
 						</div>
 
 						{brandLoading ? (
-							<div className="flex items-center gap-2.5 rounded-xl border border-sky-500/20 bg-sky-50/40 px-3.5 py-2.5 text-xs text-sky-700 dark:border-sky-500/30 dark:bg-sky-950/20 dark:text-sky-300">
+							<div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5 text-xs text-[var(--muted)] dark:border-[var(--accent)]/25">
 								<svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 									<circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
 									<path d="M12 2a10 10 0 0 1 10 10" />
@@ -290,7 +290,7 @@ export default function NewMonitorPage() {
 								<span>Detecting website title, logo, and metadata…</span>
 							</div>
 						) : brand ? (
-							<div className="overflow-hidden rounded-xl border border-sky-500/20 bg-gradient-to-br from-slate-50 via-white to-sky-50/30 shadow-xs dark:border-sky-500/30 dark:from-slate-900/60 dark:via-slate-950 dark:to-sky-950/20">
+							<div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg)] dark:border-[var(--accent)]/25">
 								{brand.hero_url ? (
 									<div className="relative h-20 w-full overflow-hidden bg-slate-100 dark:bg-slate-900">
 										<img
@@ -317,7 +317,7 @@ export default function NewMonitorPage() {
 									) : null}
 									<div className="min-w-0 flex-1">
 										<div className="flex items-center gap-2">
-											<p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+											<p className="truncate text-sm font-semibold text-[var(--fg)]">
 												{brand.title || "Discovered Brand"}
 											</p>
 											<span className="rounded-full bg-emerald-500/10 px-2 py-0.2 text-[10px] font-semibold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
@@ -342,7 +342,7 @@ export default function NewMonitorPage() {
 									<button
 										key={t.label}
 										type="button"
-										className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium capitalize text-slate-600 transition hover:border-sky-400/60 hover:text-sky-600 dark:text-slate-300 dark:hover:text-sky-300"
+										className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium capitalize text-slate-600 transition hover:border-[var(--accent)] hover:text-[var(--accent)] dark:text-slate-300"
 										onClick={() => {
 											if (!name.trim()) setName(t.name);
 											setMode(t.mode);
@@ -439,21 +439,21 @@ export default function NewMonitorPage() {
 									type="checkbox"
 									checked={jsRequired}
 									onChange={(e) => setJsRequired(e.target.checked)}
-									className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+									className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
 								/>
 								JavaScript rendering required (Playwright)
 							</label>
 						) : mode === "readme" ? (
-							<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+							<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
 								README mode fetches <code>README.md</code> from the repo&apos;s default branch over HTTP.
 							</p>
 						) : mode === "site_links" ? (
-							<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+							<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
 								Site links mode reads the sitemap over HTTP and watches for
 								added or removed URLs.
 							</p>
 						) : (
-							<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+							<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
 								RSS mode reads the feed over HTTP and watches for added or removed entries.
 							</p>
 						)}
@@ -502,7 +502,7 @@ export default function NewMonitorPage() {
 							<button
 								type="button"
 								onClick={() => setPickerOpen(true)}
-								className="mt-1.5 text-xs font-medium text-sky-600 underline-offset-2 hover:underline dark:text-sky-400"
+								className="mt-1.5 text-xs font-medium text-[var(--accent)] underline-offset-2 hover:underline"
 							>
 								Pick element visually instead
 							</button>
@@ -581,7 +581,7 @@ export default function NewMonitorPage() {
 								type="checkbox"
 								checked={runNow}
 								onChange={(e) => setRunNow(e.target.checked)}
-								className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+								className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
 							/>
 							Run first check immediately (see result, then keep or delete)
 						</label>
@@ -811,7 +811,7 @@ function SitemapDiscovery({
 											type="checkbox"
 											checked={selected.has(u)}
 											onChange={() => toggleOne(u)}
-											className="mt-0.5 h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+											className="mt-0.5 h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
 										/>
 										<span className="min-w-0 break-all text-slate-700 dark:text-slate-300">
 											{u}
@@ -904,7 +904,7 @@ function SitemapDiscovery({
 										type="checkbox"
 										checked={jsRequired}
 										onChange={(e) => setJsRequired(e.target.checked)}
-										className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+										className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
 									/>
 									JavaScript rendering required (Playwright)
 								</label>

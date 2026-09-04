@@ -46,7 +46,7 @@ function stateDot(state: StepState, index: number): ReactNode {
     return (
       <span
         aria-hidden
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-xs font-bold text-sky-700 ring-1 ring-sky-500/40 dark:text-sky-300"
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/10 text-xs font-bold text-[var(--muted)] ring-1 ring-[var(--accent)]/25"
       >
         {index + 1}
       </span>
@@ -148,7 +148,7 @@ export function OnboardingChecklist({
         aria-label="Onboarding progress"
       >
         <div
-          className="h-full rounded-full bg-sky-500 transition-all"
+          className="h-full rounded-full bg-[var(--fg)] transition-all"
           style={{ width: `${(100 * doneCount) / steps.length}%` }}
         />
       </div>
@@ -161,7 +161,7 @@ export function OnboardingChecklist({
               key={step.key}
               className={
                 state === "current"
-                  ? "flex items-center justify-between gap-4 rounded-lg border border-sky-500/30 bg-sky-500/[0.06] px-3 py-2.5 dark:border-sky-500/25"
+                  ? "flex items-center justify-between gap-4 rounded-lg border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-3 py-2.5 dark:border-[var(--accent)]/20"
                   : "flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] px-3 py-2.5"
               }
             >

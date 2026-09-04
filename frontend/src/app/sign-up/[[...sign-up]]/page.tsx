@@ -23,14 +23,14 @@ export default function SignUpPage() {
 			<div className="relative flex min-h-screen flex-col items-center justify-center gap-6 overflow-hidden px-4 py-12 text-center">
 				<div className="pointer-events-none absolute inset-0 hero-grid" />
 				<div className="relative z-10">
-					<h1 className="text-2xl font-semibold text-[var(--text)]">Sign-up is disabled</h1>
+					<h1 className="font-display text-2xl text-[var(--fg)]">Sign-up is disabled</h1>
 					<p className="mx-auto mt-2 max-w-sm text-sm text-[var(--muted)]">
 						This environment runs without Clerk (dev internal-token auth). Head
 						straight to the dashboard.
 					</p>
 					<Link
 						href="/dashboard"
-						className="mt-6 inline-block rounded-xl bg-gradient-to-b from-sky-500 to-sky-600 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:from-sky-400 hover:to-sky-500"
+						className="btn-cohere btn-cohere-primary mt-6"
 					>
 						Go to dashboard
 					</Link>
@@ -45,11 +45,11 @@ export default function SignUpPage() {
 			<div className="relative z-10 text-center">
 				<Link
 					href="/"
-					className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-[var(--text)]"
+					className="inline-flex items-center gap-2.5 tracking-tight text-[var(--fg)]"
 				>
 					<Logo iconSize={36} />
 				</Link>
-				<h1 className="mt-4 text-2xl font-semibold text-[var(--text)]">
+				<h1 className="mt-4 font-display text-2xl text-[var(--fg)]">
 					Create your account
 				</h1>
 				<p className="mt-1 text-sm text-[var(--muted)]">Start monitoring pages in a few minutes</p>

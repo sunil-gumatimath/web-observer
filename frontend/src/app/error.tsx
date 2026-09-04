@@ -20,8 +20,8 @@ export default function Error({
     <div className="relative flex min-h-screen flex-col items-center justify-center gap-6 overflow-hidden px-4 py-12 text-center">
       <div className="pointer-events-none absolute inset-0 hero-grid" />
       <div className="relative z-10">
-        <p className="section-label">Something went wrong</p>
-        <h1 className="mt-2 text-2xl font-semibold text-[var(--text)]">
+        <p className="eyebrow">Something went wrong</p>
+        <h1 className="mt-2 font-display text-3xl text-[var(--fg)]">
           This page hit an error
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
@@ -33,7 +33,7 @@ export default function Error({
           </Button>
           <Link
             href="/dashboard"
-            className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/60 px-6 py-3 text-sm font-semibold text-[var(--text)] backdrop-blur transition hover:bg-[var(--bg-elevated)]"
+            className="btn-cohere btn-cohere-ghost"
           >
             Go to dashboard
           </Link>

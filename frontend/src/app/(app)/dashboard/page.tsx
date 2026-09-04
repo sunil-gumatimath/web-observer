@@ -35,7 +35,7 @@ import { usePageTitle } from "@/lib/use-page-title";
 
 const CHANGE_COLORS: Record<string, string> = {
   pricing: "bg-emerald-500",
-  availability: "bg-sky-500",
+  availability: "bg-[var(--accent)]",
   legal: "bg-amber-500",
   content: "bg-violet-500",
   design: "bg-pink-500",
@@ -205,7 +205,7 @@ export default function DashboardPage() {
       <SectionTitle
         action={
           monitors.length > 0 ? (
-            <Link href="/monitors" className="text-xs font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300">
+            <Link href="/monitors" className="text-xs font-medium text-[var(--accent)] hover:opacity-80">
               View all →
             </Link>
           ) : null
@@ -233,7 +233,7 @@ export default function DashboardPage() {
                   <BrandLogo brand={m.brand} name={m.name} domain={m.url} size={28} className="mt-0.5" />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate font-medium text-slate-900 dark:text-slate-100">{m.name}</p>
+                      <p className="truncate font-medium text-[var(--fg)]">{m.name}</p>
                       {m.latest_change && !m.latest_change.is_read ? <Badge tone="info">new</Badge> : null}
                       {m.latest_change?.change_category ? (
                         <span className={`h-2 w-2 rounded-full ${changeDotClass(m.latest_change.change_category)}`} aria-hidden />

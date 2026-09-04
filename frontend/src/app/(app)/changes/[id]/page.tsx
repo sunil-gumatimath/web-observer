@@ -136,7 +136,7 @@ export default function ChangeDetailPage() {
 					<div className="min-w-0 flex-1">
 						<Link
 							href={`/monitors/${monitor.id}`}
-							className="text-lg font-bold text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400"
+							className="text-lg font-bold text-[var(--fg)] hover:text-[var(--accent)]"
 						>
 							{monitor.name}
 						</Link>
@@ -200,21 +200,21 @@ export default function ChangeDetailPage() {
 			</div>
 
 			{change.ai_summary ? (
-				<div className="mb-5 overflow-hidden rounded-xl border border-sky-500/20 bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent p-4 shadow-sm dark:border-sky-500/30 dark:from-sky-950/40 dark:via-indigo-950/20">
-					<div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-400">
+				<div className="mb-5 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 dark:border-[var(--accent)]/25">
+					<div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
 						<div className="flex items-center gap-2">
-							<svg className="h-4 w-4 text-sky-500" viewBox="0 0 24 24" fill="currentColor">
+							<svg className="h-4 w-4 text-[var(--accent)]" viewBox="0 0 24 24" fill="currentColor">
 								<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/>
 							</svg>
 							<span>AI Change Summary</span>
 						</div>
 						{change.title ? (
-							<span className="font-semibold text-slate-800 dark:text-slate-200 normal-case tracking-normal">
+							<span className="font-semibold text-[var(--fg)] normal-case tracking-normal">
 								{change.title}
 							</span>
 						) : null}
 					</div>
-					<p className="mt-2 text-sm leading-relaxed font-medium text-slate-900 dark:text-slate-100">
+					<p className="mt-2 text-sm leading-relaxed font-medium text-[var(--fg)]">
 						{change.ai_summary}
 					</p>
 				</div>

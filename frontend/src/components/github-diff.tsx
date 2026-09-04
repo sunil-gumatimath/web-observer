@@ -323,7 +323,7 @@ export function GithubDiff({
 						href={baseUrl}
 						target="_blank"
 						rel="noreferrer"
-						className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-600 ring-1 ring-neutral-950/5 transition hover:text-sky-700 hover:ring-sky-500/30 dark:bg-slate-900 dark:text-slate-400 dark:ring-white/10"
+						className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-600 ring-1 ring-neutral-950/5 transition hover:text-[var(--accent)] hover:ring-[var(--accent)]/25 dark:bg-slate-900 dark:text-slate-400 dark:ring-white/10"
 					>
 						<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden className="size-3.5 shrink-0 text-neutral-400">
 							<path d="M6.5 9.5a2.5 2.5 0 0 0 3.54 0l2-2a2.5 2.5 0 0 0-3.54-3.54l-.5.5" />
@@ -449,7 +449,7 @@ export function GithubDiff({
 													<button
 														type="button"
 														onClick={() => expandHunk(item.startIdx, item.endIdx)}
-														className="text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 font-medium hover:underline inline-flex items-center gap-1"
+														className="text-[var(--accent)] hover:opacity-80 font-medium hover:underline inline-flex items-center gap-1"
 													>
 														<span>↕ Expand {item.count} unchanged lines</span>
 													</button>
@@ -548,7 +548,7 @@ export function GithubDiff({
 										<button
 											type="button"
 											onClick={() => expandHunk(item.startIdx, item.endIdx)}
-											className="inline-flex items-center gap-1.5 text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline dark:text-sky-400 dark:hover:text-sky-300"
+											className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] hover:opacity-80 hover:underline"
 										>
 											<span>↕ Expand {item.count} unchanged lines</span>
 										</button>

@@ -209,7 +209,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
               href="https://kilo.ai/landing/free-models"
               target="_blank"
               rel="noreferrer"
-              className="underline hover:text-sky-600"
+              className="underline hover:text-[var(--accent)]"
             >
               View live catalog
             </a>

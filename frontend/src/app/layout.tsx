@@ -1,18 +1,25 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { ThemedClerkProvider } from "@/components/clerk-theme-provider";
 import { Providers } from "@/components/providers";
 import { ThemeProvider } from "@/components/theme-provider";
 import { config } from "@/lib/config";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Cohere design system: CohereText / Unica77 are proprietary, so we use the
+// spec-approved fallbacks — Space Grotesk for display serif, Inter for body.
+const displayFont = Space_Grotesk({
+  variable: "--font-display",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const bodyFont = Inter({
+  variable: "--font-body",
+  subsets: ["latin"],
+});
+
+const monoFont = JetBrains_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
 });
 
@@ -56,7 +63,6 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Strip attributes injected by browser extensions (e.g. Retriever `rtrvr-ls`) before React hydrates */}
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){function s(n){if(n.nodeType!==1)return;for(var i=n.attributes.length-1;i>=0;i--){var a=n.attributes[i].name;if(a.startsWith('rtrvr'))n.removeAttribute(a)}for(var c=n.firstChild;c;c=c.nextSibling)s(c)}s(document.documentElement);new MutationObserver(function(m){m.forEach(function(x){if(x.type==='attributes'&&x.attributeName&&x.attributeName.startsWith('rtrvr'))x.target.removeAttribute(x.attributeName);x.addedNodes&&x.addedNodes.forEach(function(n){s(n)})})}).observe(document.documentElement,{attributes:true,childList:true,subtree:true})})();`,
@@ -64,7 +70,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
+        className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable} font-body antialiased`}
         suppressHydrationWarning
       >
         <ThemeProvider>

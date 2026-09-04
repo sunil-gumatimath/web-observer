@@ -96,7 +96,7 @@ export function renderInlineMarkdown(text: string, baseUrl?: string): React.Reac
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sky-600 hover:text-sky-700 hover:underline dark:text-sky-400 dark:hover:text-sky-300 font-medium"
+              className="text-[var(--accent)] hover:opacity-80 hover:underline font-medium"
             >
               {renderInlineMarkdown(label, baseUrl)}
             </a>
@@ -120,7 +120,7 @@ export function renderInlineMarkdown(text: string, baseUrl?: string): React.Reac
     ) {
       // Bold
       nodes.push(
-        <strong key={`b-${keyIndex++}`} className="font-semibold text-slate-900 dark:text-slate-100">
+        <strong key={`b-${keyIndex++}`} className="font-semibold text-[var(--fg)]">
           {token.slice(2, -2)}
         </strong>
       );
@@ -411,20 +411,20 @@ export function ReadableContent({
         }
       >
         {viewMode === "raw" ? (
-          <pre className="font-mono text-xs leading-relaxed text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
+          <pre className="font-mono text-xs leading-relaxed text-[var(--fg)] whitespace-pre-wrap break-words bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
             {rawDisplayText}
           </pre>
         ) : (
-          <div className="space-y-4 text-[14.5px] leading-relaxed text-slate-800 dark:text-slate-200">
+          <div className="space-y-4 text-[14.5px] leading-relaxed text-[var(--fg)]">
             {blocks.map((block, i) => {
               if (block.type === "heading") {
                 const headingClasses =
                   block.level === 1
                     ? "text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 pt-2 pb-1 border-b border-slate-200/80 dark:border-slate-800"
                     : block.level === 2
-                    ? "text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100 pt-1.5"
+                    ? "text-lg font-semibold tracking-tight text-[var(--fg)] pt-1.5"
                     : block.level === 3
-                    ? "text-base font-semibold text-slate-900 dark:text-slate-100 pt-1"
+                    ? "text-base font-semibold text-[var(--fg)] pt-1"
                     : "text-sm font-semibold text-slate-900 dark:text-slate-200";
 
                 return (
@@ -453,7 +453,7 @@ export function ReadableContent({
                 return (
                   <blockquote
                     key={i}
-                    className="border-l-4 border-sky-500 bg-sky-50/50 dark:bg-sky-950/20 py-2.5 px-4 rounded-r-lg text-slate-700 dark:text-slate-300 italic text-[14px] leading-relaxed"
+                    className="border-l-4 border-[var(--accent)] bg-[var(--surface)] py-2.5 px-4 rounded-r-lg text-slate-700 dark:text-slate-300 italic text-[14px] leading-relaxed"
                   >
                     {renderInlineMarkdown(block.text, baseUrl)}
                   </blockquote>
@@ -470,7 +470,7 @@ export function ReadableContent({
                     ))}
                   </ol>
                 ) : (
-                  <ul key={i} className="list-disc space-y-1.5 pl-5 marker:text-sky-500">
+                  <ul key={i} className="list-disc space-y-1.5 pl-5 marker:text-[var(--accent)]">
                     {block.items.map((item, j) => (
                       <li key={j} className="pl-1">
                         {renderInlineMarkdown(item, baseUrl)}

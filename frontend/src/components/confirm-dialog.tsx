@@ -127,7 +127,7 @@ export function ConfirmButton({
 				>
 					<div
 						ref={panelRef}
-						className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl"
+						className="w-full max-w-md rounded-[22px] border border-[var(--border-soft)] bg-[var(--bg)] p-5"
 						onClick={(e) => e.stopPropagation()}
 					>
 						<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/15 text-rose-600 ring-1 ring-rose-500/25 dark:text-rose-300">
@@ -146,7 +146,7 @@ export function ConfirmButton({
 								/>
 							</svg>
 						</div>
-						<h3 className="mt-4 text-base font-semibold text-[var(--text)]">
+						<h3 className="mt-4 text-base font-semibold text-[var(--fg)]">
 							{title}
 						</h3>
 						{body ? (

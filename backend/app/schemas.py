@@ -384,6 +384,7 @@ class AlertInboxItem(ChangeEventOut):
 
     monitor_name: str
     monitor_url: str
+    monitor_brand: dict | None = None
 
 
 class AlertsSummary(BaseModel):

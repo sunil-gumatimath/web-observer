@@ -136,7 +136,7 @@ export default function SettingsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Card className="!p-4">
             <p className="section-label">API</p>
-            <p className="mt-2 truncate text-sm font-medium text-slate-800 dark:text-slate-200">{config.apiBaseUrl}</p>
+            <p className="mt-2 truncate text-sm font-medium text-[var(--fg)]">{config.apiBaseUrl}</p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
               Health:{" "}
               <span
@@ -155,7 +155,7 @@ export default function SettingsPage() {
 
           <Card className="!p-4">
             <p className="section-label">Auth mode</p>
-            <p className="mt-2 text-sm font-medium text-slate-800 dark:text-slate-200">
+            <p className="mt-2 text-sm font-medium text-[var(--fg)]">
               {config.clerkEnabled ? "Clerk (Bearer JWT)" : "Internal token (dev)"}
             </p>
             {me ? (
@@ -258,7 +258,7 @@ export default function SettingsPage() {
                   setAiEnabled(e.target.checked);
                   setPrefsSaved(false);
                 }}
-                className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+                className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
               />
               AI summaries & categories (optional LLM; heuristic if no key)
             </label>
@@ -467,7 +467,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{k.name}</span>
+                    <span className="text-sm font-medium text-[var(--fg)]">{k.name}</span>
                     <span className="font-mono text-xs text-slate-500">{k.key_prefix}…</span>
                   </div>
                   <p className="text-xs text-slate-400 dark:text-slate-500">
@@ -558,7 +558,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <Badge tone={w.enabled ? "success" : "neutral"}>{w.enabled ? "Active" : "Disabled"}</Badge>
-                    <span className="truncate font-mono text-xs text-slate-900 dark:text-slate-100">{w.url}</span>
+                    <span className="truncate font-mono text-xs text-[var(--fg)]">{w.url}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
                     Added {new Date(w.created_at).toLocaleDateString()}
@@ -607,7 +607,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
                     <Badge tone={d.status === "sent" ? "success" : d.status === "failed" ? "danger" : "warn"}>
                       {d.status}
                     </Badge>
-                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{d.event_type}</span>
+                    <span className="text-sm font-medium text-[var(--fg)]">{d.event_type}</span>
                   </div>
                   <p className="mt-1 truncate font-mono text-xs text-slate-500 dark:text-slate-500">{d.id}</p>
                   {d.last_error ? (

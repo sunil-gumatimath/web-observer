@@ -112,6 +112,7 @@ export type ChangeEvent = {
 export type AlertInboxItem = ChangeEvent & {
   monitor_name: string;
   monitor_url: string;
+  monitor_brand?: MonitorBrand | null;
 };
 
 export type AlertsSummary = {

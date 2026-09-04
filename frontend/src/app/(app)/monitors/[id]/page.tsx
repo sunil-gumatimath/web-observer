@@ -368,9 +368,9 @@ function MonitorDetailInner() {
 							className="absolute inset-0 size-full object-cover object-top"
 						/>
 					) : (
-						<div className="absolute inset-0 bg-gradient-to-br from-sky-500/15 via-indigo-500/10 to-slate-200/50 dark:from-sky-950/50 dark:via-indigo-950/30 dark:to-slate-900" />
+						<div className="absolute inset-0 bg-[var(--surface)]" />
 					)}
-					<div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-white via-white/50 to-transparent dark:from-slate-950 dark:via-slate-950/50 dark:to-transparent" />
+					<div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)]/50 to-transparent" />
 				</div>
 
 				{/* Floating Header Content */}
@@ -469,7 +469,7 @@ function MonitorDetailInner() {
 
 					<div className="mt-3.5 min-w-0">
 						<div className="flex flex-wrap items-center gap-2">
-							<h1 className="truncate text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+							<h1 className="truncate text-xl sm:text-2xl font-bold tracking-tight text-[var(--fg)]">
 								{monitor.brand?.title || monitor.name}
 							</h1>
 							<ModeBadge mode={monitor.mode} />
@@ -485,7 +485,7 @@ function MonitorDetailInner() {
 							href={monitor.url}
 							target="_blank"
 							rel="noreferrer"
-							className="mt-1 inline-block truncate font-mono text-xs text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400"
+							className="mt-1 inline-block truncate font-mono text-xs text-slate-500 hover:text-[var(--accent)] dark:text-slate-400"
 						>
 							{monitor.url}
 						</a>
@@ -509,7 +509,7 @@ function MonitorDetailInner() {
 								href={shareUrl}
 								target="_blank"
 								rel="noreferrer"
-								className="mt-1 block truncate text-sm text-sky-600 hover:underline dark:text-sky-400"
+								className="mt-1 block truncate text-sm text-[var(--accent)] hover:opacity-80"
 							>
 								{shareUrl}
 							</a>
@@ -525,7 +525,7 @@ function MonitorDetailInner() {
 			) : null}
 
 			{showResultCard ? (
-				<Card className="mb-8 border-sky-500/25 bg-sky-500/5 dark:bg-sky-500/[0.06]">
+				<Card className="mb-8 border-[var(--accent)]/20 bg-[var(--accent)]/5 dark:bg-[var(--accent)]/10">
 					<div className="flex flex-wrap items-start justify-between gap-3">
 						<div>
 							<p className="section-label">
@@ -535,7 +535,7 @@ function MonitorDetailInner() {
 								<div className="mt-3 space-y-3">
 									<div className="flex flex-wrap items-center gap-2">
 										<Badge tone="warn">taking too long</Badge>
-										<span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+										<span className="text-sm font-medium text-[var(--fg)]">
 											Check is stuck or the worker is offline
 										</span>
 									</div>
@@ -565,9 +565,9 @@ function MonitorDetailInner() {
 								(latestRun && isActiveRun(latestRun)) ||
 								(showFreshBanner && !latestTerminal) ? (
 								<div className="mt-3 flex items-center gap-3">
-									<div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+									<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
 									<div>
-										<p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+										<p className="text-sm font-medium text-[var(--fg)]">
 											{latestRun?.status === "running"
 												? "Fetching page…"
 												: "Waiting for worker…"}
@@ -596,7 +596,7 @@ function MonitorDetailInner() {
 								<div className="mt-3 space-y-2">
 									<div className="flex flex-wrap items-center gap-2">
 										<Badge tone="success">succeeded</Badge>
-										<span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+										<span className="text-sm font-medium text-[var(--fg)]">
 											Baseline captured
 										</span>
 									</div>
@@ -622,7 +622,7 @@ function MonitorDetailInner() {
 								<div className="mt-3 space-y-2">
 									<div className="flex flex-wrap items-center gap-2">
 										<Badge tone="danger">failed</Badge>
-										<span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+										<span className="text-sm font-medium text-[var(--fg)]">
 											{latestTerminal.error_code ?? "Check failed"}
 										</span>
 									</div>
@@ -689,7 +689,7 @@ function MonitorDetailInner() {
 					{latestChange ? (
 						<Link
 							href={`/changes/${latestChange.id}`}
-							className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
+							className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:opacity-80"
 						>
 							View full diff &amp; history →
 						</Link>
@@ -707,10 +707,10 @@ function MonitorDetailInner() {
 					const hasDiffTelemetry = Boolean(latestChange.diff_summary && latestChange.diff_summary !== rawSummary && latestChange.diff_summary !== summaryBody);
 
 					return (
-						<div className="overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-50/70 via-white to-indigo-50/30 p-5 shadow-sm dark:border-sky-500/30 dark:from-sky-950/30 dark:via-slate-950 dark:to-indigo-950/20">
-							<div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-500/15 pb-3 dark:border-sky-500/25">
+						<div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 dark:border-[var(--accent)]/25">
+							<div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3 dark:border-[var(--accent)]/20">
 								<div className="flex flex-wrap items-center gap-2">
-									<span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">
+									<span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[var(--accent)]">
 										<svg className="size-3.5" viewBox="0 0 24 24" fill="currentColor">
 											<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
 										</svg>
@@ -751,11 +751,11 @@ function MonitorDetailInner() {
 										{title}
 									</h3>
 								) : null}
-								<p className={`text-sm leading-relaxed text-slate-800 dark:text-slate-200 ${title ? "mt-1.5" : "font-medium"}`}>
+								<p className={`text-sm leading-relaxed text-[var(--fg)] ${title ? "mt-1.5" : "font-medium"}`}>
 									{summaryBody}
 								</p>
 								{hasDiffTelemetry ? (
-									<div className="mt-3 flex items-center gap-2 pt-2.5 border-t border-sky-500/10 dark:border-sky-500/15 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+									<div className="mt-3 flex items-center gap-2 pt-2.5 border-t border-[var(--accent)]/10 dark:border-[var(--border)] text-[11px] font-mono text-slate-500 dark:text-slate-400">
 										<span className="text-slate-400 dark:text-slate-500">Diff telemetry:</span>
 										<span>{latestChange.diff_summary}</span>
 									</div>
@@ -770,7 +770,7 @@ function MonitorDetailInner() {
 								✓
 							</span>
 							<div className="min-w-0 flex-1">
-								<h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Monitoring active — waiting for changes</h3>
+								<h3 className="text-sm font-semibold text-[var(--fg)]">Monitoring active — waiting for changes</h3>
 								<p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
 									Baseline captured {latestTerminal.finished_at ? new Date(latestTerminal.finished_at).toLocaleString() : ""} · Next check {monitor.next_run_at ? new Date(monitor.next_run_at).toLocaleString() : `every ${monitor.schedule_interval_minutes}m`} · <ModeBadge mode={monitor.mode} />
 								</p>
@@ -781,18 +781,18 @@ function MonitorDetailInner() {
 						</div>
 					</div>
 				) : polling || (latestRun && isActiveRun(latestRun)) ? (
-					<div className="rounded-2xl border border-sky-500/20 bg-sky-50/50 p-5 shadow-sm dark:border-sky-500/20 dark:bg-sky-950/20">
+					<div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--border)]">
 						<div className="flex items-center gap-3">
-							<div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+							<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
 							<div>
-								<p className="text-sm font-medium text-slate-900 dark:text-slate-100">Capturing baseline…</p>
+								<p className="text-sm font-medium text-[var(--fg)]">Capturing baseline…</p>
 								<p className="text-xs text-slate-500 dark:text-slate-400">First success creates the baseline — summaries appear after the first real change.</p>
 							</div>
 						</div>
 					</div>
 				) : (
 					<div className="rounded-2xl border border-[var(--border)] bg-slate-50/60 p-5 shadow-sm dark:bg-slate-900/40">
-						<p className="text-sm font-medium text-slate-900 dark:text-slate-100">No baseline yet</p>
+						<p className="text-sm font-medium text-[var(--fg)]">No baseline yet</p>
 						<p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
 							Run a check to capture the baseline. AI summaries are generated for each change after that.
 						</p>
@@ -914,19 +914,19 @@ function MonitorDetailInner() {
 				</Card>
 				<Card className="!p-4">
 					<p className="section-label">Renderer</p>
-					<p className="mt-2.5 text-sm font-medium text-slate-900 dark:text-slate-100">
+					<p className="mt-2.5 text-sm font-medium text-[var(--fg)]">
 						{monitor.js_required ? "Playwright (JS)" : "HTTP"}
 					</p>
 				</Card>
 				<Card className="!p-4">
 					<p className="section-label">Schedule</p>
-					<p className="mt-2.5 text-sm font-medium text-slate-900 dark:text-slate-100">
+					<p className="mt-2.5 text-sm font-medium text-[var(--fg)]">
 						Every {monitor.schedule_interval_minutes} min
 					</p>
 				</Card>
 				<Card className="!p-4">
 					<p className="section-label">Failures in a row</p>
-					<p className="mt-2.5 text-sm font-medium text-slate-900 dark:text-slate-100">
+					<p className="mt-2.5 text-sm font-medium text-[var(--fg)]">
 						{monitor.consecutive_failures ?? 0}
 					</p>
 				</Card>
@@ -1014,7 +1014,7 @@ function MonitorDetailInner() {
 									<CategoryBadge category={c.change_category} />
 									{c.is_noise ? <Badge tone="warn">noise</Badge> : null}
 								</div>
-								<p className="mt-2 text-sm text-slate-800 dark:text-slate-200">
+								<p className="mt-2 text-sm text-[var(--fg)]">
 									{c.ai_summary || c.diff_summary || "Content changed"}
 								</p>
 								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">

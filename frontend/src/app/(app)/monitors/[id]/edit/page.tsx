@@ -262,7 +262,7 @@ export default function EditMonitorPage() {
 								) : null}
 								<div className="min-w-0 flex-1">
 									{brand.title ? (
-										<p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+										<p className="truncate text-sm font-medium text-[var(--fg)]">
 											{brand.title}
 										</p>
 									) : null}
@@ -350,21 +350,21 @@ export default function EditMonitorPage() {
 								type="checkbox"
 								checked={jsRequired}
 								onChange={(e) => setJsRequired(e.target.checked)}
-								className="h-4 w-4 rounded border-slate-400 bg-white text-sky-500 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+								className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
 							/>
 							JavaScript rendering required
 						</label>
 					) : mode === "readme" ? (
-						<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+						<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
 							README mode fetches <code>README.md</code> from the repo&apos;s default branch over HTTP.
 						</p>
 					) : mode === "site_links" ? (
-						<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+						<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
 							Site links mode reads the sitemap over HTTP and watches for added
 							or removed URLs.
 						</p>
 					) : (
-						<p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/5 dark:text-sky-200/90">
+						<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
 							RSS mode reads the feed over HTTP and watches for added or removed entries.
 						</p>
 					)}

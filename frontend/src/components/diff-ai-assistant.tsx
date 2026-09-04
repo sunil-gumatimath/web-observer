@@ -66,11 +66,11 @@ export function DiffAiAssistant({
   };
 
   return (
-    <div className="rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-50/50 via-white to-indigo-50/20 shadow-sm dark:border-sky-500/25 dark:from-sky-950/20 dark:via-slate-950 dark:to-indigo-950/15 overflow-hidden transition-all duration-200">
+    <div className="rounded-2xl border border-[var(--accent)]/25 bg-[var(--bg)] dark:border-[var(--accent)]/20 overflow-hidden transition-all duration-200">
       {/* Header bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-sky-500/15 dark:border-sky-500/20">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-[var(--border)] dark:border-[var(--border)]">
         <div className="flex items-center gap-2.5">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-sky-500/15 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400">
+          <span className="flex size-7 items-center justify-center rounded-lg bg-[var(--accent)]/10 text-[var(--accent)]">
             <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
             </svg>
@@ -80,7 +80,7 @@ export function DiffAiAssistant({
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Ask AI Analyst
               </h3>
-              <span className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-500/20 dark:text-sky-300">
+              <span className="rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
                 Vercel AI SDK
               </span>
             </div>
@@ -114,7 +114,7 @@ export function DiffAiAssistant({
                 type="button"
                 disabled={isLoading}
                 onClick={() => handleQuickPrompt(prompt)}
-                className="rounded-lg border border-sky-300/60 bg-white px-2.5 py-1 text-xs font-medium text-sky-800 shadow-xs hover:bg-sky-50 disabled:opacity-50 dark:border-sky-800 dark:bg-slate-900 dark:text-sky-300 dark:hover:bg-slate-800 transition-colors"
+                className="rounded-lg border border-[var(--border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--fg-2)] shadow-xs hover:bg-[var(--surface)] disabled:opacity-50 dark:bg-slate-900 transition-colors"
               >
                 {prompt} →
               </button>
@@ -125,8 +125,8 @@ export function DiffAiAssistant({
           {completion ? (
             <div className="rounded-xl border border-slate-200/90 bg-white p-4.5 shadow-xs dark:border-slate-800 dark:bg-slate-900/90">
               <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
-                  <span className="size-1.5 rounded-full bg-sky-500" />
+                <span className="font-semibold uppercase tracking-wider text-[var(--accent)] flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-[var(--accent)]" />
                   {activePrompt ? `Analysis: "${activePrompt}"` : "AI Intelligence Analysis"}
                 </span>
                 <div className="flex items-center gap-2">
@@ -140,7 +140,7 @@ export function DiffAiAssistant({
                   </Button>
                 </div>
               </div>
-              <div className="text-sm leading-relaxed text-slate-800 dark:text-slate-200">
+              <div className="text-sm leading-relaxed text-[var(--fg)]">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -155,7 +155,7 @@ export function DiffAiAssistant({
                       </h2>
                     ),
                     h3: ({ children }) => (
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-sky-700 dark:text-sky-300 mt-2.5 mb-1">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--accent)] mt-2.5 mb-1">
                         {children}
                       </h3>
                     ),
@@ -184,19 +184,19 @@ export function DiffAiAssistant({
                       </tbody>
                     ),
                     tr: ({ children }) => (
-                      <tr className="hover:bg-slate-50/70 transition-colors dark:hover:bg-slate-800/30">
+                      <tr className="hover:bg-[var(--surface)] transition-colors">
                         {children}
                       </tr>
                     ),
                     th: ({ children }) => <th className="px-3 py-2 text-left font-semibold">{children}</th>,
                     td: ({ children }) => <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{children}</td>,
                     code: ({ children }) => (
-                      <code className="rounded bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/50 px-1.5 py-0.5 font-mono text-[11px] text-sky-800 dark:text-sky-300">
+                      <code className="rounded bg-[var(--surface)] border border-[var(--border-soft)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--accent)]">
                         {children}
                       </code>
                     ),
                     blockquote: ({ children }) => (
-                      <blockquote className="border-l-2 border-sky-500 pl-3 my-2 text-slate-600 dark:text-slate-400 italic">
+                      <blockquote className="border-l-2 border-[var(--accent)] pl-3 my-2 text-slate-600 dark:text-slate-400 italic">
                         {children}
                       </blockquote>
                     ),
@@ -207,9 +207,9 @@ export function DiffAiAssistant({
               </div>
             </div>
           ) : isLoading ? (
-            <div className="rounded-xl border border-sky-200/50 bg-sky-50/20 p-5 text-center dark:border-sky-900/30 dark:bg-sky-950/10">
-              <div className="flex items-center justify-center gap-2 text-xs text-sky-600 dark:text-sky-400 font-medium">
-                <div className="size-2 rounded-full bg-sky-500 animate-pulse" />
+            <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 text-center">
+              <div className="flex items-center justify-center gap-2 text-xs text-[var(--accent)] font-medium">
+                <div className="size-2 rounded-full bg-[var(--accent)] animate-pulse" />
                 <span>AI Analyst is streaming analysis…</span>
               </div>
             </div>
@@ -228,7 +228,7 @@ export function DiffAiAssistant({
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask anything about this diff (e.g. security risks, executive summary, pricing changes)..."
               disabled={isLoading}
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500 disabled:opacity-50"
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[var(--focus-purple)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500 disabled:opacity-50"
             />
             <Button
               type="submit"

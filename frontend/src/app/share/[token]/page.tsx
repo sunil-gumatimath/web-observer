@@ -26,7 +26,7 @@ export default function PublicSharePage() {
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
         <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Link unavailable</h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{error}</p>
-        <Link href="/" className="mt-6 inline-block text-sm text-sky-600 hover:underline dark:text-sky-400">
+        <Link href="/" className="mt-6 inline-block text-sm text-[var(--accent)] hover:opacity-80">
           Web Observer
         </Link>
       </div>
@@ -44,7 +44,7 @@ export default function PublicSharePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <Link href="/" className="text-sm font-semibold tracking-tight text-sky-600 hover:underline dark:text-sky-400">
+      <Link href="/" className="text-sm font-semibold tracking-tight text-[var(--accent)] hover:opacity-80">
         Web Observer
       </Link>
 
@@ -52,7 +52,7 @@ export default function PublicSharePage() {
         {logo ? (
           <img src={logo} alt="" className="h-12 w-12 rounded-xl object-contain" />
         ) : (
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-lg font-bold text-white">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--fg)] text-lg font-bold text-white">
             {data.monitor.name?.slice(0, 1) || "W"}
           </div>
         )}
@@ -64,7 +64,7 @@ export default function PublicSharePage() {
             href={data.monitor.url}
             target="_blank"
             rel="noreferrer"
-            className="mt-0.5 block truncate text-sm text-sky-600 hover:underline dark:text-sky-400"
+            className="mt-0.5 block truncate text-sm text-[var(--accent)] hover:opacity-80"
           >
             {data.monitor.url}
           </a>

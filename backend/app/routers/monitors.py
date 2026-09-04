@@ -1210,6 +1210,7 @@ def list_alerts(
                 created_at=change.created_at,
                 monitor_name=monitor.name,
                 monitor_url=monitor.url,
+                monitor_brand=monitor.brand,
             )
         )
     return items

@@ -45,7 +45,7 @@ function HeaderLogo({ compact = false }: { compact?: boolean }) {
 	return (
 		<Link
 			href="/dashboard"
-			className="flex items-center gap-2.5 font-semibold tracking-tight text-slate-900 dark:text-white"
+			className="flex items-center gap-2.5 tracking-tight text-[var(--fg)]"
 		>
 			<Logo compact={compact} iconSize={36} />
 		</Link>
@@ -61,7 +61,7 @@ function ClerkAuthControls() {
 			<span
 				suppressHydrationWarning
 				title="Dev mode — internal token auth"
-				className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 dark:border-white/10 dark:text-slate-300"
+				className="rounded-[8px] border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted)]"
 			>
 				Dev
 			</span>
@@ -82,13 +82,13 @@ function ClerkUserControls() {
 			<div className="flex items-center gap-2" suppressHydrationWarning>
 				<Link
 					href="/sign-in"
-					className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+					className="rounded-full px-3 py-1.5 text-sm text-[var(--fg)] transition hover:text-[var(--accent)] hover:opacity-80"
 				>
 					Sign in
 				</Link>
 				<Link
 					href="/sign-up"
-					className="rounded-lg bg-gradient-to-b from-sky-500 to-sky-600 px-3 py-1.5 text-sm font-medium text-white shadow-glow-sm transition hover:from-sky-400 hover:to-sky-500"
+					className="rounded-full bg-[var(--fg)] px-3 py-1.5 text-sm text-[var(--bg)] transition hover:bg-[var(--fg-2)] dark:bg-white dark:text-black dark:hover:bg-neutral-200"
 				>
 					Sign up
 				</Link>
@@ -99,7 +99,7 @@ function ClerkUserControls() {
 		<UserButton
 			appearance={{
 				elements: {
-					avatarBox: "h-8 w-8 ring-2 ring-sky-500/30",
+					avatarBox: "h-8 w-8 ring-2 ring-[var(--accent)]/30",
 				},
 			}}
 		/>
@@ -142,7 +142,7 @@ function ClerkWorkspaceSwitcher() {
 		<select
 			aria-label="Switch workspace"
 			value={current}
-			className="hidden max-w-[10rem] rounded-lg border border-[var(--border)] bg-[var(--field-bg)] px-2 py-1.5 text-xs text-[var(--text)] sm:block"
+			className="hidden max-w-[10rem] rounded-[8px] border border-[var(--border)] bg-[var(--field-bg)] px-2 py-1.5 text-xs text-[var(--fg)] sm:block"
 			onChange={(e) => {
 				const id = e.target.value;
 				setCurrent(id);
@@ -194,9 +194,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 	// suppressHydrationWarning: browser extensions (e.g. Retriever) inject attributes
 	// like `rtrvr-ls` into the DOM before React hydrates, which is not an app bug.
 	return (
-		<div className="min-h-screen text-[var(--text)]" suppressHydrationWarning>
+		<div className="min-h-screen bg-[var(--bg)] text-[var(--fg)]" suppressHydrationWarning>
 			<header
-				className="sticky top-0 z-40 border-b border-[var(--border)] bg-[var(--bg-elevated)]/75 backdrop-blur-xl"
+				className="sticky top-0 z-40 border-b border-[var(--border-soft)] bg-[var(--bg)]"
 				suppressHydrationWarning
 			>
 				<div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3" suppressHydrationWarning>
@@ -222,7 +222,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 					<button
 						type="button"
 						onClick={() => setPaletteOpen(true)}
-						className="hidden h-9 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 sm:inline-flex"
+						className="hidden h-9 items-center gap-2 rounded-[8px] border border-[var(--border)] px-3 text-xs text-[var(--muted)] transition hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:inline-flex"
 						aria-label="Open command palette"
 					>
 						<span aria-hidden>⌕</span>
@@ -232,7 +232,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 					<button
 						type="button"
 						onClick={() => setPaletteOpen(true)}
-						className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 sm:hidden"
+						className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-[var(--border)] text-[var(--muted)] transition hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:hidden"
 						aria-label="Open search"
 					>
 						<span aria-hidden className="text-base leading-none">⌕</span>
@@ -244,7 +244,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 						</div>
 						<button
 							type="button"
-							className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 md:hidden"
+							className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-[var(--border)] text-[var(--muted)] transition hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:hidden"
 							onClick={() => setOpen((v) => !v)}
 							aria-label="Toggle menu"
 							aria-expanded={open}
@@ -315,6 +315,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 			</header>
 
 		<main
+			key={pathname}
 			className="mx-auto max-w-6xl px-4 py-8 animate-fade-in-up"
 			suppressHydrationWarning
 		>

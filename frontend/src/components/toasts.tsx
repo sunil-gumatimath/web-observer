@@ -43,13 +43,13 @@ const toneStyles: Record<ToastTone, string> = {
   success:
     "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
   error: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-200",
-  info: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-200",
+  info: "border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]",
 };
 
 const toneDot: Record<ToastTone, string> = {
   success: "bg-emerald-500",
   error: "bg-rose-500",
-  info: "bg-sky-500",
+  info: "bg-[var(--accent)]",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -91,8 +91,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role="status"
             className={cn(
-              "pointer-events-auto flex items-start gap-2.5 rounded-xl border px-3.5 py-3 text-sm shadow-lg backdrop-blur-xl animate-fade-in-up",
-              "bg-[var(--bg-elevated)]",
+              "pointer-events-auto flex items-start gap-2.5 rounded-[22px] border px-3.5 py-3 text-sm backdrop-blur-xl animate-fade-in-up",
+              "bg-[var(--bg)] border-[var(--border-soft)]",
               toneStyles[t.tone],
             )}
           >
@@ -101,7 +101,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               aria-hidden
             />
             <div className="min-w-0 flex-1">
-              <p className="font-medium leading-snug text-[var(--text)]">{t.title}</p>
+              <p className="font-medium leading-snug text-[var(--fg)]">{t.title}</p>
               {t.body ? (
                 <p className="mt-0.5 break-words text-xs leading-relaxed text-[var(--muted)]">
                   {t.body}
@@ -112,7 +112,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               type="button"
               onClick={() => dismiss(t.id)}
               aria-label="Dismiss notification"
-              className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)]"
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:text-[var(--accent)]"
             >
               ✕
             </button>

@@ -98,7 +98,7 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                    <span className="truncate text-sm font-medium text-[var(--fg)]">
                       {m.email || "User"}
                     </span>
                     <Badge tone={m.role === "owner" ? "warn" : m.role === "admin" ? "info" : "neutral"}>

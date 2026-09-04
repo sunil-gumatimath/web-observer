@@ -129,7 +129,7 @@ export function NotificationChannelsPanel({
 							className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-slate-50/60 px-3.5 py-3 dark:bg-slate-950/40"
 						>
 							<div className="min-w-0">
-								<p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+								<p className="truncate text-sm font-medium text-[var(--fg)]">
 									{c.address}
 								</p>
 								<p className="mt-0.5 text-xs capitalize text-slate-500 dark:text-slate-500">

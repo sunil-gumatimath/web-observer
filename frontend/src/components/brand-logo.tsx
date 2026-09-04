@@ -13,17 +13,34 @@ function initials(name: string): string {
 }
 
 const GRADIENTS = [
-  "from-sky-500 to-indigo-500",
-  "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
-  "from-violet-500 to-fuchsia-500",
-  "from-rose-500 to-pink-500",
+  "from-neutral-800 to-black",
+  "from-[#1863dc] to-[#4c6ee6]",
+  "from-neutral-500 to-neutral-700",
+  "from-[#17171c] to-[#34343c]",
+  "from-neutral-900 to-neutral-600",
 ];
 
 function gradientFor(key: string): string {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
   return GRADIENTS[h % GRADIENTS.length];
+}
+
+/**
+ * Last-resort brand mark: the site's favicon via Google's favicon service.
+ * The `domain` prop usually holds a full monitor URL, so parse the hostname
+ * defensively. Returns null when no usable host exists.
+ */
+function faviconFor(domain?: string): string | null {
+  if (!domain) return null;
+  try {
+    const host = new URL(domain.includes("://") ? domain : `https://${domain}`)
+      .hostname;
+    if (!host) return null;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+  } catch {
+    return null;
+  }
 }
 
 export function BrandLogo({
@@ -41,13 +58,14 @@ export function BrandLogo({
 }) {
   const primary = brandAssetUrl(brand?.logo_path);
   const fallback = brand?.logo_url || null;
+  const favicon = faviconFor(domain);
   const [errStep, setErrStep] = useState(0);
-  // 0 -> primary, 1 -> fallback, 2 -> avatar
-  const src = useMemo(() => {
-    if (errStep === 0 && primary) return primary;
-    if (errStep <= 1 && fallback) return fallback;
-    return null;
-  }, [errStep, primary, fallback]);
+  // 0 -> re-hosted logo, 1 -> origin logo_url, 2 -> domain favicon, 3 -> avatar
+  const sources = useMemo(
+    () => [primary, fallback, favicon].filter((s): s is string => !!s),
+    [primary, fallback, favicon],
+  );
+  const src = errStep < sources.length ? sources[errStep]! : null;
 
   if (src) {
     return (

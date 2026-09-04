@@ -35,7 +35,7 @@ export function Sparkline({ values, width = 220, height = 48, label }: Props) {
       viewBox={`0 0 ${width} ${height}`}
       role="img"
       aria-label={label ?? `Trend over ${n} points`}
-      className="text-sky-500 dark:text-sky-400"
+      className="text-[var(--accent)]"
     >
       <path d={area} fill="currentColor" opacity={0.12} stroke="none" />
       <path d={line} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
@@ -53,8 +53,12 @@ export function ActivityBars({ values, labels }: { values: number[]; labels: str
         <div
           key={i}
           title={`${labels[i] ?? `Day ${i + 1}`}: ${v} change${v === 1 ? "" : "s"}`}
-          className="flex-1 rounded-sm bg-sky-500/70 transition-all hover:bg-sky-400 dark:bg-sky-500/60 dark:hover:bg-sky-400"
-          style={{ height: `${6 + (v / max) * 54}px`, opacity: v === 0 ? 0.25 : 1 }}
+          className={
+            v === 0
+              ? "flex-1 rounded-sm bg-[var(--accent)]/70 opacity-25 transition-all"
+              : "flex-1 rounded-sm bg-[var(--accent)]/70 opacity-100 transition-all hover:opacity-80 dark:bg-[var(--accent)]/60"
+          }
+          style={{ height: `${6 + (v / max) * 54}px` }}
         />
       ))}
     </div>

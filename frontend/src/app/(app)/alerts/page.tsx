@@ -393,7 +393,7 @@ export default function AlertsPage() {
 								className={`transition-all ${
 									a.is_read
 										? "!p-0 border border-[var(--border)]"
-										: "!p-0 border-l-4 border-l-sky-500 bg-sky-500/[0.02] dark:bg-sky-500/[0.04]"
+										: "!p-0 border-l-4 border-l-[var(--accent)] bg-[var(--accent)]/[0.04] "
 								}`}
 							>
 								{/* Alert Header Row */}
@@ -401,6 +401,7 @@ export default function AlertsPage() {
 									<div className="flex items-start gap-3 min-w-0 flex-1">
 										{/* Brand / Favicon Logo */}
 										<BrandLogo
+											brand={a.monitor_brand ?? null}
 											name={a.monitor_name}
 											domain={a.monitor_url}
 											size={32}
@@ -418,7 +419,7 @@ export default function AlertsPage() {
 												)}
 												<Link
 													href={`/monitors/${a.monitor_id}`}
-													className="text-sm font-semibold text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-400 truncate"
+													className="text-sm font-semibold text-[var(--fg)] hover:text-[var(--accent)] truncate"
 												>
 													{a.monitor_name}
 												</Link>
@@ -429,7 +430,7 @@ export default function AlertsPage() {
 											</div>
 
 											{/* AI Summary / Headline */}
-											<p className="text-[15px] font-medium leading-snug text-slate-900 dark:text-slate-100">
+											<p className="text-[15px] font-medium leading-snug text-[var(--fg)]">
 												{reason ?? headline}
 											</p>
 											{reason ? (

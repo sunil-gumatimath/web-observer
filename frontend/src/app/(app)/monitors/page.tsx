@@ -359,7 +359,7 @@ export default function MonitorsPage() {
 																<BrandLogo brand={m.brand} name={m.name} domain={m.url} size={24} />
 																<Link
 																	href={`/monitors/${m.id}`}
-																	className="font-medium text-slate-900 hover:text-sky-600 dark:text-slate-100 dark:hover:text-sky-300"
+																	className="font-medium text-slate-900 hover:text-[var(--accent)] dark:text-slate-100"
 																>
 																	{m.name}
 																</Link>
@@ -402,7 +402,7 @@ export default function MonitorsPage() {
 												router.push(`/monitors/${m.id}`);
 											}
 										}}
-										className="glass-card !p-4 transition cursor-pointer hover:border-sky-500/40 dark:hover:border-sky-500/25"
+										className="glass-card !p-4 transition cursor-pointer hover:border-[var(--accent)]/40 dark:hover:border-[var(--accent)]/20"
 									>
 										<div className="flex items-start justify-between gap-2">
 											<div className="flex items-center gap-2.5 min-w-0">
@@ -416,7 +416,7 @@ export default function MonitorsPage() {
 													/>
 												</span>
 												<BrandLogo brand={m.brand} name={m.name} domain={m.url} size={24} />
-												<p className="truncate font-medium text-slate-900 dark:text-slate-100">
+												<p className="truncate font-medium text-[var(--fg)]">
 													{m.name}
 												</p>
 											</div>

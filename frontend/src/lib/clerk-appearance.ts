@@ -5,32 +5,32 @@
 export function clerkAppearance(isDark: boolean) {
   return {
     variables: {
-      colorPrimary: "#0ea5e9",
-      colorBackground: isDark ? "#0b1220" : "#ffffff",
-      colorInputBackground: isDark ? "#020617" : "#f8fafc",
-      colorInputText: isDark ? "#e2e8f0" : "#0f172a",
-      colorText: isDark ? "#e2e8f0" : "#0f172a",
-      colorTextSecondary: isDark ? "#94a3b8" : "#64748b",
-      colorNeutral: isDark ? "#1e293b" : "#e2e8f0",
-      borderRadius: "0.75rem",
+      colorPrimary: "#1863dc",
+      colorBackground: isDark ? "#17171c" : "#ffffff",
+      colorInputBackground: isDark ? "#101014" : "#ffffff",
+      colorInputText: isDark ? "#ffffff" : "#000000",
+      colorText: isDark ? "#ffffff" : "#000000",
+      colorTextSecondary: isDark ? "#9a9aa5" : "#93939f",
+      colorNeutral: isDark ? "#34343c" : "#d9d9dd",
+      borderRadius: "8px",
     },
     elements: {
       rootBox: "mx-auto w-full max-w-md",
       card: isDark
-        ? "border border-white/10 bg-slate-900/80 shadow-2xl shadow-black/40 backdrop-blur-xl"
-        : "border border-slate-200 bg-white shadow-xl shadow-slate-300/30 backdrop-blur-xl",
-      headerTitle: isDark ? "text-white" : "text-slate-900",
-      headerSubtitle: isDark ? "text-slate-400" : "text-slate-500",
+        ? "border border-white/10 bg-[#1e1e24] shadow-none"
+        : "border border-[#f2f2f2] bg-white shadow-none",
+      headerTitle: isDark ? "text-white" : "text-black",
+      headerSubtitle: isDark ? "text-neutral-400" : "text-[#93939f]",
       socialButtonsBlockButton: isDark
-        ? "border border-white/10 bg-slate-950/60 text-slate-100 hover:bg-slate-800"
-        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100",
-      formButtonPrimary: "bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-500/20",
+        ? "border border-white/10 bg-black text-white hover:bg-neutral-800"
+        : "border border-[#d9d9dd] bg-white text-black hover:text-[#1863dc]",
+      formButtonPrimary: "bg-black hover:bg-neutral-800 text-white dark:bg-white dark:hover:bg-neutral-200 dark:text-black",
       footerActionLink: isDark
-        ? "text-sky-400 hover:text-sky-300"
-        : "text-sky-600 hover:text-sky-700",
+        ? "text-[#6b9bff] hover:text-[#86adff]"
+        : "text-[#1863dc] hover:text-[#1559c4]",
       formFieldInput: isDark
-        ? "border-white/10 bg-slate-950 text-slate-100"
-        : "border-slate-300 bg-white text-slate-900",
+        ? "border-white/10 bg-black text-white"
+        : "border-[#d9d9dd] bg-white text-black",
     },
   };
 }

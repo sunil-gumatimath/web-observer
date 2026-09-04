@@ -96,7 +96,7 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
             max={100}
             value={maxUses}
             onChange={(e) => setMaxUses(Number(e.target.value))}
-            className="w-24 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm focus:border-sky-400 focus:outline-none dark:bg-slate-950"
+            className="w-24 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm focus:border-[var(--focus-purple)] focus:outline-none dark:bg-slate-950"
           />
         </div>
         <div>
@@ -107,7 +107,7 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
             max={365}
             value={expiresDays}
             onChange={(e) => setExpiresDays(Number(e.target.value))}
-            className="w-24 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm focus:border-sky-400 focus:outline-none dark:bg-slate-950"
+            className="w-24 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm focus:border-[var(--focus-purple)] focus:outline-none dark:bg-slate-950"
           />
         </div>
         <Button type="button" variant="secondary" disabled={creating} onClick={create}>
@@ -116,8 +116,8 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
       </div>
 
       {generated ? (
-        <div className="space-y-2 rounded-xl border border-sky-500/30 bg-sky-500/10 p-3">
-          <p className="break-all font-mono text-xs text-sky-800 dark:text-sky-100">{generated}</p>
+        <div className="space-y-2 rounded-xl border border-[var(--accent)]/25 bg-[var(--accent)]/10 p-3">
+          <p className="break-all font-mono text-xs text-[var(--accent)]">{generated}</p>
           <Button type="button" variant="ghost" size="sm" onClick={copy}>
             Copy link
           </Button>

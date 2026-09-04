@@ -26,13 +26,13 @@ export function Button({
 }) {
 	const styles = {
 		primary:
-			"bg-gradient-to-b from-sky-500 to-sky-600 text-white shadow-glow-sm hover:from-sky-400 hover:to-sky-500 border border-sky-400/30",
+			"bg-[var(--fg)] text-[var(--bg)] hover:bg-[var(--fg-2)] border border-transparent dark:bg-white dark:text-black dark:hover:bg-neutral-200",
 		secondary:
-			"bg-[var(--bg-elevated)] text-[var(--text)] border border-[var(--border)] hover:bg-[var(--surface-bg)] shadow-sm dark:border-white/10 dark:hover:bg-white/5",
+			"bg-transparent text-[var(--fg)] border border-[var(--border)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:opacity-80",
 		danger:
-			"bg-rose-600/90 text-white hover:bg-rose-500 border border-rose-400/20 shadow-sm",
+			"bg-[var(--danger)] text-white hover:opacity-90 border border-transparent shadow-sm",
 		ghost:
-			"bg-transparent text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)] border border-transparent dark:hover:bg-white/5",
+			"bg-transparent text-[var(--fg)] hover:text-[var(--accent)] hover:opacity-80 border border-transparent",
 	}[variant];
 
 	const sizes = {
@@ -44,8 +44,8 @@ export function Button({
 	return (
 		<button
 			className={cn(
-				"inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition",
-				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40",
+				"inline-flex items-center justify-center gap-1.5 rounded-full font-normal transition",
+				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-1",
 				"disabled:pointer-events-none disabled:opacity-45",
 				styles,
 				sizes,
@@ -129,8 +129,7 @@ export function Card({
 		<div
 			className={cn(
 				"glass-card",
-				hover &&
-					"transition hover:border-sky-500/40 hover:shadow-glow-sm dark:hover:border-sky-500/25",
+				hover && "transition hover:border-[var(--border)]",
 				className,
 			)}
 			suppressHydrationWarning
@@ -151,13 +150,13 @@ export function Badge({
 }) {
 	const styles = {
 		neutral:
-			"bg-slate-200/90 text-slate-700 ring-1 ring-slate-300 dark:bg-slate-800/90 dark:text-slate-300 dark:ring-white/10",
+			"bg-[var(--surface)] text-[var(--muted)] ring-1 ring-[var(--border)]",
 		success:
-			"bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25",
+			"bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/25 dark:text-emerald-300",
 		danger:
-			"bg-rose-500/15 text-rose-700 ring-1 ring-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25",
-		warn: "bg-amber-500/15 text-amber-700 ring-1 ring-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/25",
-		info: "bg-sky-500/15 text-sky-700 ring-1 ring-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25",
+			"bg-rose-500/10 text-rose-700 ring-1 ring-rose-500/25 dark:text-rose-300",
+		warn: "bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/25 dark:text-amber-200",
+		info: "bg-[var(--accent)]/10 text-[var(--accent)] ring-1 ring-[var(--accent)]/25",
 	}[tone];
 	return (
 		<span
@@ -184,11 +183,11 @@ export function PageHeader({
 	return (
 		<div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 			<div className="min-w-0">
-				<h1 className="text-2xl font-semibold tracking-tight text-[var(--text)] sm:text-3xl">
+				<h1 className="font-display text-3xl tracking-tight text-[var(--fg)] sm:text-[48px] sm:leading-[1.2]">
 					{title}
 				</h1>
 				{description ? (
-					<p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
+					<p className="mt-1.5 max-w-2xl text-base leading-relaxed text-[var(--muted)]">
 						{description}
 					</p>
 				) : null}
@@ -215,7 +214,7 @@ export function EmptyState({
 }) {
 	return (
 		<Card className="flex flex-col items-center py-12 text-center">
-			<div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500/15 text-sky-600 ring-1 ring-sky-500/25 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20">
+			<div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[22px] bg-[var(--surface)] text-[var(--fg)] ring-1 ring-[var(--border-soft)]">
 				{icon ?? (
 					<svg
 						className="h-6 w-6"
@@ -232,7 +231,7 @@ export function EmptyState({
 					</svg>
 				)}
 			</div>
-			<p className="text-base font-medium text-[var(--text)]">{title}</p>
+			<p className="text-base font-medium text-[var(--fg)]">{title}</p>
 			<p className="mt-1.5 max-w-sm text-sm text-[var(--muted)]">{body}</p>
 			{action ? <div className="mt-5">{action}</div> : null}
 		</Card>
@@ -305,11 +304,11 @@ export function Spinner({
 			suppressHydrationWarning
 		>
 			<div
-				className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500/20 border-t-sky-500"
+				className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--fg)]"
 				suppressHydrationWarning
 			/>
 			<p
-				className="text-sm text-slate-500 dark:text-slate-500"
+				className="text-sm text-[var(--muted)]"
 				suppressHydrationWarning
 			>
 				{label}
@@ -336,18 +335,17 @@ export function StatCard({
 
 	return (
 		<Card className="relative overflow-hidden">
-			<div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-sky-500/10 blur-2xl" />
 			<p className="section-label">{label}</p>
-			<p className="mt-3 text-3xl font-semibold tracking-tight text-[var(--text)]">
+			<p className="mt-3 font-display text-3xl tracking-tight text-[var(--fg)]">
 				{value}
 			</p>
 			{hint ? (
 				<p className="mt-1.5 text-xs text-[var(--muted)]">{hint}</p>
 			) : null}
 			{pct != null ? (
-				<div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
+				<div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--border-soft)]">
 					<div
-						className="h-full rounded-full bg-gradient-to-r from-sky-500 to-indigo-400 transition-all"
+						className="h-full rounded-full bg-[var(--fg)] transition-all"
 						style={{ width: `${pct}%` }}
 					/>
 				</div>
@@ -372,8 +370,8 @@ export function SectionTitle({
 }
 
 const segmentedBtn =
-	"rounded-lg px-3 py-1.5 text-sm font-medium transition " +
-	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40";
+	"rounded-lg px-3 py-1.5 text-sm transition " +
+	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
 /**
  * Single styled toggle group for 2+ mutually exclusive options.
@@ -412,8 +410,8 @@ export function SegmentedControl<T extends string>({
 						className={cn(
 							segmentedBtn,
 							active
-								? "bg-sky-600 text-white shadow-sm"
-								: "border border-transparent text-[var(--muted)] hover:bg-[var(--nav-active-bg)] hover:text-[var(--text)]",
+								? "bg-[var(--fg)] text-[var(--bg)] dark:bg-white dark:text-black"
+								: "border border-transparent text-[var(--muted)] hover:text-[var(--accent)]",
 						)}
 					>
 						{opt.label}

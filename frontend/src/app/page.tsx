@@ -6,77 +6,53 @@ const features = [
   {
     title: "Precise change detection",
     body: "Watch a page's content, a site's sitemap links, a product's price, or a list of links.",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M2.25 12 9 5.25l4.5 4.5L21.75 3M21.75 12v6.75a2.25 2.25 0 0 1-2.25 2.25H4.5A2.25 2.25 0 0 1 2.25 18.75V12"
-        />
-      </svg>
-    ),
+    eyebrow: "Detect",
   },
   {
     title: "Clear before / after diffs",
     body: "Inspect deterministic text diffs and optional AI summaries so noise stays out of your inbox.",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
-        />
-      </svg>
-    ),
+    eyebrow: "Compare",
   },
   {
     title: "Alerts where you work",
     body: "Email, Slack, or Discord when something meaningful changes — not every cookie banner.",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"
-        />
-      </svg>
-    ),
+    eyebrow: "Alert",
   },
 ];
+
+const trustBar = ["Product teams", "Founders", "Researchers", "Agencies", "E-commerce", "Compliance"];
 
 export default function HomePage() {
   // suppressHydrationWarning: browser extensions (e.g. Retriever) inject attrs
   // like `rtrvr-ls` into the DOM before React hydrates — not an app bug.
   return (
-    <div className="relative min-h-screen overflow-hidden text-[var(--text)]" suppressHydrationWarning>
-      <div className="pointer-events-none absolute inset-0 hero-grid" />
-
+    <div className="relative min-h-screen bg-[var(--bg)] text-[var(--fg)]" suppressHydrationWarning>
       <header
-        className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-4 py-5"
+        className="relative z-10 mx-auto flex max-w-[1440px] items-center justify-between px-8 py-5"
         suppressHydrationWarning
       >
-        <Link href="/dashboard" className="flex items-center gap-2.5 font-semibold tracking-tight">
+        <Link href="/dashboard" className="flex items-center gap-2.5" aria-label="Web Observer home">
           <Logo iconSize={36} />
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <ThemeToggle />
           <Link
             href="/docs"
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            className="btn-cohere btn-cohere-ghost !px-3 !py-1.5 !text-sm"
             suppressHydrationWarning
           >
             Docs
           </Link>
           <Link
             href="/sign-in"
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            className="btn-cohere btn-cohere-ghost !px-3 !py-1.5 !text-sm"
             suppressHydrationWarning
           >
             Sign in
           </Link>
           <Link
             href="/sign-up"
-            className="rounded-lg bg-gradient-to-b from-sky-500 to-sky-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-glow-sm transition hover:from-sky-400 hover:to-sky-500"
+            className="btn-cohere btn-cohere-primary !px-[18px] !py-2.5 !text-sm"
             suppressHydrationWarning
           >
             Get started
@@ -84,83 +60,103 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main
-        className="relative z-10 mx-auto max-w-6xl px-4 pb-24 pt-12 sm:pt-20"
-        suppressHydrationWarning
-      >
-        <div className="mx-auto max-w-3xl text-center animate-fade-in-up" suppressHydrationWarning>
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-sky-500/25 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-600 dark:text-sky-300">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400" />
-            Web change detection & high-signal alerts
-          </div>
-          <h1
-            className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl md:text-6xl md:leading-[1.08] dark:text-white"
-            suppressHydrationWarning
-          >
-            Know the moment{" "}
-            <span suppressHydrationWarning className="bg-gradient-to-r from-sky-500 via-cyan-500 to-indigo-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-cyan-200 dark:to-indigo-300">
-              pages you care about
-            </span>{" "}
-            change.
-          </h1>
-          <p
-            className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg dark:text-slate-400"
-            suppressHydrationWarning
-          >
-            Track public URLs or precise sections, get email and webhook alerts, and review clear
-            before-and-after diffs. Built for product teams, founders, and researchers.
-          </p>
-          <div
-            className="mt-9 flex flex-wrap items-center justify-center gap-3"
-            suppressHydrationWarning
-          >
-            <Link
-              href="/sign-up"
-              className="rounded-xl bg-gradient-to-b from-sky-500 to-sky-600 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:from-sky-400 hover:to-sky-500"
+      <main className="relative z-10 mx-auto max-w-[1440px] px-8 pb-24" suppressHydrationWarning>
+        <section className="grid gap-12 pt-[60px] lg:grid-cols-[1.4fr_1fr] lg:items-end">
+          <div suppressHydrationWarning>
+            <p className="eyebrow">Web change detection · high-signal alerts</p>
+            <h1
+              className="mt-4 font-display text-[48px] leading-[1.0] tracking-[-0.02em] sm:text-[60px] lg:text-[72px]"
               suppressHydrationWarning
             >
-              Create free account
-            </Link>
-            <Link
-              href="/sign-in"
-              className="rounded-xl border border-slate-300 bg-white/60 px-6 py-3 text-sm font-semibold text-slate-800 backdrop-blur transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10"
-              suppressHydrationWarning
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/dashboard"
-              className="rounded-xl px-4 py-3 text-sm font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              suppressHydrationWarning
-            >
-              Go to dashboard →
-            </Link>
-          </div>
-        </div>
-
-        <div className="mx-auto mt-20 grid max-w-5xl gap-4 sm:grid-cols-3">
-          {features.map((f) => (
-            <div
-              key={f.title}
-              className="glass-card group transition hover:border-sky-500/40 hover:shadow-glow-sm dark:hover:border-sky-500/25"
-            >
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-600 ring-1 ring-sky-500/25 transition group-hover:bg-sky-500/20 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20 dark:group-hover:bg-sky-500/15">
-                {f.icon}
-              </div>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">{f.title}</h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{f.body}</p>
+              Know the moment pages you care about change.
+            </h1>
+            <p className="lead mt-6 max-w-[52ch]" suppressHydrationWarning>
+              Track public URLs or precise sections, get email and webhook alerts, and review clear
+              before-and-after diffs. Built for product teams, founders, and researchers.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3" suppressHydrationWarning>
+              <Link
+                href="/sign-up"
+                className="btn-cohere btn-cohere-primary"
+                suppressHydrationWarning
+              >
+                Create free account
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </Link>
+              <Link
+                href="/sign-in"
+                className="btn-cohere btn-cohere-ghost"
+                suppressHydrationWarning
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/dashboard"
+                className="btn-cohere btn-cohere-ghost !text-sm"
+                suppressHydrationWarning
+              >
+                Go to dashboard →
+              </Link>
             </div>
-          ))}
-        </div>
+          </div>
+          <aside className="rounded-[22px] border border-[var(--border-soft)] bg-[var(--surface)] p-4" aria-label="System status">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-[var(--muted)]">Platform status</span>
+              <span className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+                Operational
+              </span>
+            </div>
+            <p className="mt-3 text-sm text-[var(--muted)]">Deterministic diffs · AI summaries · ⌘K search</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">Press <kbd>⌘</kbd> <kbd>K</kbd> anywhere in the app.</p>
+          </aside>
+        </section>
 
-        <div className="mx-auto mt-16 max-w-3xl rounded-2xl border border-[var(--border)] bg-gradient-to-br from-white/80 to-slate-100/80 p-8 text-center shadow-card backdrop-blur dark:from-slate-900/80 dark:to-slate-950/80">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+        <section className="border-t border-[var(--border-soft)] pt-[60px]">
+          <p className="eyebrow">What this does</p>
+          <h2 className="mt-3 max-w-[28ch] text-[32px] font-normal leading-[1.2] tracking-[-0.01em]">
+            Precise monitoring with enterprise clarity.
+          </h2>
+          <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {features.map((f) => (
+              <article
+                key={f.title}
+                className="flex flex-col gap-3 rounded-[22px] border border-[var(--border-soft)] bg-[var(--bg)] p-6"
+              >
+                <p className="eyebrow">{f.eyebrow}</p>
+                <h3 className="text-2xl font-normal leading-[1.3]">{f.title}</h3>
+                <p className="text-sm leading-relaxed text-[var(--muted)]">{f.body}</p>
+                <Link href="/docs" className="mt-auto text-sm">Learn more →</Link>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-[60px] rounded-[22px] bg-[#17171c] px-8 py-14 text-center text-white dark:border dark:border-[var(--border)]">
+          <p className="font-mono text-sm uppercase tracking-[0.028em] text-neutral-400">Enterprise-ready monitoring</p>
+          <h2 className="mx-auto mt-3 max-w-[24ch] font-display text-[32px] leading-[1.1] sm:text-[60px]">
+            Serious infrastructure for page changes.
+          </h2>
+          <p className="mx-auto mt-4 max-w-xl text-[18px] leading-[1.4] text-neutral-400">
             Page content · Site links · Product price · List items
           </p>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-500">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/sign-up" className="inline-flex items-center gap-2 rounded-full bg-white px-[18px] py-2.5 text-base text-black hover:bg-neutral-200">
+              Start monitoring
+            </Link>
+            <Link href="/docs" className="inline-flex items-center gap-2 rounded-full px-[18px] py-2.5 text-base text-white hover:text-[#6b9bff]">
+              Read docs
+            </Link>
+          </div>
+          <div className="mx-auto mt-10 flex max-w-3xl flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-white/10 pt-6 text-xs uppercase tracking-[0.14em] text-neutral-500">
+            {trustBar.map((t) => (
+              <span key={t}>{t}</span>
+            ))}
+          </div>
+          <p className="mt-6 text-xs text-neutral-500">
             Auth powered by Clerk. After sign-in you land on the dashboard.
           </p>
-        </div>
+        </section>
       </main>
     </div>
   );

@@ -3,86 +3,152 @@
 @tailwind utilities;
 
 /*
- * Light theme is the default (:root).
- * Dark theme is activated by a `.dark` class on <html> (next-themes, class strategy).
- * All component classes below reference these tokens so they adapt automatically.
+ * Cohere design system (https://github.com/nexu-io/open-design/tree/main/design-systems/cohere)
+ * Bright white canvas, cool gray containment borders, 22px signature radius,
+ * Interaction Blue (#1863dc) only on hover/focus, Space Grotesk display + Inter body.
+ * Light theme is Cohere canonical. .dark keeps the same language on charcoal.
  */
 :root {
   color-scheme: light;
-  --bg: #f8fafc;
+  /* Cohere core */
+  --bg: #ffffff;
+  --surface: #fafafa;
+  --surface-warm: var(--surface);
+  --fg: #000000;
+  --fg-2: #212121;
+  --muted: #93939f;
+  --meta: var(--muted);
+  --border: #d9d9dd;
+  --border-soft: #f2f2f2;
+  --accent: #1863dc;
+  --accent-on: #ffffff;
+  --accent-hover: #1559c4;
+  --accent-active: #124eaa;
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #ef4444;
+  --focus-purple: #9b60aa;
+
+  --font-display: "CohereText", "Space Grotesk", Inter, ui-sans-serif, sans-serif;
+  --font-body: "Unica77 Cohere Web", Inter, Arial, ui-sans-serif, sans-serif;
+  --font-mono: "CohereMono", "JetBrains Mono", ui-monospace, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 60px;
+  --text-4xl: 72px;
+  --leading-body: 1.5;
+  --leading-tight: 1;
+  --tracking-display: -0.02em;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 60px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  --radius-sm: 8px;
+  --radius-md: 22px;
+  --radius-lg: 22px;
+  --radius-pill: 9999px;
+
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border-soft);
+  --elev-raised: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --focus-ring: 0 0 0 2px var(--accent);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1440px;
+
+  /* Back-compat aliases for existing app code */
   --bg-elevated: #ffffff;
-  --bg-card: rgba(255, 255, 255, 0.9);
-  --border: rgba(15, 23, 42, 0.10);
-  --border-strong: rgba(15, 23, 42, 0.16);
-  --accent: #0284c7;
-  --accent-strong: #0369a1;
-  --text: #0f172a;
-  --muted: #64748b;
-  --ring: rgba(2, 132, 199, 0.30);
+  --bg-card: #ffffff;
+  --text: var(--fg);
+  --border-strong: var(--border);
+  --accent-strong: var(--accent-hover);
+  --ring: rgba(24, 99, 220, 0.3);
   --field-bg: #ffffff;
-  --field-border: rgba(15, 23, 42, 0.12);
-  --surface-bg: rgba(255, 255, 255, 0.85);
-  --card-bg: rgba(255, 255, 255, 0.92);
-  --nav-active-bg: rgba(2, 132, 199, 0.10);
-  --nav-active-text: #0369a1;
-  --nav-active-ring: rgba(2, 132, 199, 0.25);
-  --hero-grid: rgba(15, 23, 42, 0.06);
-  --diff-bg: #f8fafc;
-  --diff-text: #334155;
+  --field-border: var(--border);
+  --surface-bg: var(--surface);
+  --card-bg: #ffffff;
+  --nav-active-bg: rgba(24, 99, 220, 0.08);
+  --nav-active-text: var(--fg);
+  --nav-active-ring: rgba(24, 99, 220, 0.25);
+  --hero-grid: rgba(23, 23, 28, 0.06);
+  --diff-bg: var(--surface);
+  --diff-text: var(--fg-2);
 }
 
 .dark {
   color-scheme: dark;
-  --bg: #05070f;
-  --bg-elevated: #0b1220;
-  --bg-card: rgba(15, 23, 42, 0.72);
-  --border: rgba(148, 163, 184, 0.12);
-  --border-strong: rgba(148, 163, 184, 0.22);
-  --accent: #38bdf8;
-  --accent-strong: #0ea5e9;
-  --text: #e2e8f0;
-  --muted: #a2b2c6;
-  --ring: rgba(56, 189, 248, 0.35);
-  --field-bg: rgba(2, 6, 23, 0.7);
-  --field-border: rgba(255, 255, 255, 0.10);
-  --surface-bg: rgba(15, 23, 42, 0.4);
-  --card-bg: rgba(15, 23, 42, 0.55);
-  --nav-active-bg: rgba(56, 189, 248, 0.10);
-  --nav-active-text: #7dd3fc;
-  --nav-active-ring: rgba(56, 189, 248, 0.25);
-  --hero-grid: rgba(148, 163, 184, 0.06);
-  --diff-bg: rgba(2, 6, 23, 0.8);
-  --diff-text: #cbd5e1;
+  --bg: #17171c;
+  --surface: #1e1e24;
+  --surface-warm: var(--surface);
+  --fg: #ffffff;
+  --fg-2: #e4e4e7;
+  --muted: #9a9aa5;
+  --meta: var(--muted);
+  --border: #34343c;
+  --border-soft: #26262c;
+  --accent: #6b9bff;
+  --accent-on: #0b0b0e;
+  --accent-hover: #86adff;
+  --accent-active: #9dbdff;
+  --focus-purple: #9b60aa;
+  --hero-grid: rgba(255, 255, 255, 0.06);
+  --diff-bg: #1e1e24;
+  --diff-text: #e4e4e7;
+
+  --bg-elevated: #1e1e24;
+  --bg-card: #1e1e24;
+  --text: var(--fg);
+  --border-strong: var(--border);
+  --accent-strong: var(--accent-hover);
+  --ring: rgba(107, 155, 255, 0.35);
+  --field-bg: #101014;
+  --field-border: var(--border);
+  --surface-bg: #1e1e24;
+  --card-bg: #1e1e24;
+  --nav-active-bg: rgba(107, 155, 255, 0.12);
+  --nav-active-text: #ffffff;
+  --nav-active-ring: rgba(107, 155, 255, 0.3);
 }
 
 body {
   @apply min-h-screen antialiased;
-  color: var(--text);
-  background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(14, 165, 233, 0.10), transparent 55%),
-    radial-gradient(900px 500px at 90% 0%, rgba(99, 102, 241, 0.08), transparent 50%),
-    radial-gradient(800px 400px at 50% 100%, rgba(16, 185, 129, 0.05), transparent 55%),
-    var(--bg);
+  color: var(--fg);
+  background: var(--bg);
+  font-family: var(--font-body);
   font-feature-settings: "ss01" on, "cv11" on;
 }
 
-.dark body {
-  background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(14, 165, 233, 0.16), transparent 55%),
-    radial-gradient(900px 500px at 90% 0%, rgba(99, 102, 241, 0.12), transparent 50%),
-    radial-gradient(800px 400px at 50% 100%, rgba(16, 185, 129, 0.06), transparent 55%),
-    var(--bg);
+h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-display);
 }
 
 ::selection {
-  background: rgba(14, 165, 233, 0.30);
+  background: rgba(24, 99, 220, 0.18);
   color: inherit;
 }
 
 /* Scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
+  scrollbar-color: rgba(147, 147, 159, 0.5) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -91,58 +157,60 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.4);
+  background: rgba(147, 147, 159, 0.5);
   border-radius: 999px;
 }
 
 a {
   @apply transition-colors;
+  color: var(--fg);
 }
 
-/* Form controls & shared surfaces — theme-aware via CSS variables */
+a:hover {
+  color: var(--accent);
+}
+
+/* Form controls & shared surfaces — Cohere rules */
 @layer components {
   .field {
-    @apply w-full rounded-lg px-3 py-2.5 text-sm outline-none transition;
+    @apply w-full px-3.5 py-3 text-sm outline-none transition;
     background: var(--field-bg);
     border: 1px solid var(--field-border);
-    color: var(--text);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    font-family: var(--font-body);
   }
 
   .field::placeholder {
     color: var(--muted);
-    opacity: 0.7;
+    opacity: 0.8;
   }
 
   .field:focus {
-    border-color: rgba(2, 132, 199, 0.55);
-    box-shadow: 0 0 0 2px var(--ring);
-  }
-
-  .dark .field {
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    border-color: var(--focus-purple);
+    box-shadow: var(--focus-ring);
   }
 
   .glass-card {
-    @apply rounded-2xl p-5 backdrop-blur-md;
+    @apply p-6 backdrop-blur-md;
     background: var(--card-bg);
-    border: 1px solid var(--border);
-    box-shadow: 0 10px 40px -16px rgba(0, 0, 0, 0.18);
-  }
-
-  .dark .glass-card {
-    box-shadow: 0 10px 40px -16px rgba(0, 0, 0, 0.55);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elev-flat);
   }
 
   .surface {
-    @apply rounded-2xl backdrop-blur-sm;
+    @apply backdrop-blur-sm;
     background: var(--surface-bg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
   }
 
   .section-label {
-    @apply text-xs font-semibold uppercase tracking-[0.14em];
+    @apply text-sm font-normal uppercase;
     color: var(--muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.028em;
   }
 
   .link-quiet {
@@ -150,36 +218,123 @@ a {
   }
 
   .link-quiet:hover {
-    color: var(--text);
+    color: var(--accent);
   }
 
   .nav-link {
-    @apply rounded-lg px-3 py-1.5 text-sm font-medium transition;
-    color: var(--muted);
+    @apply px-3 py-1.5 text-sm font-normal transition;
+    position: relative;
+    color: var(--fg);
+    border-radius: var(--radius-sm);
   }
 
   .nav-link:hover {
-    background: var(--nav-active-bg);
-    color: var(--text);
+    color: var(--accent);
+    opacity: 0.8;
+    background: transparent;
+  }
+
+  /* Animated active indicator — slides/scales in on tab switch. */
+  .nav-link::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 3px;
+    height: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--motion-base) var(--ease-standard);
   }
 
   .nav-link-active {
-    background: var(--nav-active-bg);
-    color: var(--nav-active-text);
-    box-shadow: inset 0 0 0 1px var(--nav-active-ring);
+    color: var(--fg);
+    background: transparent;
+  }
+
+  .nav-link-active::after {
+    transform: scaleX(1);
   }
 
   .nav-link-active:hover {
-    background: var(--nav-active-bg);
-    color: var(--nav-active-text);
+    color: var(--accent);
+    background: transparent;
+  }
+
+  /* Cohere typography helpers */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.028em;
+  }
+
+  .lead {
+    font-size: var(--text-lg);
+    line-height: 1.4;
+    color: var(--muted);
+  }
+
+  /* Cohere buttons */
+  .btn-cohere {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 10px 18px;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    transition:
+      color var(--motion-fast) var(--ease-standard),
+      background-color var(--motion-fast) var(--ease-standard);
+  }
+
+  .btn-cohere:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+
+  .btn-cohere-primary {
+    background: var(--fg);
+    color: var(--bg);
+  }
+
+  .btn-cohere-primary:hover {
+    background: var(--fg-2);
+    color: var(--bg);
+  }
+
+  .dark .btn-cohere-primary {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .dark .btn-cohere-primary:hover {
+    background: #e4e4e7;
+    color: #000000;
+  }
+
+  .btn-cohere-ghost {
+    background: transparent;
+    color: var(--fg);
+  }
+
+  .btn-cohere-ghost:hover {
+    color: var(--accent);
+    opacity: 0.8;
   }
 }
 
 pre.diff {
-  @apply overflow-x-auto rounded-xl p-4 text-xs leading-relaxed;
+  @apply overflow-x-auto p-4 text-xs leading-relaxed;
   background: var(--diff-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
   color: var(--diff-text);
+  font-family: var(--font-mono);
 }
 
 /* Diff line coloring helpers (optional class usage) */
@@ -254,13 +409,21 @@ mark.hl-del {
   animation: pulse-soft 1.6s ease-in-out infinite;
 }
 
-/* Subtle grid overlay for hero sections */
+/* Cohere hero: flat white, no grid glow. Kept as no-op for back-compat. */
 .hero-grid {
-  background-image:
-    linear-gradient(var(--hero-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
+  background: transparent;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 /* Respect users who prefer reduced motion (WCAG 2.3.3) */
@@ -268,6 +431,10 @@ mark.hl-del {
   .animate-fade-in-up,
   .animate-pulse-soft {
     animation: none;
+  }
+
+  .nav-link::after {
+    transition: none;
   }
 
   *,
@@ -289,7 +456,7 @@ mark.hl-del {
   bottom: 0;
   width: 1.5rem;
   pointer-events: none;
-  background: linear-gradient(to right, transparent, rgba(15, 23, 42, 0.10));
+  background: linear-gradient(to right, transparent, rgba(23, 23, 28, 0.08));
 }
 
 .dark .datatable-edge {

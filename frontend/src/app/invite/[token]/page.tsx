@@ -47,7 +47,7 @@ export default function InvitePage() {
 
   return (
     <div className="mx-auto mt-16 max-w-md px-4">
-      <Link href="/" className="text-sm font-semibold tracking-tight text-sky-600 hover:underline dark:text-sky-400">
+      <Link href="/" className="text-sm font-semibold tracking-tight text-[var(--accent)] hover:opacity-80">
         Web Observer
       </Link>
 
@@ -74,7 +74,7 @@ export default function InvitePage() {
                 <p className="text-xs text-slate-500">
                   You&apos;ll need to{" "}
                   <Link
-                    className="text-sky-600 dark:text-sky-400 underline"
+                    className="text-[var(--accent)] underline"
                     href={`/sign-in?redirect_url=/invite/${encodeURIComponent(token)}`}
                   >
                     sign in
