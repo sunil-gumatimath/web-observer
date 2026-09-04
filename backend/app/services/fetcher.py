@@ -114,12 +114,47 @@ def _check_robots(url: str, user_agent: str, client: httpx.Client) -> None:
         logger.debug("robots_check_skipped url=%s error=%s", url, exc)
 
 
+def _check_robots_with_failover(
+    url: str, user_agent: str, *, timeout: httpx.Timeout, headers: dict[str, str]
+) -> None:
+    """Best-effort robots.txt check using IP-failover pinned fetch."""
+    from urllib.parse import urlparse as _urlparse
+
+    parsed = _urlparse(url)
+    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+    try:
+        validate_url_for_fetch(robots_url, resolve_dns=True)
+    except SSRFError:
+        return
+    try:
+        resp = _pinned_get(robots_url, timeout=timeout, headers=headers)
+    except FetchError:
+        # Robots fetch failures are soft — never fail a monitor for robots.txt.
+        # _pinned_get already fanned out across all validated IPs.
+        logger.debug("robots_check_skipped url=%s", url)
+        return
+    if resp.status_code != 200:
+        return
+    rp = RobotFileParser()
+    rp.parse(resp.text.splitlines())
+    if not rp.can_fetch(user_agent, url):
+        logger.debug("robots_disallowed_soft_skip url=%s robots disallows fetch, proceeding", url)
+        return
+
+
 def _pinned_client(url: str, *, timeout: httpx.Timeout, headers: dict[str, str]) -> httpx.Client:
     """Build an httpx.Client that connects to a validated, pinned IP for ``url``.
 
     Resolution + SSRF validation happen exactly once here, and the resulting IP
     is pinned into the transport so httpx cannot re-resolve the hostname
     (defeating DNS-rebinding / TOCTOU). Raises SSRFError on any block/failure.
+
+    .. note::
+        Prefer :func:`_pinned_get` below, which tries *every* validated IP in
+        turn. A CDN hostname (e.g. ``raw.githubusercontent.com``) routinely
+        resolves to several A records and a single blackholed PoP must not
+        fail the whole fetch — plain httpx/curl fail over, a single pinned IP
+        does not.
     """
     ips = resolve_and_validate(url, resolve_dns=True)
     hostname = urlparse(url).hostname or ""
@@ -130,6 +165,58 @@ def _pinned_client(url: str, *, timeout: httpx.Timeout, headers: dict[str, str])
         follow_redirects=False,
         headers=headers,
     )
+
+
+def _is_connect_failure(exc: BaseException) -> bool:
+    """True for TCP/TLS connect-level failures worth retrying on another IP.
+
+    Read/write timeouts happen *after* a connection is established, so they
+    are not IP-specific and must not trigger failover (that would just
+    multiply slow probes).
+    """
+    # httpx.ConnectTimeout subclasses TimeoutException; check it before the
+    # broader TimeoutException branch used by callers.
+    return isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
+
+
+def _pinned_get(
+    url: str, *, timeout: httpx.Timeout, headers: dict[str, str]
+) -> httpx.Response:
+    """GET ``url`` trying each validated IP in turn (SSRF-pinned).
+
+    Raises SSRFError if the URL/host is blocked, FetchError if every IP fails
+    to connect. Non-connect errors (HTTP status, read timeouts, TLS verify
+    failures after connect) are returned/raised from the first IP that
+    connects — they are not IP-specific.
+    """
+    ips = resolve_and_validate(url, resolve_dns=True)
+    hostname = urlparse(url).hostname or ""
+    last_exc: BaseException | None = None
+    for ip in ips:
+        transport = PinnedIPTransport(pinned_ip=ip, server_hostname=hostname)
+        client = httpx.Client(
+            transport=transport,
+            timeout=timeout,
+            follow_redirects=False,
+            headers=headers,
+        )
+        with client:
+            try:
+                return client.get(url, follow_redirects=False)
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                last_exc = exc
+                logger.debug("pinned_connect_failed host=%s ip=%s error=%s", hostname, ip, exc)
+                continue
+            except httpx.TimeoutException as exc:
+                raise FetchError("read_timeout", str(exc)) from exc
+            except httpx.RequestError as exc:
+                raise FetchError("internal_error", str(exc)) from exc
+    # Every resolved IP refused/timed-out at connect time.
+    if isinstance(last_exc, httpx.ConnectTimeout) or (
+        last_exc is not None and "timed out" in str(last_exc).lower()
+    ):
+        raise FetchError("connection_timeout", f"All {len(ips)} IPs for {hostname} timed out: {last_exc}")
+    raise FetchError("connection_timeout", f"All {len(ips)} IPs for {hostname} unreachable: {last_exc}")
 
 
 def fetch_binary(
@@ -155,62 +242,55 @@ def fetch_binary(
     redirects = 0
 
     while True:
+        # Resolve + validate + pin every hop (defeats DNS-rebinding / TOCTOU).
+        # _pinned_get tries each validated IP in turn, so one dead CDN PoP
+        # cannot fail the whole fetch.
         try:
-            client = _pinned_client(current, timeout=timeout, headers=headers)
+            response = _pinned_get(current, timeout=timeout, headers=headers)
         except SSRFError as exc:
             raise FetchError(exc.code, str(exc)) from exc
 
-        with client:
+        if response.is_redirect:
+            response.close()
+            redirects += 1
+            if redirects > MAX_REDIRECTS:
+                raise FetchError("redirect_limit", f"Exceeded {MAX_REDIRECTS} redirects")
+            location = response.headers.get("location")
+            if not location:
+                raise FetchError("invalid_url", "Redirect without Location header")
+            next_url = urljoin(current, location)
             try:
-                response = client.get(current, follow_redirects=False)
-            except httpx.TimeoutException as exc:
-                raise FetchError("read_timeout", str(exc)) from exc
-            except httpx.ConnectError as exc:
-                raise FetchError("connection_timeout", str(exc)) from exc
-            except httpx.RequestError as exc:
-                raise FetchError("internal_error", str(exc)) from exc
+                current = validate_url_for_fetch(next_url, resolve_dns=True).url
+            except SSRFError as exc:
+                raise FetchError(exc.code, str(exc)) from exc
+            continue
 
-            if response.is_redirect:
-                response.close()
-                redirects += 1
-                if redirects > MAX_REDIRECTS:
-                    raise FetchError("redirect_limit", f"Exceeded {MAX_REDIRECTS} redirects")
-                location = response.headers.get("location")
-                if not location:
-                    raise FetchError("invalid_url", "Redirect without Location header")
-                next_url = urljoin(current, location)
-                try:
-                    current = validate_url_for_fetch(next_url, resolve_dns=True).url
-                except SSRFError as exc:
-                    raise FetchError(exc.code, str(exc)) from exc
-                continue
+        chunks: list[bytes] = []
+        total = 0
+        try:
+            for chunk in response.iter_bytes():
+                total += len(chunk)
+                if total > max_response_bytes:
+                    response.close()
+                    raise FetchError(
+                        "response_too_large",
+                        f"Response size exceeds limit {max_response_bytes}",
+                        http_status=response.status_code,
+                    )
+                chunks.append(chunk)
+        except httpx.TimeoutException as exc:
+            raise FetchError("read_timeout", str(exc)) from exc
+        except httpx.RequestError as exc:
+            raise FetchError("internal_error", str(exc)) from exc
 
-            chunks: list[bytes] = []
-            total = 0
-            try:
-                for chunk in response.iter_bytes():
-                    total += len(chunk)
-                    if total > max_response_bytes:
-                        response.close()
-                        raise FetchError(
-                            "response_too_large",
-                            f"Response size exceeds limit {max_response_bytes}",
-                            http_status=response.status_code,
-                        )
-                    chunks.append(chunk)
-            except httpx.TimeoutException as exc:
-                raise FetchError("read_timeout", str(exc)) from exc
-            except httpx.RequestError as exc:
-                raise FetchError("internal_error", str(exc)) from exc
-
-            return FetchResult(
-                final_url=current,
-                status_code=response.status_code,
-                content=b"".join(chunks),
-                text="",
-                content_type=response.headers.get("content-type", ""),
-                latency_ms=round((time.perf_counter() - started) * 1000),
-            )
+        return FetchResult(
+            final_url=current,
+            status_code=response.status_code,
+            content=b"".join(chunks),
+            text="",
+            content_type=response.headers.get("content-type", ""),
+            latency_ms=round((time.perf_counter() - started) * 1000),
+        )
 
 
 def fetch_url(
@@ -228,20 +308,21 @@ def fetch_url(
     headers = {"User-Agent": user_agent}
 
     if respect_robots:
-        # robots.txt is fetched from the (validated) target host via its own
-        # pinned client to avoid re-resolution.
+        # robots.txt is fetched from the (validated) target host with the same
+        # IP-failover pinned fetch. Robots failures never fail a monitor.
         try:
-            with _pinned_client(current, timeout=timeout, headers=headers) as robots_client:
-                _check_robots(current, user_agent, robots_client)
+            _check_robots_with_failover(current, user_agent, timeout=timeout, headers=headers)
         except FetchError as exc:
             # robots_disallowed is soft-skipped – never fail a monitor for robots.txt
             if getattr(exc, "code", None) == "robots_disallowed":
                 logger.debug("robots_disallowed_soft_skip url=%s error=%s", current, exc)
             else:
-                raise
+                logger.debug("robots_check_skipped url=%s error=%s", current, exc)
         except SSRFError as exc:
             # If robots host is blocked somehow, skip robots (do not open SSRF).
             logger.debug("robots_check_skipped_ssrf error=%s", exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("robots_check_skipped url=%s error=%s", current, exc)
 
     import time
 
@@ -250,102 +331,93 @@ def fetch_url(
 
     while True:
         # Resolve + validate + pin every hop (defeats DNS-rebinding / TOCTOU).
+        # _pinned_get tries each validated IP in turn.
         try:
-            client = _pinned_client(current, timeout=timeout, headers=headers)
+            response = _pinned_get(current, timeout=timeout, headers=headers)
         except SSRFError as exc:
             raise FetchError(exc.code, str(exc)) from exc
 
-        with client:
+        if response.is_redirect:
+            response.close()
+            redirects += 1
+            if redirects > MAX_REDIRECTS:
+                raise FetchError("redirect_limit", f"Exceeded {MAX_REDIRECTS} redirects")
+            location = response.headers.get("location")
+            if not location:
+                raise FetchError("invalid_url", "Redirect without Location header")
+            next_url = urljoin(current, location)
+            # Re-validate every hop (SSRF + DNS); pin happens next iteration.
             try:
-                response = client.get(current, follow_redirects=False)
-            except httpx.TimeoutException as exc:
-                raise FetchError("read_timeout", str(exc)) from exc
-            except httpx.ConnectError as exc:
-                raise FetchError("connection_timeout", str(exc)) from exc
-            except httpx.RequestError as exc:
-                raise FetchError("internal_error", str(exc)) from exc
+                current = validate_url_for_fetch(next_url, resolve_dns=True).url
+            except SSRFError as exc:
+                raise FetchError(exc.code, str(exc)) from exc
+            continue
 
-            if response.is_redirect:
-                response.close()
-                redirects += 1
-                if redirects > MAX_REDIRECTS:
-                    raise FetchError("redirect_limit", f"Exceeded {MAX_REDIRECTS} redirects")
-                location = response.headers.get("location")
-                if not location:
-                    raise FetchError("invalid_url", "Redirect without Location header")
-                next_url = urljoin(current, location)
-                # Re-validate every hop (SSRF + DNS); pin happens next iteration.
-                try:
-                    current = validate_url_for_fetch(next_url, resolve_dns=True).url
-                except SSRFError as exc:
-                    raise FetchError(exc.code, str(exc)) from exc
-                continue
-
-            content_type = response.headers.get("content-type", "")
-            # Allow common text/html and text/* for MVP
-            if content_type and not any(
+        content_type = response.headers.get("content-type", "")
+        # Allow common text/html and text/* for MVP
+        if content_type and not any(
+            t in content_type.lower()
+            for t in ("text/", "html", "xml", "json", "javascript", "application/xhtml")
+        ):
+            # Soft allow empty content-type and application/octet-stream (may be mislabelled HTML);
+            # sniff HTML after buffering content. Hard block obvious binary types only.
+            if any(
                 t in content_type.lower()
-                for t in ("text/", "html", "xml", "json", "javascript", "application/xhtml")
+                for t in ("image/", "video/", "audio/", "pdf")
             ):
-                # Soft allow empty content-type and application/octet-stream (may be mislabelled HTML);
-                # sniff HTML after buffering content. Hard block obvious binary types only.
-                if any(
-                    t in content_type.lower()
-                    for t in ("image/", "video/", "audio/", "pdf")
-                ):
-                    response.close()
-                    raise FetchError(
-                        "unsupported_content_type",
-                        f"Unsupported content type: {content_type}",
-                        http_status=response.status_code,
-                    )
-
-            # Stream the body, enforcing the size limit BEFORE buffering it all.
-            chunks: list[bytes] = []
-            total = 0
-            try:
-                for chunk in response.iter_bytes():
-                    total += len(chunk)
-                    if total > max_response_bytes:
-                        response.close()
-                        raise FetchError(
-                            "response_too_large",
-                            f"Response size exceeds limit {max_response_bytes}",
-                            http_status=response.status_code,
-                        )
-                    chunks.append(chunk)
-            except httpx.TimeoutException as exc:
-                raise FetchError("read_timeout", str(exc)) from exc
-            except httpx.RequestError as exc:
-                raise FetchError("internal_error", str(exc)) from exc
-
-            content = b"".join(chunks)
-            encoding = response.encoding or "utf-8"
-            try:
-                text = content.decode(encoding, errors="replace")
-            except (LookupError, TypeError):
-                text = content.decode("utf-8", errors="replace")
-
-            latency_ms = round((time.perf_counter() - started) * 1000)
-            challenge = detect_bot_challenge(
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                text=text,
-            )
-            if challenge:
+                response.close()
                 raise FetchError(
-                    "bot_challenge",
-                    f"Blocked while fetching {url}: {challenge}. "
-                    "The site requires a real browser session; try enabling "
-                    "'JavaScript rendering required' on this monitor, or monitor "
-                    "a different endpoint.",
+                    "unsupported_content_type",
+                    f"Unsupported content type: {content_type}",
                     http_status=response.status_code,
                 )
-            return FetchResult(
-                final_url=current,
-                status_code=response.status_code,
-                content=content,
-                text=text,
-                content_type=content_type,
-                latency_ms=latency_ms,
+
+        # Stream the body, enforcing the size limit BEFORE buffering it all.
+        chunks: list[bytes] = []
+        total = 0
+        try:
+            for chunk in response.iter_bytes():
+                total += len(chunk)
+                if total > max_response_bytes:
+                    response.close()
+                    raise FetchError(
+                        "response_too_large",
+                        f"Response size exceeds limit {max_response_bytes}",
+                        http_status=response.status_code,
+                    )
+                chunks.append(chunk)
+        except httpx.TimeoutException as exc:
+            raise FetchError("read_timeout", str(exc)) from exc
+        except httpx.RequestError as exc:
+            raise FetchError("internal_error", str(exc)) from exc
+
+        content = b"".join(chunks)
+        encoding = response.encoding or "utf-8"
+        try:
+            text = content.decode(encoding, errors="replace")
+        except (LookupError, TypeError):
+            text = content.decode("utf-8", errors="replace")
+
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        challenge = detect_bot_challenge(
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            text=text,
+        )
+        if challenge:
+            raise FetchError(
+                "bot_challenge",
+                f"Blocked while fetching {url}: {challenge}. "
+                "The site requires a real browser session; try enabling "
+                "'JavaScript rendering required' on this monitor, or monitor "
+                "a different endpoint.",
+                http_status=response.status_code,
             )
+        return FetchResult(
+            final_url=current,
+            status_code=response.status_code,
+            content=content,
+            text=text,
+            content_type=content_type,
+            latency_ms=latency_ms,
+        )
