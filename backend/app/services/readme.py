@@ -79,7 +79,10 @@ def _candidate_raw_urls(owner: str, repo: str, branch_hint: str | None) -> list[
     branches = []
     if branch_hint:
         branches.append(branch_hint)
-    branches.extend(["main", "master", "HEAD"])
+    # NOTE: "HEAD" is not a resolvable raw.githubusercontent.com branch and
+    # cost 7 slow probes; only try real default-branch names here. The GitHub
+    # API path (tried first) already handles arbitrary defaults.
+    branches.extend(["main", "master"])
     # Deduplicate preserving order
     seen: set[str] = set()
     uniq_branches: list[str] = []
@@ -95,6 +98,48 @@ def _candidate_raw_urls(owner: str, repo: str, branch_hint: str | None) -> list[
     return urls
 
 
+def _fetch_github_api_readme(
+    owner: str, repo: str, *, timeout_seconds: int, max_response_bytes: int
+) -> tuple[str, str] | None:
+    """Try the GitHub API readme endpoint (single request, default branch).
+
+    Returns ``(normalized, download_url)`` or None if the API has no usable
+    README (404, rate-limited, unexpected payload). Raises FetchError only for
+    transport-level failures the caller may want to surface; HTTP 4xx/5xx and
+    rate-limit responses are treated as "try raw next".
+    """
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
+    result = fetch_url(
+        api_url,
+        timeout_seconds=timeout_seconds,
+        max_response_bytes=max_response_bytes,
+        respect_robots=False,
+    )
+    if result.status_code == 404:
+        return None
+    if result.status_code == 403 and "rate limit" in result.text.lower():
+        logger.warning("github_api_rate_limited owner=%s repo=%s", owner, repo)
+        return None
+    if result.status_code >= 400 or not result.text:
+        return None
+    try:
+        data = json.loads(result.text)
+    except Exception:  # noqa: BLE001
+        return None
+    content_b64 = data.get("content", "")
+    encoding = data.get("encoding", "")
+    if not content_b64 or encoding != "base64":
+        return None
+    try:
+        decoded = base64.b64decode(content_b64).decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        return None
+    normalized = normalize_text(decoded)
+    if not normalized:
+        return None
+    return normalized, data.get("download_url") or api_url
+
+
 def fetch_readme_text(
     repo_input: str,
     *,
@@ -103,20 +148,40 @@ def fetch_readme_text(
 ) -> tuple[str, str]:
     """Fetch README markdown for *repo_input*.
 
-    Returns ``(normalized_markdown, final_url)``. Tries raw.githubusercontent.com
-    first, then the GitHub API as fallback.
+    Returns ``(normalized_markdown, final_url)``. Tries the GitHub API first
+    (single request, resolves the default branch automatically), then
+    raw.githubusercontent.com as fallback.
 
     Raises :class:`ExtractionError` on failure.
     """
     owner, repo, branch_hint = parse_github_repo(repo_input)
 
-    # 1) Try raw URLs
+    # 1) GitHub API first: one request instead of up to 21 raw probes, and it
+    # follows the repo's actual default branch (not just main/master).
     last_exc: Exception | None = None
+    try:
+        api_hit = _fetch_github_api_readme(
+            owner,
+            repo,
+            timeout_seconds=timeout_seconds,
+            max_response_bytes=max_response_bytes,
+        )
+        if api_hit is not None:
+            return api_hit
+    except FetchError as exc:
+        # Transport failure (DNS/connect/timeout) — fall through to raw.
+        last_exc = exc
+    except Exception as exc:  # noqa: BLE001
+        last_exc = exc
+
+    # 2) Fallback: raw URLs with a capped per-probe timeout so a missing repo
+    # (or a dead CDN PoP) cannot stack 21 x 30s hangs past the worker limit.
+    probe_timeout = max(5, min(timeout_seconds, 10))
     for raw_url in _candidate_raw_urls(owner, repo, branch_hint):
         try:
             result = fetch_url(
                 raw_url,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=probe_timeout,
                 max_response_bytes=max_response_bytes,
                 respect_robots=False,
             )
@@ -145,31 +210,6 @@ def fetch_readme_text(
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             continue
-
-    # 2) Fallback: GitHub API (handles default branch automatically, also private if token?)
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/readme"
-    try:
-        result = fetch_url(
-            api_url,
-            timeout_seconds=timeout_seconds,
-            max_response_bytes=max_response_bytes,
-            respect_robots=False,
-        )
-        if result.status_code < 400 and result.text:
-            try:
-                data = json.loads(result.text)
-                content_b64 = data.get("content", "")
-                encoding = data.get("encoding", "")
-                if content_b64 and encoding == "base64":
-                    decoded = base64.b64decode(content_b64).decode("utf-8", errors="replace")
-                    normalized = normalize_text(decoded)
-                    if normalized:
-                        download_url = data.get("download_url") or api_url
-                        return normalized, download_url
-            except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-    except Exception as exc:  # noqa: BLE001
-        last_exc = exc
 
     msg = f"README not found for {owner}/{repo}"
     if last_exc:
