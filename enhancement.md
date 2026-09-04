@@ -116,7 +116,9 @@ To expand from developer-centric change detection into an all-in-one web intelli
 
 ## 4. Diffing, Visualization & UX Upgrades
 
-### 4.1 Interactive Visual Diff Slider (Swipe / Split-Screen View)
+### 4.1 Interactive Visual Diff Slider (Swipe / Split-Screen View) `[Status: Partially Implemented]`
+* **Done (2026-09):** swipe/split slider component (`frontend/src/components/visual-diff.tsx`), screenshot keying to changed runs (not latest runs), slider polish via UI batch.
+* **Remaining:** pixel-difference heatmap overlay (magenta/neon clusters) and flicker/blink mode.
 * **Problem:** Viewing old and new screenshots side-by-side makes subtle layout and typography changes difficult to detect.
 * **Proposed Solution:**
   * Implement an interactive comparison slider (Juxtapose-style) in the Next.js frontend:
@@ -153,6 +155,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
     * Support custom HTTP/SOCKS5 proxy URIs with authentication (`http://user:pass@proxy.example.com:8080`).
     * Direct integrations with proxy providers (Bright Data, Oxylabs, ScrapingBee).
     * Geo-location targeting (e.g., execute check from US, EU, UK, or APAC IP addresses).
+* **Solo / free-tier note:** proxy providers are paid. Defer provider integrations to Phase 10; Phase 8–9 uses only free custom-proxy-URI support (user brings their own proxy).
 
 ### 5.2 Stealth Browser Automation
 * **Problem:** Cloudflare Turnstile, DataDome, and Akamai detect default headless Chromium instances.
@@ -227,18 +230,20 @@ Based on architectural reviews, the following foundational optimizations will ke
 
 ## 8. Phased Implementation Roadmap & Priority Matrix
 
+> Solo + free-tier constraint: no paid proxy/SDK infra in Phase 8–9. Ship deployable increments per phase (see `production.md` for Render/GCP path).
+
 ```mermaid
 gantt
     title Web Observer Enhancement Roadmap
     dateFormat  YYYY-MM-DD
     section Phase 8 (Immediate High-ROI)
-    Interactive Point-and-Click Selector    :2026-09-10, 14d
-    Telegram Bot Channel                   :2026-09-15, 7d
-    Async Brand Fetch & DB Query Fixes     :2026-09-12, 5d
+    Telegram Bot Channel                   :p8telegram, 2026-09-08, 7d
+    Async Brand Fetch & DB Query Fixes     :p8hard, after p8telegram, 5d
+    Interactive Point-and-Click Selector   :p8selector, after p8hard, 14d
     section Phase 9 (Advanced Automation)
     Multi-Step User Journeys (Logins/Clicks) :2026-10-01, 14d
     Visual Bounding-Box Cropping           :2026-10-10, 10d
-    Visual Diff Slider & Pixel Heatmap      :2026-10-15, 8d
+    Diff Heatmap + Flicker (4.1 remainder) :2026-10-15, 8d
     Web Push (PWA) Notifications           :2026-10-20, 7d
     section Phase 10 (Enterprise & Ecosystem)
     Stealth Evasion & Proxy Rotation       :2026-11-01, 14d
@@ -255,14 +260,16 @@ gantt
 | **Async Brand Fetch & Query Hardening** | High (Stability) | Low (1 day) | 2 |
 | **Visual Element Selector (Point-and-Click)** | Very High | Medium (3–4 days) | 3 |
 | **Visual Bounding-Box Crop** | High | Low-Medium (2 days) | 4 |
-| **Interactive Swipe Diff Slider** | High (Visual Wow) | Low (1–2 days) | 5 |
+| **Diff Heatmap + Flicker (4.1 remainder)** | Medium-High | Low (1–2 days) | 5 |
 | **Multi-Step Journeys (Logins, Clicks)** | Very High | Medium (4–5 days) | 6 |
 | **Smart Alert Throttling & Flapping** | Medium-High | Low (2 days) | 7 |
-| **Browser Extension** | Very High | Medium (4–5 days) | 8 |
-| **Residential / Rotating Proxy Pool** | High | Medium (3 days) | 9 |
+| **Browser Extension** | Very High | Medium (4–5 days) | 8 — Phase 10 (needs packaging + store review) |
+| **Residential / Rotating Proxy Pool** | High | Medium (3 days) | 9 — Phase 10, paid providers only; free BYO-proxy URI first |
 | **PDF Document Diffing** | Medium | Medium (3 days) | 10 |
 | **Zapier / n8n Nodes** | Medium-High | Low-Medium (2–3 days) | 11 |
+| **Semantic AI Alert Rules (3.3)** | Done 2026-09 | — | Done, skip |
+| **Swipe Diff Slider base (4.1)** | Done 2026-09 | — | Done, only heatmap/flicker left |
 
 ---
 
-*Document created for pair-programming and roadmap tracking. Review or update as feature requirements evolve.*
+*Document created for pair-programming and roadmap tracking. Last reviewed 2026-09-04: marked 3.3 + 4.1-base done, re-sequenced Phase 8 (Telegram first), deferred paid proxy/extension to Phase 10. Deploy path: see `production.md`. Review or update as feature requirements evolve.*
