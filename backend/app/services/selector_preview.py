@@ -21,10 +21,14 @@ PREVIEW_MAX_BYTES = 1_500_000
 PREVIEW_MAX_CHARS = 1_000_000
 _TRUNCATED_MARKER = "\n…[preview truncated]\n"
 
-# Tags that must never reach the preview renderer.
+# Tags that must never reach the preview renderer. ``style``/``link`` are
+# included: page CSS would leak out of the preview container and restyle the
+# dashboard itself (inline ``style=""`` attributes are safe and are kept).
 _DROP_TAGS = (
     "script",
     "noscript",
+    "style",
+    "link",
     "iframe",
     "frame",
     "frameset",

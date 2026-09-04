@@ -14,6 +14,7 @@ import {
 	Textarea,
 } from "@/components/ui";
 import { ThresholdEditor } from "@/components/threshold-editor";
+import { SelectorPicker } from "@/components/selector-picker";
 import { api } from "@/lib/api";
 import type {
 	BrandInfo,
@@ -103,6 +104,7 @@ export default function NewMonitorPage() {
 	const [ignoreSelectors, setIgnoreSelectors] = useState("");
 	const [ignoreRegexes, setIgnoreRegexes] = useState("");
 	const [cssSelector, setCssSelector] = useState<string | null>(null);
+	const [pickerOpen, setPickerOpen] = useState(false);
 	const [alertConfig, setAlertConfig] = useState<Record<string, unknown> | null>(null);
 	const [runNow, setRunNow] = useState(true);
 	const [brand, setBrand] = useState<BrandInfo | null>(null);
@@ -496,6 +498,15 @@ export default function NewMonitorPage() {
 								mode === "json_field" ? "$.data.price" : "article h2 a, .post-title a"
 							}
 						/>
+						{mode === "list_items" ? (
+							<button
+								type="button"
+								onClick={() => setPickerOpen(true)}
+								className="mt-1.5 text-xs font-medium text-sky-600 underline-offset-2 hover:underline dark:text-sky-400"
+							>
+								Pick element visually instead
+							</button>
+						) : null}
 						<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
 							{mode === "json_field" ? (
 								<>
@@ -587,6 +598,15 @@ export default function NewMonitorPage() {
 							</Button>
 						</div>
 					</form>
+					<SelectorPicker
+						open={pickerOpen}
+						initialUrl={normalizeUrl(url)}
+						onClose={() => setPickerOpen(false)}
+						onPick={(sel) => {
+							setCssSelector(sel);
+							setPickerOpen(false);
+						}}
+					/>
 				</Card>
 			)}
 		</div>

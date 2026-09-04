@@ -50,6 +50,12 @@ export type BrandInfo = {
   assets_available: boolean;
 };
 
+export type SelectorPreview = {
+  final_url: string;
+  html: string;
+  truncated: boolean;
+};
+
 export type LatestChange = {
   id: string;
   change_category: string | null;

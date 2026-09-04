@@ -25,6 +25,7 @@ import type {
   SitemapDiscovery,
   SitemapImportResult,
   SeedResponse,
+  SelectorPreview,
   SnapshotAccess,
   Usage,
   WebhookDelivery,
@@ -501,6 +502,12 @@ export const api = {
   enrichBrand: (workspaceId: string, monitorId: string) =>
     request<Monitor>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/brand`, {
       method: "POST",
+    }),
+
+  selectorPreview: (workspaceId: string, url: string) =>
+    request<SelectorPreview>(`/api/v1/workspaces/${workspaceId}/monitors/selector-preview`, {
+      method: "POST",
+      body: JSON.stringify({ url }),
     }),
 
   // --- webdog.ai parity: per-account (bring-your-own) keys ---

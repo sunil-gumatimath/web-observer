@@ -15,12 +15,15 @@ from app.services.selector_preview import (
 
 def test_strips_scripts_frames_and_handlers() -> None:
     html = (
-        "<html><head><title>T</title><script>alert(1)</script></head>"
+        "<html><head><title>T</title><script>alert(1)</script>"
+        "<style>.x{color:red}</style><link rel='stylesheet' href='https://example.com/a.css'></head>"
         "<body><iframe src='https://ads.example/x'></iframe>"
         "<a href='javascript:alert(1)' onclick='evil()' class='post'>hi</a></body></html>"
     )
     out = sanitize_preview_html(html, "https://example.com/page")
     assert "<script" not in out
+    assert "<style" not in out
+    assert "<link" not in out
     assert "<iframe" not in out
     assert "onclick" not in out
     assert "javascript:" not in out
