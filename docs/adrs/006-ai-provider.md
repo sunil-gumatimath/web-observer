@@ -27,4 +27,14 @@ We want optional human-readable summaries and change classification. Detection m
 ## Consequences
 
 - Works offline/dev without LLM.  
-- Easy swap of providers (OpenAI, Azure, Groq, local).  
+- Easy swap of providers (OpenAI, Azure, Groq, local).
+
+## Supersede note (2026-09)
+
+Original §Safety stated noise feedback is user-driven, not
+auto-suppressed, and alerts are never suppressed solely on AI. Current
+behavior (§3.3 roadmap, phase-05): `semantic_trigger` + watch-note
+triage may mark `is_noise=true` automatically via LLM, with
+guardrails — `<untrusted_diff_content>` fences, size caps, fail-open
+on LLM error, noise retained in inbox (not deleted), excluded from
+notifications/digests.  

@@ -114,7 +114,9 @@ Scope: MVP public monitoring
 
 - Authenticated page monitoring (deferred with credential encryption design)  
 - CAPTCHA / bot-defense bypass (will not implement)  
-- Full legal clearance for every jurisdiction (document policy; user responsibility for targets)  
+- Full legal clearance for every jurisdiction (document policy; user responsibility for targets)
+
+Note: roadmap §5.2 proposes revisiting this; see ADR 007 (Proposed) — no implementation until accepted.  
 
 ## Security requirements checklist (Phase 1 exit)
 
