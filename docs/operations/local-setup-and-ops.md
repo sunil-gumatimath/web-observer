@@ -46,6 +46,7 @@ Staging/production are not configured (hosting config removed).
 | `CLERK_*` | api, web |
 | `S3_*` / `R2_*` | workers, api (optional object storage) |
 | `RESEND_API_KEY` | notification worker |
+| `SECRET_KEY` | api (encryption key + API-key HMAC — pin in production) |
 | `INTERNAL_API_TOKEN` | admin |
 
 ## Snapshot retention (matches `backend/app/services/retention.py`)

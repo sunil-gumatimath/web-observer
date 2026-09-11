@@ -14,7 +14,7 @@ Web change-detection and alerting platform.
 
 **Latest:** the frontend was re-themed to the Cohere design system (white canvas, 22px signature cards, ghost buttons, `#1863dc` interaction blue, Space Grotesk/Inter, charcoal dark mode), the alerts inbox now carries monitor brand logos with a domain-favicon fallback, and the app nav has an animated active indicator with a page fade on tab switches.
 
-Verified end-to-end: backend unit tests pass (140 passed, 2 skipped, 8 integration deselected), the frontend type-checks (`tsc`), `vitest` is green (40 tests), `next build` compiles all routes, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
+Verified end-to-end: backend unit + integration tests pass (see CI), the frontend type-checks (`tsc`), `vitest` is green (see CI), `next build` compiles all routes, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
 | Doc | Topic |
 | ----- | -------- |
@@ -166,7 +166,7 @@ pip install -r requirements.txt
 # required for JS rendering / screenshots:
 python -m playwright install chromium
 cd ..\frontend
-bun install # or npm install
+npm ci # CI-canonical (also works: bun install)
 ```
 
 ### Every time (5 processes)
@@ -179,7 +179,7 @@ Redis must already be running. Prefer loading env from `backend/.env` (Neon).
 | 2 | **HTTP worker** | `dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2` |
 | 3 | **Browser worker** | `dramatiq app.workers --queues browser_checks --processes 1 --threads 1` |
 | 4 | **Scheduler** | `python -m app.scheduler` |
-| 5 | **Frontend** | `bun run dev` or `npm run dev` (port 3000) |
+| 5 | **Frontend** | `npm run dev` (port 3000) |
 
 **Browser worker is required** for `js_required` monitors and opt-in `screenshots_enabled`.  
 Use **`--threads 1`** on Windows. Playwright runs in a **subprocess** (`playwright_job`) to avoid `[Errno 9] Bad file descriptor`.
