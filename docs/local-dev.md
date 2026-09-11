@@ -2,7 +2,7 @@
   <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
 </p>
 
-# Local development **without Docker**
+# Local development
 
 You need:
 
@@ -11,14 +11,14 @@ You need:
 3. **PostgreSQL** — **Neon** cloud URL or local install
 4. **Redis** (local install / WSL / Memurai)
 
-No Docker, no MinIO required. Snapshots go to `./data/snapshots`.
+Snapshots go to `./data/snapshots`.
 
 ---
 
 ## Port alignment (important)
 
 | Service | Default in this doc | Notes |
-|---------|---------------------|--------|
+| --------- | --------------------- | -------- |
 | Frontend | `3000` | `npm run dev` |
 | API | `8002` | Match `NEXT_PUBLIC_API_BASE_URL` |
 | Redis | `6379` | Required for workers |
@@ -130,13 +130,14 @@ bun run dev --port 3000
 ```
 
 | URL | What |
-|-----|------|
-| http://127.0.0.1:3000 | UI |
-| http://127.0.0.1:8002/docs | API docs |
-| http://127.0.0.1:8002/health | API process |
-| http://127.0.0.1:8002/ready | DB connectivity |
+| ----- | ------ |
+| <http://127.0.0.1:3000> | UI |
+| <http://127.0.0.1:8002/docs> | API docs |
+| <http://127.0.0.1:8002/health> | API process |
+| <http://127.0.0.1:8002/ready> | DB connectivity |
 
-Tables are auto-created only when APP_ENV is development/test/testing (see app/main.py lifespan); production schema is managed by Alembic migrations. Set APP_ENV=production in prod and run `alembic upgrade head`.
+Tables are auto-created only when APP_ENV is development/test/testing (see app/main.py lifespan); production schema is managed by Alembic migrations. Set APP_ENV=production in prod and run `alembic upgrade head`
+
 ---
 
 ## 5. Frontend env
@@ -163,7 +164,7 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 ## 5b. Notable endpoints & behavior (post-roadmap additions)
 
 | Capability | Endpoint / notes |
-|------------|------------------|
+| ------------ | ------------------ |
 | Change activity | `GET /api/v1/workspaces/{id}/changes/activity?days=14&include_noise=false` — per-day counts + per-category breakdown for the dashboard card (`days` 1–90, noise excluded by default, 20k-row cap, null category → `uncategorized`) |
 | Bulk pause / resume | `POST /api/v1/workspaces/{id}/monitors/pause-all`, `.../resume-all` (resume re-schedules `next_run_at`) |
 | Selector preview | `POST /api/v1/workspaces/{id}/monitors/selector-preview` — sanitized HTML for the point-and-click picker |
@@ -192,7 +193,7 @@ STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storag
 ## 6. Minimum set
 
 | Process | Required? |
-|---------|-----------|
+| --------- | ----------- |
 | Redis | Yes (queue + rate limits) |
 | DB (Neon or local) | Yes |
 | API (`uvicorn`) | Yes |
@@ -200,14 +201,13 @@ STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storag
 | Worker browser (`threads 1`) | Yes for `js_required` monitors |
 | Scheduler | Yes for schedules; optional for manual Run now |
 | Frontend | Yes for UI |
-| MinIO / Docker | **No** |
 
 ---
 
 ## Troubleshooting
 
 | Issue | Fix |
-|-------|-----|
+| ------- | ----- |
 | **Failed to fetch** | API down or wrong port; start API; match `NEXT_PUBLIC_API_BASE_URL` |
 | Stuck **Loading…** | Sign in with Clerk; hard-refresh; ensure API up |
 | Hydration `rtrvr-ls` warning | Browser extension (Retriever); suppress or disable on localhost |
@@ -216,7 +216,7 @@ STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storag
 | Visual: Bad file descriptor | Browser worker `--threads 1`; restart workers; Playwright install chromium |
 | Visual: Executable doesn't exist | `python -m playwright install chromium` |
 | Snapshot storage errors | `STORAGE_BACKEND=local` |
-| Frontend CORS | API allows `localhost:3000` and `127.0.0.1:3000` (dev only — prod uses an explicit allow-list, see `production.md`) |
+| Frontend CORS | API allows `localhost:3000` and `127.0.0.1:3000` (dev only — prod uses an explicit allow-list via `CORS_ORIGINS`) |
 
 ---
 

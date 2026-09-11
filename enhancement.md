@@ -5,6 +5,7 @@ This document details the strategic product enhancements, technical architecture
 ---
 
 ## Table of Contents
+
 1. [Executive Summary](#1-executive-summary)
 2. [Advanced Monitoring & Extraction Engines](#2-advanced-monitoring--extraction-engines)
 3. [Notification Channels & Alert Intelligence](#3-notification-channels--alert-intelligence)
@@ -18,9 +19,10 @@ This document details the strategic product enhancements, technical architecture
 
 ## 1. Executive Summary
 
-Web Observer currently excels at scheduled webpage fetching (HTTP / Playwright), content hashing, line diffing, heuristic and LLM summaries, and multi-tenant workspace management. 
+Web Observer currently excels at scheduled webpage fetching (HTTP / Playwright), content hashing, line diffing, heuristic and LLM summaries, and multi-tenant workspace management.
 
 To expand from developer-centric change detection into an all-in-one web intelligence platform (competing with Visualping, ChangeDetection.io, Hexowatch, and Distill.io), the system should expand across five pillars:
+
 * **Ease of setup:** Visual point-and-click element selection without needing manual CSS/XPath inspection.
 * **Access deeper web content:** Multi-step user journeys (logins, cookie banners, dropdowns) and anti-bot evasion.
 * **Zero false-alarm alerting:** Natural-language semantic triggers, smart cooldowns, and instant push channels (Telegram, Web Push).
@@ -32,6 +34,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 ## 2. Advanced Monitoring & Extraction Engines
 
 ### 2.1 Interactive Point-and-Click Visual Element Selector `[Status: Partially Implemented]`
+
 * **Problem:** Users currently must inspect browser DevTools, locate DOM classes or IDs, and manually paste CSS selectors or JSONPaths into the form.
 * **Shipped (2026-09):** proxied `POST /monitors/selector-preview` (sanitized HTML) + `SelectorPicker` overlay (`frontend/src/components/selector-picker.tsx`) with resilient selector synthesis (`frontend/src/lib/selector.ts`) on New/Edit monitor.
 * **Remaining:** pre-fill from the browser-extension flow (§6.1), saved-selector confidence scoring.
@@ -43,9 +46,11 @@ To expand from developer-centric change detection into an all-in-one web intelli
 * **Impact:** Eliminates 80% of onboarding friction for non-technical users.
 
 ### 2.2 Multi-Step Scripted User Journeys (Pre-Action Sequences)
+
 * **Problem:** Modern sites require user interactions before target content renders (e.g., dismissing cookie consent banners, logging in, selecting a store location, or clicking accordions).
 * **Proposed Solution:**
   * Add a `pre_actions` JSONB column to `monitors`:
+
     ```json
     [
       {"action": "click", "selector": "#onetrust-accept-btn-handler"},
@@ -54,10 +59,12 @@ To expand from developer-centric change detection into an all-in-one web intelli
       {"action": "wait_for_selector", "selector": ".inventory-grid", "timeout_ms": 5000}
     ]
     ```
+
   * Playwright iterates through these actions before taking the content snapshot.
   * Include common pre-action recipes: "Dismiss Cookie Modal", "Accept 18+ Gate", "Scroll to Bottom (Infinite Scroll)".
 
 ### 2.3 Visual Region / Bounding-Box Cropping
+
 * **Problem:** Whole-page visual monitoring (`visual` mode) frequently fires false positives due to rotating banner ads, sticky chat widgets, or changing header carousels.
 * **Proposed Solution:**
   * Allow users to draw a selection rectangle over the captured screenshot preview (`{x: 100, y: 240, width: 400, height: 180}`).
@@ -65,6 +72,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * Supports multiple exclusion zones (e.g., "ignore this banner area").
 
 ### 2.4 PDF & Document Tracking
+
 * **Problem:** Many organizations track government gazettes, regulatory policy updates, whitepapers, or contracts published exclusively as downloadable PDFs.
 * **Proposed Solution:**
   * Add a `document_pdf` mode.
@@ -72,6 +80,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * Provide visual page-by-page change thumbnails.
 
 ### 2.5 Custom HTTP Request Configuration & Session Cookies
+
 * **Problem:** Monitoring internal staging portals, private dashboards, or authenticated accounts requires custom headers or persistent cookies.
 * **Proposed Solution:**
   * Support custom HTTP headers (e.g., `Authorization: Bearer <token>`).
@@ -83,6 +92,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 ## 3. Notification Channels & Alert Intelligence
 
 ### 3.1 Telegram Bot Integration
+
 * **Problem:** Email alerts are often delayed or buried, and Slack/Discord setups require workspace administrative permissions that individual users or small teams may not have.
 * **Proposed Solution:**
   * Create an official Web Observer Telegram bot (`@WebObserverBot`).
@@ -91,12 +101,14 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * Deliver instant alert messages with change summaries, inline diff snippets, and action buttons (`[View Diff]`, `[Pause Monitor]`, `[Mark as Noise]`).
 
 ### 3.2 Web Push Notifications (PWA / Browser Notifications)
+
 * **Proposed Solution:**
   * Integrate the Web Push API via Service Workers and VAPID keys.
   * Users can enable desktop and mobile browser push notifications with a single click.
   * Alerts arrive natively on macOS, Windows, Android, and iOS (PWA home screen).
 
 ### 3.3 Semantic / Natural-Language AI Alert Rules `[Status: Implemented]`
+
 * **Problem:** Regex and percentage-based conditional rules require technical syntax and fail on nuanced natural language changes.
 * **Implemented Solution:**
   * Added `semantic_trigger` to `Monitor` entity and `MonitorCreate`/`MonitorUpdate` schemas.
@@ -108,6 +120,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * Added UI badge display for impact/confidence and semantic trigger input fields in the frontend.
 
 ### 3.4 Smart Alert Throttling & Flapping Protection
+
 * **Problem:** Websites that update frequently or flap between two states (e.g., "In Stock" and "Out of Stock" every 5 minutes) flood channels with noise.
 * **Proposed Solution:**
   * **Cooldown Window:** Configurable quiet period per monitor (e.g., maximum 1 notification per 3 hours).
@@ -119,6 +132,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 ## 4. Diffing, Visualization & UX Upgrades
 
 ### 4.1 Interactive Visual Diff Slider (Swipe / Split-Screen View) `[Status: Partially Implemented]`
+
 * **Done (2026-09):** swipe/split slider component (`frontend/src/components/visual-diff.tsx`), screenshot keying to changed runs (not latest runs), slider polish via UI batch.
 * **Remaining:** pixel-difference heatmap overlay (magenta/neon clusters) and flicker/blink mode.
 * **Problem:** Viewing old and new screenshots side-by-side makes subtle layout and typography changes difficult to detect.
@@ -129,18 +143,21 @@ To expand from developer-centric change detection into an all-in-one web intelli
     * **Flicker/Blink Mode:** Rapidly alternate between previous and current snapshot to spot micro-movements.
 
 ### 4.2 Rendered In-Situ HTML Diffs (Wayback Style)
+
 * **Problem:** Line-based Markdown diffs lose visual webpage context.
 * **Proposed Solution:**
   * Render the webpage in an isolated iframe sandboxed container with the historical DOM.
   * Inject visual styling: added elements highlighted with a subtle green background and green border; removed elements overlaid in red with strikethrough.
 
 ### 4.3 Historical Time-Travel & Snapshot Scrubbing
+
 * **Problem:** Users can currently only view the diff between the latest run and its immediate predecessor.
 * **Proposed Solution:**
   * A timeline calendar / scrubbing bar on the Monitor Detail page.
   * Allows selecting any two arbitrary historical snapshots (e.g., "Compare 2026-06-01 baseline against 2026-09-01") to analyze cumulative drift over weeks or months.
 
 ### 4.4 Folders, Tags & Bulk Fleet Management `[Status: Partially Implemented]`
+
 * **Done (2026-09):** bulk pause/resume — `POST /monitors/pause-all` + `POST /monitors/resume-all` (`backend/app/routers/monitors.py`) with dashboard Pause-all/Resume-all controls (confirm dialog, optimistic `enabled` flip).
 * **Remaining:** `tags`/`folder_id` organization, multi-select *Change Check Interval*, *Assign Channel*, *Batch Export*.
 * **Problem:** When a workspace tracks 50+ monitors, the flat list becomes disorganized.
@@ -153,6 +170,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 ## 5. Network, Stealth & Anti-Bot Infrastructure
 
 ### 5.1 Residential & Rotating Proxy Pools
+
 * **Problem:** Enterprise target sites (Amazon, LinkedIn, Cloudflare, Ticketmaster) ban datacenter IPs or serve localized content based on geography.
 * **Proposed Solution:**
   * Add workspace and per-monitor proxy configuration:
@@ -162,6 +180,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 * **Solo / free-tier note:** proxy providers are paid. Defer provider integrations to Phase 10; Phase 8–9 uses only free custom-proxy-URI support (user brings their own proxy).
 
 ### 5.2 Stealth Browser Automation
+
 * **Problem:** Cloudflare Turnstile, DataDome, and Akamai detect default headless Chromium instances.
 * **Proposed Solution:**
   * Implement `playwright-stealth` evasions:
@@ -171,6 +190,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
     * Emulate humanized mouse trajectories and random viewport jitter before taking snapshots.
 
 ### 5.3 Warm Browser Worker Context Pool
+
 * **Problem:** Spawning a brand-new Python subprocess and Chromium browser instance per check on Windows incurs a 1.5–2.5 second launch overhead.
 * **Proposed Solution:**
   * Maintain a persistent warm Chromium browser process managed by a supervision daemon.
@@ -178,6 +198,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * Recycle the master browser process every $N$ runs to guarantee zero memory or handle leaks.
 
 ### 5.4 Real-Time Streaming via Server-Sent Events (SSE)
+
 * **Problem:** Long-running checks historically had the frontend poll for status; newer surfaces (e.g. the dashboard activity card) fetch on interaction (range change) rather than polling.
 * **Proposed Solution:**
   * Add a FastAPI SSE endpoint: `GET /api/v1/workspaces/{ws}/monitors/{id}/stream`.
@@ -189,6 +210,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 ## 6. Developer Platform & Ecosystem Integrations
 
 ### 6.1 Official Browser Extension (Chrome & Firefox)
+
 * **Proposed Solution:**
   * A lightweight browser extension with OAuth/API key login.
   * **Workflow:**
@@ -200,18 +222,21 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * Immediately creates the monitor in Web Observer without leaving the target site.
 
 ### 6.2 Official SDKs & Developer CLI
+
 * **Proposed Solution:**
   * **TypeScript SDK:** `@web-observer/sdk` for easy integration in Next.js/Node services.
   * **Python SDK:** `web-observer-client` for data engineers and automation scripts.
   * **CLI (`mtw`):** Command-line utility for DevOps teams to manage monitors as code or trigger checks inside CI/CD pipelines (e.g., checking landing pages post-deploy).
 
 ### 6.3 No-Code Integrations (Zapier & n8n)
+
 * **Proposed Solution:**
   * Publish a verified Zapier app and n8n community node.
   * **Triggers:** "New Change Detected", "Monitor Failed", "Price Dropped Below Threshold".
   * **Actions:** "Create Monitor", "Run Check Now", "Pause Monitor".
 
 ### 6.4 Executive PDF / CSV Scheduled Reports
+
 * **Proposed Solution:**
   * Enable weekly or monthly compiled digest reports in styled PDF format.
   * Includes brand thumbnails, categorized changes (pricing, features, legal), and competitive intelligence timelines.
@@ -225,7 +250,7 @@ Based on architectural reviews, the following foundational optimizations keep th
 All four are **implemented** — statuses verified against code 2026-09-04:
 
 | Enhancement | Problem Solved | Architectural Strategy | Status |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Asynchronous Brand Fetching** | Creating a monitor blocked the uvicorn HTTP worker while fetching external page metadata. | `201 Created` returns immediately; brand metadata extraction runs in the background Dramatiq queue (`app/workers/branding.py:enrich_monitor_brand`, enqueued at `routers/monitors.py:create_monitor`). | Done |
 | **Bounded Dashboard Query** | `list_monitors` performed an unbounded scan of `ChangeEvent` across workspace history. | LATERAL join — one index walk per monitor via `ix_change_events_monitor_created` (`routers/monitors.py:list_monitors`). | Done |
 | **Outbox Conflict Safety** | Outbox insertion used a bare `db.add()`, which poisoned retry workers on race conditions. | `pg_insert(...).on_conflict_do_nothing(index_elements=["idempotency_key"])` keyed on `run:{run_id}:change:channel:{channel_id}` (`services/pipeline.py:_queue_notifications`). | Done |
@@ -235,7 +260,7 @@ All four are **implemented** — statuses verified against code 2026-09-04:
 
 ## 8. Phased Implementation Roadmap & Priority Matrix
 
-> Solo + free-tier constraint: no paid proxy/SDK infra in Phase 8–9. Ship deployable increments per phase (see `production.md` for Render/GCP path).
+> Solo + free-tier constraint: no paid proxy/SDK infra in Phase 8–9. Ship deployable increments per phase.
 
 ```mermaid
 gantt
@@ -260,7 +285,7 @@ gantt
 ### Effort vs. Impact Matrix
 
 | Feature | User Impact | Implementation Effort | Recommended Order |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Telegram Bot Alerting** | High | Low (1–2 days) | 1 |
 | **Async Brand Fetch & Query Hardening** | Done 2026-09 (all 4 items verified in code) | — | Done, skip |
 | **Visual Element Selector (Point-and-Click)** | Partially done 2026-09 (preview + picker shipped; extension flow left) | — | Partial, see 2.1 |
@@ -277,4 +302,4 @@ gantt
 
 ---
 
-*Document created for pair-programming and roadmap tracking. Last reviewed 2026-09-04: marked 3.3 + 4.1-base + bulk pause/resume (4.4) done, 2.1 partially implemented (selector-preview + picker shipped), re-sequenced Phase 8 (Telegram first), deferred paid proxy/extension to Phase 10. Deploy path: see `production.md`. Review or update as feature requirements evolve.*
+*Document created for pair-programming and roadmap tracking. Last reviewed 2026-09-04: marked 3.3 + 4.1-base + bulk pause/resume (4.4) done, 2.1 partially implemented (selector-preview + picker shipped), re-sequenced Phase 8 (Telegram first), deferred paid proxy/extension to Phase 10. Review or update as feature requirements evolve.*

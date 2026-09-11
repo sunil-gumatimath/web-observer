@@ -7,7 +7,7 @@
 ## What shipped
 
 | Capability | Implementation |
-|------------|----------------|
+| ------------ | ---------------- |
 | JS monitors | `monitors.js_required` → `browser_checks` queue |
 | Opt-in screenshots | `monitors.screenshots_enabled` → full-page screenshot attached to checks/alerts (any mode); a first-class `visual` monitor mode was added later (perceptual aHash comparison) — see `docs/phase-4.md` |
 | Playwright fetch | `app/services/browser_fetch.py` |
@@ -21,7 +21,7 @@
 | Failure emails | After N consecutive failures (default 3) |
 | Browser quota | `MAX_BROWSER_CHECKS_PER_DAY` per workspace (default 50) |
 
-## Run (no Docker)
+## Run
 
 ```powershell
 # HTTP worker
@@ -35,13 +35,6 @@
 ```
 
 Or: `powershell -File .\scripts\restart-stack.ps1`
-
-Docker (optional):
-
-```bash
-docker compose up --build
-# Includes worker-browser if defined in compose
-```
 
 Create a monitor with **JavaScript rendering required** in the UI (screenshots are a separate opt-in via `screenshots_enabled`; a first-class `visual` mode also exists now — see `docs/phase-4.md`).
 
