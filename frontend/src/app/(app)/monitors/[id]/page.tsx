@@ -22,19 +22,26 @@ import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
 import { api, ApiError, brandAssetUrl } from "@/lib/api";
+import {
+  isActiveRun,
+  runsSignature,
+  TERMINAL_RUN_STATUSES as TERMINAL,
+} from "@/lib/monitor-runs";
 import type { ChangeEvent, Monitor, MonitorRun, ValuePoint } from "@/lib/types";
 import { ValueChart } from "@/components/value-chart";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
-const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
+// Polling budget: the first check can legitimately take a while (cold backend,
+// large pages, browser queue — backend workers allow 120-180s), so the budget
+// only expires after this long with *no observed progress* (no new run and no
+// status change). Any progress restarts the clock. After expiry the UI says so
+// but keeps a slow background watch: a late finish still settles the card
+// without a manual refresh.
 const POLL_MS = 1500;
 const POLL_SLOW_MS = 15_000;
 const POLL_MAX_MS = 45_000;
-
-function isActiveRun(r: MonitorRun) {
-	return r.status === "queued" || r.status === "running";
-}
+const POLL_STALE_MS = 10_000;
 
 export default function MonitorDetailPage() {
 	return (
@@ -76,6 +83,13 @@ function MonitorDetailInner() {
 
 	const pollStartedAt = useRef<number | null>(null);
 	const latestSnapshotId = useRef<string | null>(null);
+	// Fingerprint of the last observed run list: any new run or status change
+	// counts as progress and restarts the stall budget (see polling effect).
+	const lastRunsSig = useRef<string | null>(null);
+	// True once SSE has delivered at least one run/change event; the fallback
+	// interval idles while the stream is live. Ref (not state) so the stream
+	// connecting doesn't tear down and restart the effect.
+	const sseLiveRef = useRef(false);
 	// Latest values for the polling interval callback to read without being in
 	// the effect deps (prevents the interval from being torn down every poll).
 	const isFreshRef = useRef(isFresh);
@@ -124,19 +138,24 @@ function MonitorDetailInner() {
 		};
 	}, [load]);
 
-	// Live updates: SSE primary with polling fallback
+	// Live updates: SSE primary with polling fallback.
+	// `polling` stays true while waiting (even past the stall budget) so the
+	// result card keeps its spinner; `pollTimedOut` only switches the card to
+	// the "taking too long" advisory while a slow background watch continues.
 	const hasActiveRun = runs.some(isActiveRun);
 	const waitingForFirst =
 		showFreshBanner &&
 		(runs.length === 0 || runs.every((r) => !TERMINAL.has(r.status)));
 	const shouldPoll =
 		!loading && !!workspaceId && (hasActiveRun || waitingForFirst);
-	const polling = shouldPoll && !pollTimedOut;
+	const polling = shouldPoll;
 
 	useEffect(() => {
 		if (loading || !workspaceId) return;
 		if (!shouldPoll) {
 			pollStartedAt.current = null;
+			lastRunsSig.current = null;
+			sseLiveRef.current = false;
 			setSseConnected(false);
 			return;
 		}
@@ -144,7 +163,67 @@ function MonitorDetailInner() {
 
 		const ac = new AbortController();
 		let fallbackId: number | null = null;
-		let sseOk = false;
+		let slow = false;
+		sseLiveRef.current = false;
+
+		function startFallback(ms: number) {
+			if (fallbackId) window.clearInterval(fallbackId);
+			fallbackId = window.setInterval(async () => {
+				if (sseLiveRef.current) return;
+				try {
+					await observe();
+				} catch {
+					/* keep polling */
+				}
+			}, ms);
+		}
+
+		// Any new run or status change restarts the stall budget. Without
+		// this, a healthy-but-slow first check (cold backend, large page,
+		// browser queue) outlives the fixed 45s budget and the UI dead-ends
+		// while the worker is still going — the page then only recovers via
+		// a manual refresh.
+		function noteProgress(next: MonitorRun[]) {
+			const sig = runsSignature(next);
+			if (sig !== lastRunsSig.current) {
+				lastRunsSig.current = sig;
+				pollStartedAt.current = Date.now();
+				if (slow) {
+					slow = false;
+					startFallback(POLL_MS);
+				}
+				setPollSlow(false);
+				setPollTimedOut(false);
+			}
+		}
+
+		async function observe() {
+			const started = pollStartedAt.current ?? Date.now();
+			if (Date.now() - started > POLL_SLOW_MS) setPollSlow(true);
+			const { runs: next } = await load();
+			noteProgress(next);
+			const stillActive = next.some(isActiveRun);
+			const hasTerminal = next.some((r) => TERMINAL.has(r.status));
+			const stalled = Date.now() - (pollStartedAt.current ?? Date.now()) > POLL_MAX_MS;
+			if (!stillActive && hasTerminal) {
+				setPollSlow(false);
+				setPollTimedOut(false);
+				pollStartedAt.current = null;
+				lastRunsSig.current = null;
+				if (isFreshRef.current) {
+					router.replace(`/monitors/${monitorIdRef.current}`, { scroll: false });
+				}
+				if (fallbackId) window.clearInterval(fallbackId);
+				ac.abort();
+			} else if (stalled && !slow) {
+				// No status change for the whole budget: say so, but keep a
+				// slow background watch so a late finish still settles the
+				// card on its own.
+				slow = true;
+				setPollTimedOut(true);
+				startFallback(POLL_STALE_MS);
+			}
+		}
 
 		// Try SSE first
 		(async () => {
@@ -155,23 +234,9 @@ function MonitorDetailInner() {
 					async (event, data) => {
 						if (event === "connected") setSseConnected(true);
 						if (event === "run" || event === "change") {
-							sseOk = true;
-							const started = pollStartedAt.current ?? Date.now();
-							const elapsed = Date.now() - started;
-							if (elapsed > POLL_SLOW_MS) setPollSlow(true);
+							sseLiveRef.current = true;
 							try {
-								const { runs: next } = await load();
-								const stillActive = next.some(isActiveRun);
-								const hasTerminal = next.some((r) => TERMINAL.has(r.status));
-								if (!stillActive && hasTerminal) {
-									setPollSlow(false);
-									setPollTimedOut(false);
-									pollStartedAt.current = null;
-									if (isFreshRef.current) {
-										router.replace(`/monitors/${monitorIdRef.current}`, { scroll: false });
-									}
-									ac.abort();
-								}
+								await observe();
 							} catch {
 								/* keep streaming */
 							}
@@ -185,42 +250,14 @@ function MonitorDetailInner() {
 			}
 		})();
 
-		// Fallback polling if SSE not connected within 2.5s or fails
-		fallbackId = window.setInterval(async () => {
-			if (sseOk && sseConnected) return;
-			try {
-				const started = pollStartedAt.current ?? Date.now();
-				const elapsed = Date.now() - started;
-				if (elapsed > POLL_SLOW_MS) setPollSlow(true);
-				const { runs: next } = await load();
-				const stillActive = next.some(isActiveRun);
-				const hasTerminal = next.some((r) => TERMINAL.has(r.status));
-				const timedOut = elapsed > POLL_MAX_MS;
-				if (!stillActive && hasTerminal) {
-					setPollSlow(false);
-					setPollTimedOut(false);
-					pollStartedAt.current = null;
-					if (isFreshRef.current) {
-						router.replace(`/monitors/${monitorIdRef.current}`, { scroll: false });
-					}
-					if (fallbackId) window.clearInterval(fallbackId);
-					ac.abort();
-				} else if (timedOut) {
-					setPollTimedOut(true);
-					pollStartedAt.current = null;
-					if (fallbackId) window.clearInterval(fallbackId);
-					ac.abort();
-				}
-			} catch {
-				/* keep polling */
-			}
-		}, POLL_MS);
+		// Fallback polling while SSE isn't delivering
+		startFallback(POLL_MS);
 
 		return () => {
 			ac.abort();
 			if (fallbackId) window.clearInterval(fallbackId);
 		};
-	}, [shouldPoll, loading, workspaceId, load, router, monitorId, sseConnected]);
+	}, [shouldPoll, loading, workspaceId, load, router, monitorId]);
 
 	// Load snapshot text preview for latest successful run.
 	useEffect(() => {
@@ -405,7 +442,7 @@ function MonitorDetailInner() {
 							</Link>
 							<Button
 								size="sm"
-								disabled={busy || polling}
+								disabled={busy}
 								onClick={() =>
 									withAction(async () => {
 										try {
@@ -550,10 +587,11 @@ function MonitorDetailInner() {
 										</span>
 									</div>
 									<p className="text-sm text-slate-600 dark:text-slate-300">
-										The job stayed queued/running past{" "}
+										No status change for{" "}
 										{Math.round(POLL_MAX_MS / 1000)}s. Common causes: worker not
 										listening on the right queue, Redis disconnect, or a lost
-										job after restart.
+										job after restart. Still watching — if the check finishes,
+										this page updates on its own.
 									</p>
 									<div className="flex flex-wrap gap-2">
 										<Button type="button" disabled={busy} onClick={retryCheck}>
