@@ -24,6 +24,8 @@ Local setup & ops live in
 
 | Doc | Description |
 | ----- | ------------- |
+| [phase-01-core-detection.md](./phase-01-core-detection.md) | Core detection pipeline (SSRF-safe fetch → diff → alerts) |
+| [phase-02-dashboard-auth.md](./phase-02-dashboard-auth.md) | Next.js dashboard + Clerk auth + workspaces |
 | [phase-03-browser-and-js.md](./phase-03-browser-and-js.md) | Reliability & JavaScript rendering (Playwright) |
 | [phase-04-structured-and-visual.md](./phase-04-structured-and-visual.md) | Structured & visual monitor modes |
 | [phase-05-ai-and-alerts.md](./phase-05-ai-and-alerts.md) | AI summaries, semantic triggers, Slack/Discord, digests |
