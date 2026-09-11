@@ -59,15 +59,15 @@ flowchart TD
 ## Process topology
 
 | Process | Responsibility |
-|---------|----------------|
+| --------- | ---------------- |
 | `api` | REST API, authz, CRUD, manual trigger |
 | `scheduler` | Poll due monitors, claim, enqueue |
 | `worker-http` | Fetch, extract, hash, diff, outbox insert |
 | `worker-notifications` | Deliver email (and later Slack/Discord) |
 | `web` | Next.js dashboard (Phase 2+) |
 
-Local: all via Docker Compose.  
-Beta: separately deployable API, scheduler, workers; managed Postgres + Redis; R2 for blobs.
+Local: run the processes directly (see `docs/local-dev.md`).  
+Beta: separately runnable API, scheduler, workers; Postgres + Redis; optional object storage for blobs.
 
 ## Baseline and comparison rules
 
@@ -109,7 +109,7 @@ Beta: separately deployable API, scheduler, workers; managed Postgres + Redis; R
 ## Queue separation
 
 | Queue | Work |
-|-------|------|
+| ------- | ------ |
 | `http_checks` | Standard fetch checks |
 | `notifications` | Outbox delivery |
 | `browser_checks` | Shipped (Playwright JS-rendered checks; dedicated worker `--threads 1`) |
@@ -120,4 +120,4 @@ Separate concurrency, timeout, and retry per queue.
 
 - Kubernetes not required  
 - Kafka not required  
-- Browser workers not required until Phase 3  
+- Browser workers were out of scope for the MVP; shipped in Phase 3 (see `docs/phase-3.md`).  

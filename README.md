@@ -17,11 +17,13 @@ Web change-detection and alerting platform.
 Verified end-to-end: backend unit tests pass (140 passed, 2 skipped, 8 integration deselected), the frontend type-checks (`tsc`), `vitest` is green (40 tests), `next build` compiles all routes, and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
 | Doc | Topic |
-|-----|--------|
-| [docs/local-dev.md](docs/local-dev.md) | Run without Docker (full process list) |
+| ----- | -------- |
+| [docs/local-dev.md](docs/local-dev.md) | Run locally (full process list) |
 | [docs/clerk-setup.md](docs/clerk-setup.md) | Clerk auth (dev) |
 | [docs/clerk-production.md](docs/clerk-production.md) | Clerk production hardening |
+| [docs/phase-2-auth.md](docs/phase-2-auth.md) | Auth modes (dev token / Clerk) |
 | [docs/resend-setup.md](docs/resend-setup.md) | Email alerts |
+| [docs/r2-setup.md](docs/r2-setup.md) | Cloudflare R2 snapshots (optional object storage) |
 | [docs/phase-3.md](docs/phase-3.md) | JS / Playwright / browser queue |
 | [docs/phase-4.md](docs/phase-4.md) | Structured + visual modes |
 | [docs/phase-5.md](docs/phase-5.md) | AI summaries, semantic triggers, Slack/Discord, digests |
@@ -85,8 +87,8 @@ sequenceDiagram
 <details>
 <summary><strong>Under the hood (for contributors)</strong></summary>
 
-- Workers are Python `dramatiq` (`backend/app/workers/checks.py:21`, `browser_checks.py:24`) on three queues — `http_checks`, `browser_checks`, `notifications` — via `RedisBroker` (`backend/app/workers/broker.py:9`).
-- Due-monitor claiming is Postgres-driven (`SELECT ... FOR UPDATE SKIP LOCKED`, 60s lease + jitter: `backend/app/config.py:73-75`, `backend/app/scheduler.py:40`), so multiple schedulers never double-claim.
+- Workers are Python `dramatiq` (`backend/app/workers/checks.py`, `browser_checks.py`) on three queues — `http_checks`, `browser_checks`, `notifications` — via `RedisBroker` (`backend/app/workers/broker.py`).
+- Due-monitor claiming is Postgres-driven (`SELECT ... FOR UPDATE SKIP LOCKED`, 60s lease + jitter: `backend/app/config.py`, `backend/app/scheduler.py`), so multiple schedulers never double-claim.
 - Snapshots store raw HTML + normalized text with a SHA256 `content_hash`; change rows carry `is_noise` / `is_read`; webhooks are HMAC-signed (`X-MTW-Signature`).
 - An external LLM is only called when `LLM_API_KEY` is set; otherwise summaries/triage use fast local heuristics.
 - Full diagrams (components, ERD, sequence): `docs/architecture-uml.md`.
@@ -96,13 +98,12 @@ sequenceDiagram
 ## What you need
 
 | Piece | This project |
-|--------|----------------|
+| -------- | ---------------- |
 | Database | **Neon** Postgres (or local Postgres) — `DATABASE_URL` in `backend/.env` |
 | Queue | **Redis** on `localhost:6379` |
 | Auth | **Clerk** — keys in `frontend/.env.local` + JWKS in `backend/.env` |
 | Email | **Resend** — optional for alerts |
-| Snapshots | Local disk (`STORAGE_BACKEND=local`) — no MinIO |
-| Docker | **Not required** |
+| Snapshots | Local disk (`STORAGE_BACKEND=local`) or S3-compatible object storage |
 
 ## Env files (do not commit secrets)
 
@@ -155,7 +156,7 @@ CLERK_SECRET_KEY=sk_test_...
 # NEXT_PUBLIC_DEV_WORKSPACE_ID=
 ```
 
-## Run locally (no Docker)
+## Run locally
 
 ### One-time
 
@@ -175,7 +176,7 @@ bun install # or npm install
 Redis must already be running. Prefer loading env from `backend/.env` (Neon).
 
 | # | Process | Command |
-|---|---------|---------|
+| --- | --------- | --------- |
 | 1 | **API** | `uvicorn app.main:app --host 127.0.0.1 --port 8002` |
 | 2 | **HTTP worker** | `dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2` |
 | 3 | **Browser worker** | `dramatiq app.workers --queues browser_checks --processes 1 --threads 1` |
@@ -192,7 +193,7 @@ Use **`--threads 1`** on Windows. Playwright runs in a **subprocess** (`playwrig
 | Digest | `python -m app.digest_job --loop` | Sends daily/weekly workspace digests (Phase 5) |
 | Retention | `python -m app.retention_job` | Purges runs/snapshots older than `RUN_RETENTION_DAYS` (default 90) |
 
-These are separate processes (the Docker Compose `digest` service runs the loop automatically). Run them on a schedule/cron in production.
+These are separate processes. Run them on a schedule/cron.
 
 **Helpers:**
 
@@ -202,17 +203,17 @@ powershell -File .\scripts\restart-stack.ps1
 ```
 
 | URL | What |
-|-----|------|
-| http://127.0.0.1:3000 | UI |
-| http://127.0.0.1:8002/docs | API docs |
-| http://127.0.0.1:8002/health | API up? |
-| http://127.0.0.1:8002/ready | DB reachable? |
+| ----- | ------ |
+| <http://127.0.0.1:3000> | UI |
+| <http://127.0.0.1:8002/docs> | API docs |
+| <http://127.0.0.1:8002/health> | API up? |
+| <http://127.0.0.1:8002/ready> | DB reachable? |
 
 If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_URL` does not match the API port.
 
 ## First test flow
 
-1. Open http://127.0.0.1:3000 → **Sign up / Sign in** (Clerk).  
+1. Open <http://127.0.0.1:3000> → **Sign up / Sign in** (Clerk).  
 2. **Settings → Alert channels** → add your email (optional).  
 3. **New monitor** → e.g. `https://example.com/` (enable screenshots for image history).  
 4. Open monitor → **Run now** (first success = baseline, no alert).  
@@ -220,11 +221,11 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 ## Features
 
 | Area | What's included |
-|------|-----------------|
+| ------ | ----------------- |
 | Monitoring modes | `page_content` (whole page text; `js_required` for SPAs), `readme` (GitHub repository README changes via `owner/repo` or full URL, renders GitHub-style markdown diffs), `site_links` (sitemap URL changes), `rss_feed` (RSS/Atom feed updates), `product_price` (price/currency, defaults to a daily schedule), `list_items` (CSS-selector link list), `json_field` (single value via JSONPath-style query, e.g. `$.data.price`, from a JSON endpoint), `visual` (perceptual screenshot comparison via aHash, `VISUAL_AHASH_THRESHOLD=5`) — `site_links`/`rss_feed`/`readme` fetch over plain HTTP only (`js_required` rejected at the schema layer); other modes can use the Playwright browser queue |
 | Visual element picker | Point-and-click selector picker on New/Edit monitor: proxied `POST /monitors/selector-preview` renders a sanitized preview, clicking an element synthesizes the most resilient CSS selector (`frontend/src/components/selector-picker.tsx`, `frontend/src/lib/selector.ts`); brand info auto-fill via `POST /monitors/brand-info` |
 | Alert channels | Email (Resend), Slack webhook, Discord webhook |
-| AI change summaries | Optional plain-language summaries per change (heuristic by default; enable OpenAI-compatible LLM via `LLM_API_BASE` — works with OpenAI or Vercel AI Gateway — and toggle per-workspace via `ai_summaries_enabled`) |
+| AI change summaries | Optional plain-language summaries per change (heuristic by default; enable any OpenAI-compatible gateway via `LLM_API_BASE`, default `api.kilo.ai` — and toggle per-workspace via `ai_summaries_enabled`) |
 | AI relevance filter | Optional per-monitor `watch_note` triage — LLM scores each diff vs. watch note; routine noise (cookie banners, ads, counters) is marked `is_noise=true`, held in dashboard (not deleted), excluded from notifications/digests, fails open on LLM error |
 | Conditional alerting | Optional per-monitor `alert_config` JSONB (migration `011`) — thresholds evaluated in `backend/app/services/conditional.py:26` before notify: `price_below`/`price_above` + `percent_change` (`product_price`), `percent_change` (`json_field`, `page_content`), `list_min_added`/`list_min_removed` (`list_items`/`site_links`/`rss_feed`), `min_diff_chars`, `regex_must_match`/`regex_must_not_match`. Unmet thresholds mark the change `is_noise=true` with reason (stored, excluded from notifications/digests); empty config = alert on any hash difference. Set via `POST/PATCH /monitors` body or bulk import CSV/JSON `alert_config` column |
 | Diffs | GitHub-style added/removed line views for every content change (unified diff + split view) via `GithubDiff` and readable markdown views |
@@ -270,5 +271,3 @@ Quick smoke test of a running stack (API + worker must be up):
 ```sh
 ./scripts/smoke.sh
 ```
-
-

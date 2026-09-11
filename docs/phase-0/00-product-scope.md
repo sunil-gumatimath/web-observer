@@ -1,7 +1,6 @@
 # Product Scope — Phase 0
 
 Status: **Approved for MVP implementation**  
-Source: `Web Observer-final-roadmap.md`  
 Date: 2026-07-10
 
 ## Product vision
@@ -13,7 +12,7 @@ Web Observer detects changes on public web pages (or selected sections) and send
 ## Initial personas
 
 | Persona | Example use |
-|---------|-------------|
+| --------- | ------------- |
 | Developer / eng team | Docs, changelogs, release notes |
 | Product / founder | Competitor pricing, feature lists |
 | Researcher | Public notices, tenders, job boards |

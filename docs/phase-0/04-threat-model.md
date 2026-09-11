@@ -6,7 +6,7 @@ Scope: MVP public monitoring
 ## Assets
 
 | Asset | Impact if compromised |
-|-------|------------------------|
+| ------- | ------------------------ |
 | Workspace data (monitors, runs, diffs) | Cross-tenant leak |
 | Raw HTML snapshots | Sensitive public content aggregation / abuse |
 | Worker egress | Internal network access via SSRF |
@@ -118,9 +118,11 @@ Scope: MVP public monitoring
 
 ## Security requirements checklist (Phase 1 exit)
 
-- [ ] SSRF suite green  
-- [ ] No private/metadata IP access in tests  
-- [ ] Workspace isolation tests green  
-- [ ] Diff rendering safe (no raw HTML inject)  
-- [ ] Secrets not in logs  
-- [ ] Quotas enforced at API and worker edges  
+Status: **implemented** — controls shipped (see `docs/phase-3.md`, `docs/phase-6-7.md`).
+
+- [x] SSRF suite green  
+- [x] No private/metadata IP access in tests  
+- [x] Workspace isolation tests green  
+- [x] Diff rendering safe (no raw HTML inject)  
+- [x] Secrets not in logs  
+- [x] Quotas enforced at API and worker edges  

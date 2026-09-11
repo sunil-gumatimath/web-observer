@@ -11,7 +11,7 @@ Right now only **Development** exists. Production is **not created yet**, so the
 ## Why you still see Development mode
 
 | Instance | Keys | Badge |
-|----------|------|--------|
+| ---------- | ------ | -------- |
 | Development | `pk_test_…` / `sk_test_…` | “Development mode” |
 | Production | `pk_live_…` / `sk_live_…` | No “Development mode” (branding may still show on free plans) |
 
@@ -67,7 +67,7 @@ Keys should look like:
 | Local coding / first tests | **Development** is fine |
 | “Keep prod” / real users | **Production** keys only on the machine/server you deploy |
 
-You can keep **dev keys** for local and **prod keys** only on a VPS later.  
+You can keep **dev keys** for local use and **prod keys** only in the environment you use for real users.  
 If you want **only prod** even locally, use prod keys after Production is ready (and allow localhost in prod allowed origins).
 
 ## “Secured by Clerk” branding

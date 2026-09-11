@@ -5,7 +5,7 @@ Status: **Approved as beta defaults (configurable)**
 ## Private-beta KPIs
 
 | Metric | Target |
-|--------|--------|
+| -------- | -------- |
 | Successful eligible checks | ≥ 99% |
 | Lightweight checks within 15s | ≥ 95% |
 | Checks start within 5 min of schedule | ≥ 99% |
@@ -40,11 +40,11 @@ Status: **Approved as beta defaults (configurable)**
 ## Initial workspace quotas (beta defaults)
 
 | Limit | Default |
-|-------|---------|
+| ------- | --------- |
 | Min check interval | 15 minutes (5 min for trusted internal) |
 | Max monitors / workspace | 25 |
 | Max checks / day / workspace | 500 |
-| Max browser checks / day | 0 (until Phase 3) |
+| Max browser checks / day | 50 (`MAX_BROWSER_CHECKS_PER_DAY`; shipped in Phase 3) |
 | Max response size | 2 MB |
 | Max snapshot storage / workspace | 1 GB |
 | Max notification deliveries / day | 200 |

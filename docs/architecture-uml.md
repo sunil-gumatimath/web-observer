@@ -213,6 +213,7 @@ classDiagram
         +UUID workspace_id
         +String key_hash
         +String key_prefix
+    }
     class ShareLink {
         +UUID id
         +UUID workspace_id
@@ -386,7 +387,7 @@ flowchart TB
         LAYOUT["layout.tsx\nmetadata.icons + openGraph"]
     end
     subgraph Public["Static Public — frontend/public"]
-        PUB["icon.svg\nlogo.svg (= web-observer.svg)\nweb-observer.svg / web-observer-icon.svg\napple-icon.svg / opengraph-image.svg"]
+        PUB["web-observer.svg\nweb-observer-icon.svg"]
     end
     subgraph Components["Components — frontend/src/components"]
         LOGO["logo.tsx\nLogoIcon (32px target mark)\nLogo (icon + wordmark)"]
@@ -406,7 +407,7 @@ flowchart TB
 
 * Mark: 32×32 (36×36 at 18px center) — `slate-900` rounded square `rx 9.5`, hairline track `r 9.5 @ 14% white`, scanning arc `sky-400 #38bdf8 1.55px` `M 16 6.5 A 9.5 9.5`, ping `r1.35 + r2.45@18%`, middle ring `r5.9 1.35px white 95%`, center dot `r2.35 white`. No literal eye / no zig-zag — reads at 16px favicon.
 * Wordmark: `Inter 700 -0.03em` `Web #0f172a → #f8fafc (dark)` + `Observer 500 #64748b → #cbd5e1 (dark)`; SVG embeds `@media (prefers-color-scheme: dark)` so `assets/web-observer.svg` is theme-aware; React `Logo` uses `text-slate-900/dark:text-white` + `text-slate-500/dark:text-slate-300`.
-* Assets: source in `assets/` (also `frontend/public/` for direct serving, `frontend/src/app/` for Next.js file-based metadata). `frontend/README.md:1` and root `README.md:2` header use `assets/web-observer.svg` (320w).
+* Assets: source in `assets/` (also `frontend/public/` for direct serving, `frontend/src/app/` for Next.js file-based metadata). Root `README.md` header uses `assets/web-observer.svg` (320w).
 
 ## Notes
 
@@ -417,4 +418,4 @@ flowchart TB
 * **Newer endpoints not in the diagrams above**: `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`.
 * **Quotas/plans** (`services/usage.py`, `services/plans.py`): daily check/notification/storage counters per workspace, gated by plan.
 * **Lease + reaper**: scheduler claims monitors with a 60s lease; `run_reaper` recovers stuck runs so HA scheduler/workers don't double-run.
-* **Branding pipeline**: `assets/` is the source of truth; `frontend/public/` is the static fallback; `frontend/src/app/icon.svg` etc are Next.js metadata routes (generates `/icon.svg`, `/manifest.webmanifest`). `LogoIcon` is inline SVG (not `<img>`) so it inherits Tailwind theming and scales via `size` prop (`shell.tsx:49` `iconSize={36}`). OG image `opengraph-image.svg` (1200×630) is served from both `src/app` and `public` and referenced in `layout.tsx:40`.
+* **Branding pipeline**: `assets/` is the source of truth; `frontend/public/web-observer.svg` and `web-observer-icon.svg` are the static copies; `frontend/src/app/icon.svg` etc are Next.js metadata routes (generates `/icon.svg`, `/manifest.webmanifest`). `LogoIcon` is inline SVG (not `<img>`) so it inherits Tailwind theming and scales via `size` prop (`shell.tsx:49` `iconSize={36}`). OG image `opengraph-image.svg` (1200×630) is served from `src/app` and referenced in `layout.tsx`.

@@ -25,23 +25,26 @@ erDiagram
 ## Primary tables (MVP)
 
 ### `users`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | clerk_user_id | unique, nullable in Phase 1 seed mode |
 | email | unique |
 | created_at, updated_at | timestamptz |
 
 ### `workspaces`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | name | text |
 | created_at, updated_at | |
 
 ### `workspace_members`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | workspace_id | FK |
 | user_id | FK |
@@ -49,13 +52,14 @@ erDiagram
 | unique | (workspace_id, user_id) |
 
 ### `monitors`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | workspace_id | FK, indexed |
 | name | text |
 | url | text |
-| mode | `page_content` \| `site_links` \| `product_price` \| `list_items` \| `json_field` (updated to reflect shipped MonitorMode enum) |
+| mode | `page_content` \| `site_links` \| `product_price` \| `list_items` \| `json_field` \| `rss_feed` \| `readme` \| `visual` (matches shipped `MonitorMode` enum) |
 | css_selector | nullable |
 | schedule_expression | e.g. interval or cron-like; MVP may use interval minutes |
 | timezone | IANA tz |
@@ -70,8 +74,9 @@ erDiagram
 | created_at, updated_at | |
 
 ### `monitor_config_versions`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | monitor_id | FK |
 | version | int |
@@ -79,8 +84,9 @@ erDiagram
 | created_at | |
 
 ### `monitor_runs`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | monitor_id, workspace_id | FKs |
 | config_version | int |
@@ -96,8 +102,9 @@ erDiagram
 | created_at | |
 
 ### `snapshots`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | workspace_id, monitor_id | FKs |
 | run_id | FK |
@@ -109,8 +116,9 @@ erDiagram
 | created_at | |
 
 ### `change_events`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | workspace_id, monitor_id | FKs |
 | run_id | FK |
@@ -122,18 +130,20 @@ erDiagram
 | unique protection | e.g. unique(run_id) for change |
 
 ### `notification_channels`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | workspace_id | FK |
-| type | `email` |
+| type | `email` \| `slack` \| `discord` |
 | address | email |
 | enabled | bool |
 | created_at | |
 
 ### `notification_outbox`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | workspace_id | FK |
 | change_event_id | FK nullable (or failure notice type) |
@@ -147,8 +157,9 @@ erDiagram
 | created_at, updated_at | |
 
 ### `notification_deliveries`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | id | UUID PK |
 | outbox_id | FK |
 | channel_id | FK |
@@ -157,8 +168,9 @@ erDiagram
 | created_at | |
 
 ### `domain_policies`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | domain | text PK or unique |
 | robots_mode | policy flags |
 | blocked | bool |
@@ -166,8 +178,9 @@ erDiagram
 | updated_at | |
 
 ### `usage_counters`
+
 | Column | Notes |
-|--------|--------|
+| -------- | -------- |
 | workspace_id | FK |
 | period_start | date or timestamptz |
 | checks_count | int |

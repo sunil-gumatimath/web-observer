@@ -19,4 +19,4 @@ Raw HTML (and later screenshots) can be large. Alerts must be reliable transacti
 
 - Keep large blobs out of Postgres.  
 - Email delivery is async and retryable.  
-- Local/dev can use MinIO-compatible S3 API or filesystem shim behind the same interface.
+- Local/dev can use the filesystem (`STORAGE_BACKEND=local`) or any S3-compatible endpoint behind the same interface.
