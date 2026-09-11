@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     )
 
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # Canonical frontend origin (e.g. https://app.example.com or a fixed
+    # https://*.vercel.app deployment). Merged into the CORS allow-list in
+    # main._cors_origins(). Explicit values only — no regex wildcards.
+    frontend_url: str | None = None
 
     # Quotas (beta defaults)
     min_check_interval_minutes: int = 15

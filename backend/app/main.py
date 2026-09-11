@@ -53,14 +53,23 @@ app.add_exception_handler(
 
 
 def _cors_origins() -> list[str]:
+    """Explicit CORS allow-list from config: CORS_ORIGINS + FRONTEND_URL.
+
+    No regex/wildcard matching: every allowed origin is enumerated here so
+    a credentialed (`allow_credentials=True`) API never trusts an arbitrary
+    subdomain. Vercel preview deployments must be listed explicitly via
+    CORS_ORIGINS / FRONTEND_URL.
+    """
     import re
 
     raw = (getattr(settings, "cors_origins", "") or "").strip()
-    if not raw:
+    origins = [o.strip() for o in re.split(r"[,\s]+", raw) if o.strip()] if raw else []
+    frontend = (getattr(settings, "frontend_url", None) or "").strip()
+    if frontend and frontend not in origins:
+        origins.append(frontend)
+    if not origins:
         return ["http://localhost:3000", "http://127.0.0.1:3000"]
-    # Split on commas AND any whitespace — some platforms flatten commas to
-    # spaces in env values, so space-separated must also work in prod.
-    return [o.strip() for o in re.split(r"[,\s]+", raw) if o.strip()]
+    return origins
 
 
 # Enumerated instead of "*": the wildcard is broader than the API needs, and it
@@ -78,7 +87,6 @@ _ALLOWED_HEADERS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=_ALLOWED_METHODS,
     allow_headers=_ALLOWED_HEADERS,
@@ -120,12 +128,16 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 @app.get("/ready", response_model=HealthResponse)
 def ready(db: Db) -> HealthResponse:
+    """Liveness/readiness probe. Unauthenticated by design (load balancers /
+    smoke checks call it without credentials) and cheap by design: a single
+    ``SELECT 1`` ping, no table scans, so frequent scrapes stay O(1)."""
     db.execute(select(1))
     return HealthResponse(status="ready", version=__version__)
 
 
 @app.get("/metrics")
-def metrics(db: Db):
+@limiter.limit("30/minute")
+def metrics(request: Request, db: Db):
     """Prometheus-compatible metrics (lightweight, no extra deps)."""
     from sqlalchemy import func as _func
 

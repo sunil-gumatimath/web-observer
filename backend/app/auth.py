@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import BackgroundTasks, Depends, Header, HTTPException, Request, status
 from jwt import PyJWKClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -129,12 +129,86 @@ def ensure_default_workspace(db: Session, user: User) -> Workspace:
     return workspace
 
 
+def _touch_api_key_last_used(key_id: uuid.UUID) -> None:
+    """Background write: refresh an API key's ``last_used_at`` in its own session.
+
+    Runs via FastAPI BackgroundTasks after the response is sent, so the
+    request-scoped session in :func:`get_current_principal` stays read-only.
+    Best-effort: a stale timestamp must never fail a request.
+    """
+    try:
+        from datetime import UTC, datetime
+
+        from app.db import SessionLocal
+        from app.models import ApiKey
+
+        session = SessionLocal()
+    except Exception as exc:  # noqa: BLE001 - never fail the request path
+        logger.debug("api_key_touch_setup_failed error=%s", exc)
+        return
+    try:
+        row = session.get(ApiKey, key_id)
+        if row is not None:
+            row.last_used_at = datetime.now(UTC)
+            session.commit()
+    except Exception as exc:  # noqa: BLE001 - best-effort timestamp
+        session.rollback()
+        logger.debug("api_key_touch_failed error=%s", exc)
+    finally:
+        session.close()
+
+
+def sync_clerk_principal(db: Session, *, clerk_user_id: str, email: str) -> User:
+    """Explicit provisioning path for Clerk users. COMMITS.
+
+    :func:`get_current_principal` is read-only; first-login provisioning is
+    deferred to a background task. Endpoints that need the user row
+    immediately (e.g. workspace bootstrap) should call this explicitly
+    instead of relying on auth side effects.
+    """
+    user = upsert_clerk_user(db, clerk_user_id=clerk_user_id, email=email)
+    ensure_default_workspace(db, user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _sync_clerk_user_background(clerk_user_id: str, email: str) -> None:
+    """Background provisioning for first-login Clerk users (own session)."""
+    try:
+        from app.db import SessionLocal
+
+        session = SessionLocal()
+    except Exception as exc:  # noqa: BLE001 - never fail the request path
+        logger.debug("clerk_sync_setup_failed error=%s", exc)
+        return
+    try:
+        sync_clerk_principal(session, clerk_user_id=clerk_user_id, email=email)
+    except Exception as exc:  # noqa: BLE001 - best-effort provisioning
+        session.rollback()
+        logger.debug("clerk_sync_failed error=%s", exc)
+    finally:
+        session.close()
+
+
 def get_current_principal(
+    request: Request,
+    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
     x_internal_token: str | None = Header(default=None),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AuthPrincipal:
+    """Resolve the caller. READ-ONLY: never commits or flushes ``db``.
+
+    Writes that used to happen here moved out of the request path:
+    API-key ``last_used_at`` touches run in :func:`_touch_api_key_last_used`
+    via BackgroundTasks, and Clerk user/workspace provisioning runs in
+    :func:`_sync_clerk_user_background` (or explicitly via
+    :func:`sync_clerk_principal`). The verified principal is stashed on
+    ``request.state.auth_principal`` for the rate limiter — which must only
+    ever trust this value, never a self-parsed JWT claim.
+    """
     # Prefer Bearer token when present (API key or Clerk JWT)
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
@@ -149,21 +223,25 @@ def get_current_principal(
             if found is None:
                 raise HTTPException(status_code=401, detail="Invalid API key")
             _key, ws, user = found
-            # lookup_api_key already staged last_used_at; commit only that flush
-            # without side-effecting unrelated pending changes.
-            db.flush()
+            # lookup_api_key stages last_used_at on the request session as a
+            # side effect; discard it so this dependency performs no write.
+            # The touch is deferred to a background task with its own session.
+            key_id = _key.id
             try:
-                db.commit()
-            except Exception:
                 db.rollback()
-                raise
-            return AuthPrincipal(
+            except Exception:  # noqa: BLE001 - rollback is best-effort cleanup
+                pass
+            if background_tasks is not None:
+                background_tasks.add_task(_touch_api_key_last_used, key_id)
+            principal = AuthPrincipal(
                 user=user,
                 is_internal=False,
                 email=user.email if user else f"apikey@{ws.id}",
                 api_key_workspace_id=ws.id,
                 role_hint="admin",
             )
+            request.state.auth_principal = principal
+            return principal
 
         if not clerk_configured(settings):
             raise HTTPException(
@@ -181,20 +259,35 @@ def get_current_principal(
         )
         if isinstance(email, list):
             email = email[0] if email else f"{clerk_user_id}@users.clerk.local"
-        user = upsert_clerk_user(db, clerk_user_id=clerk_user_id, email=str(email))
-        ensure_default_workspace(db, user)
-        db.flush()
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
-        db.refresh(user)
-        return AuthPrincipal(user=user, is_internal=False, clerk_user_id=clerk_user_id, email=user.email)
+        email = str(email)
+        # Read-only: resolve an existing user without writing. First-login
+        # provisioning (upsert + default workspace) is deferred to a
+        # background task with its own session, or to an explicit
+        # sync_clerk_principal() call where the row is needed immediately.
+        user = db.scalar(select(User).where(User.clerk_user_id == clerk_user_id))
+        if user is None:
+            if background_tasks is not None:
+                background_tasks.add_task(_sync_clerk_user_background, clerk_user_id, email)
+            principal = AuthPrincipal(
+                user=None, is_internal=False, clerk_user_id=clerk_user_id, email=email
+            )
+            request.state.auth_principal = principal
+            return principal
+        if email and user.email != email and background_tasks is not None:
+            background_tasks.add_task(_sync_clerk_user_background, clerk_user_id, email)
+        principal = AuthPrincipal(
+            user=user, is_internal=False, clerk_user_id=clerk_user_id, email=user.email
+        )
+        request.state.auth_principal = principal
+        return principal
 
     # Dev / smoke internal token
     if hmac.compare_digest(x_internal_token or "", settings.internal_api_token):
-        return AuthPrincipal(user=None, is_internal=True, email="internal@local", role_hint="owner")
+        principal = AuthPrincipal(
+            user=None, is_internal=True, email="internal@local", role_hint="owner"
+        )
+        request.state.auth_principal = principal
+        return principal
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

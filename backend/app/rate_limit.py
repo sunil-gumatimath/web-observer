@@ -30,13 +30,17 @@ def _storage_uri() -> str | None:
 
 
 def _key_func(request: Request) -> str:
-    """Rate-limit key: authenticated principal when available, else IP.
+    """Rate-limit key from the VERIFIED principal only, else client IP.
 
-    Prefers a verified principal if the request has already been authenticated
-    (via app.auth). Falls back to best-effort JWT sub parsing for unauthenticated
-    endpoints that still want per-user limiting, else IP.
+    The principal is stashed on ``request.state.auth_principal`` by the
+    verified auth dependency (:func:`app.auth.get_current_principal`).
+    This function never parses tokens itself: an unverified JWT ``sub``
+    is attacker-controlled input and must not allocate its own bucket
+    (spoofed-sub keying would let a caller dodge per-user limits or
+    collide with another user's bucket).
     """
-    # Prefer verified principal stash set by auth middleware if present
+    # Verified principal only — set by the auth dependency after checking
+    # the signature / API-key hash. Anything else falls through to IP below.
     principal = getattr(request.state, "auth_principal", None)
     if principal is not None:
         # AuthPrincipal.user_id or clerk_user_id
@@ -46,25 +50,12 @@ def _key_func(request: Request) -> str:
         ak_ws = getattr(principal, "api_key_workspace_id", None)
         if ak_ws:
             return f"apikey:{ak_ws}"
-    auth = request.headers.get("authorization")
-    if auth and auth.lower().startswith("bearer "):
-        tok = auth.split(" ", 1)[1].strip()
-        if tok.startswith("mtw_"):
-            return f"apikey:{tok[:24]}"
-        # Clerk JWT: take sub claim without verifying (cheap, best-effort fallback)
-        try:
-            import base64
-            import json
-
-            part = tok.split(".")[1]
-            part += "=" * (-len(part) % 4)
-            payload = json.loads(base64.urlsafe_b64decode(part))
-            sub = payload.get("sub")
-            if sub:
-                # Prefix to distinguish unverified fallback
-                return f"user_unverified:{sub}"
-        except Exception as exc:  # noqa: BLE001 - unverified fallback path
-            logger.debug("jwt_subject_fallback_to_ip error=%s", exc)
+        if getattr(principal, "is_internal", False):
+            return "internal:local"
+        # Authenticated but no stable identity (e.g. first-login Clerk user
+        # whose row is still provisioning): share one bucket, never the IP
+        # pool and never a caller-supplied claim.
+        return "auth:unknown"
     return f"ip:{get_remote_address(request)}"
 
 
