@@ -628,10 +628,9 @@ def _parse_llm_content(
 
 
 _DEFAULT_FALLBACK_MODELS = (
-    "minimax/minimax-m3:free",
-    "nvidia/nemotron-3-super:free",
-    "google/gemma-4-26b-a4b:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
+    "openrouter/free",
+    "stepfun/step-3.7-flash:free",
+    "nex-agi/nex-n2.5-pro:free",
 )
 
 
@@ -657,7 +656,7 @@ def _candidate_models(primary: str | None, api_base: str | None) -> list[str]:
     always kept even if it looks cross-provider (explicit user choice).
     """
     settings = get_settings()
-    primary_model = (primary or "").strip() or "minimax/minimax-m3:free"
+    primary_model = (primary or "").strip() or "kilo-auto/free"
     candidates = [primary_model]
     base = (api_base or "").lower()
     first_party_openai = "api.openai.com" in base

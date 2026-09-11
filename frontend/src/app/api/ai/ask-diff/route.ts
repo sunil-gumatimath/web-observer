@@ -9,7 +9,7 @@ export async function POST(req: Request) {
 
     const apiKey = process.env.LLM_API_KEY;
     const baseURL = (process.env.LLM_API_BASE || "https://api.kilo.ai/api/gateway").replace(/\/+$/, "");
-    const modelName = process.env.LLM_MODEL || "minimax/minimax-m3:free";
+    const modelName = process.env.LLM_MODEL || "kilo-auto/free";
 
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "LLM_API_KEY not configured" }), {

@@ -183,8 +183,8 @@ Optional env (defaults work locally):
 ```env
 LLM_API_KEY=            # empty => heuristic summaries only
 LLM_API_BASE=https://api.kilo.ai/api/gateway
-LLM_MODEL=minimax/minimax-m3:free
-LLM_FALLBACK_MODELS=
+LLM_MODEL=kilo-auto/free
+LLM_FALLBACK_MODELS=openrouter/free,stepfun/step-3.7-flash:free,nex-agi/nex-n2.5-pro:free
 STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storage
 ```
 
