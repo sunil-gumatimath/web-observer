@@ -1,7 +1,18 @@
+import uuid
+
+import httpx
 import pytest
 
 from app.config import Settings
-from app.services.ai_summary import classify_heuristic, enrich_change, template_summary
+from app.services.ai_summary import (
+    _dedup_key,
+    _effective_llm,
+    _request_chat_with_failover,
+    classify_heuristic,
+    enrich_change,
+    template_summary,
+    validate_provider_base,
+)
 
 
 def test_classify_pricing() -> None:
@@ -17,6 +28,7 @@ def test_enrich_without_llm_is_heuristic(monkeypatch: pytest.MonkeyPatch) -> Non
     s.llm_api_key = ""
     monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: s)
     result = enrich_change(
+        workspace_id=uuid.uuid4(),
         monitor_name="Docs",
         url="https://example.com",
         mode="page_content",
@@ -143,5 +155,104 @@ def test_redis_dedup_cache_roundtrip(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cached.tokens_used == 0
 
 
+def test_workspace_overrides_never_inherit_global_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings()
+    settings.llm_api_key = "global-secret"
+    settings.llm_api_base = "https://global.example/v1"
+    settings.llm_model = "global-model"
+    monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: settings)
+
+    cfg = _effective_llm(
+        {"api_key": None, "api_base": "https://attacker.example/v1", "model": "custom"}
+    )
+
+    assert cfg["api_key"] == "global-secret"
+    assert cfg["api_base"] == "https://global.example/v1"
+    assert cfg["model"] == "global-model"
+    assert cfg["scope"] == "server"
 
 
+@pytest.mark.parametrize(
+    "base",
+    [
+        "http://api.example.com/v1",
+        "https://user:pass@api.example.com/v1",
+        "https://localhost/v1",
+        "https://127.0.0.1/v1",
+        "https://10.0.0.2/v1",
+    ],
+)
+def test_provider_base_rejects_unsafe_urls(base: str) -> None:
+    with pytest.raises(ValueError):
+        validate_provider_base(base, resolve_dns=False)
+
+
+def test_dedup_key_is_namespaced_by_workspace_provider_and_prompt() -> None:
+    common = {
+        "provider_scope": "server",
+        "api_base": "https://api.example/v1",
+        "model": "model-a",
+        "monitor_name": "Docs",
+        "url": "https://example.com",
+        "deterministic_summary": "changed",
+        "diff_text": "+new",
+        "mode": "page_content",
+        "watch_note": None,
+        "brand": {"title": "Example", "description": "Brand context"},
+    }
+    first = _dedup_key(workspace_id="workspace-a", **common)
+    assert first != _dedup_key(workspace_id="workspace-b", **common)
+    assert first != _dedup_key(workspace_id="workspace-a", **{**common, "model": "model-b"})
+    assert first != _dedup_key(
+        workspace_id="workspace-a",
+        **{**common, "deterministic_summary": "different"},
+    )
+
+
+def test_workspace_update_requires_key_for_model_override() -> None:
+    from fastapi import HTTPException
+
+    from app.models import Workspace
+    from app.routers.workspaces import update_workspace
+    from app.schemas import WorkspaceUpdate
+
+    workspace_id = uuid.uuid4()
+    workspace = Workspace(id=workspace_id, name="Test")
+    with pytest.raises(HTTPException) as exc_info:
+        update_workspace(
+            workspace_id,
+            WorkspaceUpdate(llm_model="custom-model"),
+            None,  # type: ignore[arg-type]
+            workspace,
+        )
+    assert exc_info.value.status_code == 422
+
+
+def test_failover_respects_overall_attempt_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def fail(*args: object, **kwargs: object) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        request = httpx.Request("POST", "https://api.example/v1/chat/completions")
+        response = httpx.Response(500, request=request)
+        raise httpx.HTTPStatusError("failed", request=request, response=response)
+
+    monkeypatch.setattr("app.services.ai_summary._post_with_retries", fail)
+    monkeypatch.setattr(
+        "app.services.ai_summary._candidate_models",
+        lambda primary, base: ["one", "two", "three", "four"],
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        _request_chat_with_failover(
+            base="https://api.example/v1",
+            api_key="key",
+            primary_model="one",
+            messages=[],
+            temperature=0.2,
+            max_tokens=20,
+            max_total_attempts=3,
+            deadline_seconds=10,
+        )
+    assert calls == 3

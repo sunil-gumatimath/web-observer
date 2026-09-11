@@ -25,7 +25,7 @@ from app.models.entities import (
     OutboxStatus,
     RunStatus,
 )
-from app.services.ai_summary import AIEnrichment, enrich_change
+from app.services.ai_summary import AIEnrichment, enrich_change, workspace_llm_config
 from app.services.diffing import short_summary, unified_diff
 from app.services.extract import (
     ExtractionError,
@@ -564,38 +564,54 @@ def _create_change_event(
     workspace = db.get(Workspace, monitor.workspace_id)
     ai_enabled = bool(workspace.ai_summaries_enabled) if workspace is not None else True
     watch_note = getattr(monitor, "watch_note", None)
-    llm_cfg = None
-    if workspace is not None and (
-        workspace.llm_api_key or workspace.llm_api_base or workspace.llm_model
-    ):
-        from app.services.crypto import decrypt_secret
-
-        llm_cfg = {
-            "api_key": decrypt_secret(workspace.llm_api_key),
-            "api_base": workspace.llm_api_base,
-            "model": workspace.llm_model,
-        }
+    provider_config_valid = True
+    try:
+        llm_cfg = workspace_llm_config(workspace) if workspace is not None else None
+    except ValueError as exc:
+        logger.warning(
+            "workspace_llm_config_invalid workspace_id=%s error=%s",
+            monitor.workspace_id,
+            exc,
+        )
+        llm_cfg = None
+        provider_config_valid = False
 
     from app.config import get_settings as _get_settings
 
     _settings = _get_settings()
-    effective_key = (llm_cfg.get("api_key") if llm_cfg else None) or _settings.llm_api_key
+    effective_key = None
+    if provider_config_valid:
+        effective_key = (llm_cfg.get("api_key") if llm_cfg else None) or _settings.llm_api_key
     # P3: async path — heuristic placeholder now, LLM in background
-    if _settings.ai_async_enrichment and effective_key and ai_enabled:
+    if (
+        _settings.ai_async_enrichment
+        and _settings.ai_summaries_enabled
+        and effective_key
+        and ai_enabled
+    ):
         enrichment = enrich_change(
+            workspace_id=monitor.workspace_id,
             monitor_name=monitor.name,
             url=monitor.url,
             mode=monitor.mode,
             deterministic_summary=ctx.summary,
             diff_text=ctx.diff_text,
-            enabled=True,
+            enabled=False,  # heuristic placeholder only; worker does the LLM call
             watch_note=watch_note,
-            llm=None,  # heuristic only for immediate row
+            llm=None,
             brand=getattr(monitor, "brand", None),
             semantic_trigger=getattr(monitor, "semantic_trigger", None),
         )
-        # Mark provider as pending to signal async upgrade
-        enrichment.provider = "heuristic_pending"
+        # Deterministic conditional suppression is final and must not be
+        # deferred to (or overwritten by) an AI worker.
+        conditional_reason = getattr(ctx, "suppressed_reason", None)
+        if conditional_reason:
+            enrichment.summary = f"[Conditional] {conditional_reason} (threshold not met)"
+            enrichment.provider = "conditional"
+            enrichment.is_noise = True
+            enrichment.noise_reason = conditional_reason
+        else:
+            enrichment.provider = "heuristic_pending"
         ctx.enrichment = enrichment
         change = ChangeEvent(
             workspace_id=monitor.workspace_id,
@@ -611,27 +627,21 @@ def _create_change_event(
             title=getattr(enrichment, "title", None),
             impact=getattr(enrichment, "impact", None),
             confidence=getattr(enrichment, "confidence", None),
-            is_noise=False,  # triage deferred to worker
+            is_noise=bool(enrichment.is_noise),
             is_read=False,
         )
         db.add(change)
         db.flush()
-        try:
-            from app.workers.ai_enrich import enrich_change_event
-
-            enrich_change_event.send(str(change.id), ctx.diff_text)
-            logger.info("ai_enrich_enqueued change_id=%s monitor_id=%s", change.id, monitor.id)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("ai_enrich_enqueue_failed change_id=%s error=%s", change.id, exc)
         return change
 
     enrichment = enrich_change(
+        workspace_id=monitor.workspace_id,
         monitor_name=monitor.name,
         url=monitor.url,
         mode=monitor.mode,
         deterministic_summary=ctx.summary,
         diff_text=ctx.diff_text,
-        enabled=ai_enabled,
+        enabled=ai_enabled and provider_config_valid,
         watch_note=watch_note,
         llm=llm_cfg,
         brand=getattr(monitor, "brand", None),
@@ -903,11 +913,20 @@ def apply_fetch_result(
     # Step 4 – notification outbox & webhooks (deferred when async enrichment pending)
     enrichment = getattr(ctx, "enrichment", None)
     if enrichment is not None and getattr(enrichment, "provider", None) == "heuristic_pending":
+        change_id = change.id
+        diff_text = ctx.diff_text
         db.commit()
+        try:
+            from app.workers.ai_enrich import enrich_change_event
+
+            enrich_change_event.send(str(change_id), diff_text)
+            logger.info("ai_enrich_enqueued change_id=%s monitor_id=%s", change_id, monitor.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ai_enrich_enqueue_failed change_id=%s error=%s", change_id, exc)
         return PipelineResult(
             status=run.status,
             content_hash=digest,
-            change_event_id=change.id,
+            change_event_id=change_id,
             outbox_ids=[],
         )
     outbox_ids, webhook_ids = _queue_notifications(db, monitor, change, ctx)

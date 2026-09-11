@@ -18,7 +18,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.models import ChangeEvent, Monitor, Snapshot, Workspace
 from app.models.entities import LIST_DIFF_MODES
-from app.services.crypto import decrypt_secret
+from app.services.ai_summary import workspace_llm_config
 from app.workers.broker import redis_broker  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -34,8 +34,6 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
     from app.services.usage import increment_ai_tokens
 
     settings = get_settings()
-    if not settings.ai_summaries_enabled:
-        return
 
     with SessionLocal() as db:
         change = db.get(ChangeEvent, uuid.UUID(change_event_id))
@@ -47,6 +45,12 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
             return
         workspace = db.get(Workspace, change.workspace_id)
         if workspace is None:
+            return
+
+        # Deterministic conditional suppression is authoritative. Never let a
+        # delayed worker turn a suppressed event back into a notification.
+        if change.is_noise and (change.ai_summary or "").startswith("[Conditional]"):
+            logger.info("ai_enrich_skip_conditional change_id=%s", change_event_id)
             return
 
         # Idempotency check: skip if already enriched by LLM
@@ -108,21 +112,30 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
                 fallback_summary = change.diff_summary
                 diff_text = fallback_summary if fallback_summary else ""
 
-        llm_cfg = None
-        if workspace.llm_api_key or workspace.llm_api_base or workspace.llm_model:
-            llm_cfg = {
-                "api_key": decrypt_secret(workspace.llm_api_key),
-                "api_base": workspace.llm_api_base,
-                "model": workspace.llm_model,
-            }
+        provider_config_valid = True
+        try:
+            llm_cfg = workspace_llm_config(workspace)
+        except ValueError as exc:
+            logger.warning(
+                "workspace_llm_config_invalid workspace_id=%s error=%s",
+                workspace.id,
+                exc,
+            )
+            llm_cfg = None
+            provider_config_valid = False
 
         enrichment = enrich_change(
+            workspace_id=workspace.id,
             monitor_name=monitor.name,
             url=monitor.url,
             mode=monitor.mode,
             deterministic_summary=change.diff_summary or "Content changed",
             diff_text=diff_text or "",
-            enabled=bool(workspace.ai_summaries_enabled),
+            enabled=bool(
+                workspace.ai_summaries_enabled
+                and settings.ai_summaries_enabled
+                and provider_config_valid
+            ),
             watch_note=getattr(monitor, "watch_note", None),
             llm=llm_cfg,
             brand=getattr(monitor, "brand", None),
@@ -155,20 +168,18 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
         except Exception:  # noqa: BLE001
             logger.warning("ai_token_accounting_failed workspace_id=%s", monitor.workspace_id)
 
-        db.commit()
-        logger.info(
-            "ai_enrich_done change_id=%s category=%s is_noise=%s tokens=%s",
-            change_event_id,
-            enrichment.category,
-            enrichment.is_noise,
-            enrichment.tokens_used,
-        )
-
-        # If sync pipeline already queued notifications, don't duplicate.
-        # Async path creates placeholder with no notifications, so we queue now.
-        # Detect by checking if change was previously not noise but now noise -> no queue.
-        # For async, we queue only when not noise.
+        # Keep enrichment and notification rows in one transaction. If outbox
+        # creation fails, Dramatiq retries from the original placeholder instead
+        # of leaving an enriched event that can never notify.
         if enrichment.is_noise:
+            db.commit()
+            logger.info(
+                "ai_enrich_done change_id=%s category=%s is_noise=%s tokens=%s",
+                change_event_id,
+                enrichment.category,
+                enrichment.is_noise,
+                enrichment.tokens_used,
+            )
             return
 
         # Queue notifications only if none exist yet for this change
@@ -197,21 +208,31 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
             )
             outbox_ids, webhook_ids = _queue_notifications(db, monitor, change, ctx)
             db.commit()
-            if webhook_ids:
-                try:
-                    from app.workers.webhooks import deliver_webhook_message
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            logger.exception("ai_enrich_queue_failed change_id=%s", change_event_id)
+            raise
 
-                    for wid in webhook_ids:
-                        deliver_webhook_message.send(str(wid))
-                except Exception:  # noqa: BLE001
-                    logger.exception("webhook_enqueue_failed async")
-            # Trigger notification delivery via dramatiq
+        logger.info(
+            "ai_enrich_done change_id=%s category=%s is_noise=%s tokens=%s",
+            change_event_id,
+            enrichment.category,
+            enrichment.is_noise,
+            enrichment.tokens_used,
+        )
+        if webhook_ids:
             try:
-                from app.workers.notifications import deliver_outbox_message
+                from app.workers.webhooks import deliver_webhook_message
 
-                for oid in outbox_ids:
-                    deliver_outbox_message.send(str(oid))
+                for wid in webhook_ids:
+                    deliver_webhook_message.send(str(wid))
             except Exception:  # noqa: BLE001
-                logger.exception("notification_enqueue_failed async")
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("ai_enrich_queue_failed change_id=%s error=%s", change_event_id, exc)
+                logger.exception("webhook_enqueue_failed async")
+        # Trigger notification delivery via dramatiq
+        try:
+            from app.workers.notifications import deliver_outbox_message
+
+            for oid in outbox_ids:
+                deliver_outbox_message.send(str(oid))
+        except Exception:  # noqa: BLE001
+            logger.exception("notification_enqueue_failed async")

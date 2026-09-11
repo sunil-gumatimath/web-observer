@@ -217,6 +217,100 @@ def test_change_creates_single_event_and_outbox(db_session, monkeypatch):
     assert outbox[0].idempotency_key == f"change:{changes[0].id}:channel:{outbox[0].channel_id}"
 
 
+def test_async_ai_enqueues_only_after_change_commit(db_session, monkeypatch):
+    from app.config import Settings
+    from app.workers.ai_enrich import enrich_change_event
+
+    settings = Settings()
+    settings.ai_async_enrichment = True
+    settings.ai_summaries_enabled = True
+    settings.llm_api_key = "server-key"
+    monkeypatch.setattr("app.config.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.pipeline.put_bytes", lambda **kwargs: kwargs["key"])
+
+    sent: list[str] = []
+
+    def send_after_commit(change_id: str, _diff: str) -> None:
+        assert not db_session.in_transaction()
+        sent.append(change_id)
+
+    monkeypatch.setattr(enrich_change_event, "send", send_after_commit)
+    _ws, mon = _seed_monitor(db_session)
+    first = _make_run(db_session, mon)
+    apply_fetch_result(db_session, monitor=mon, run=first, result=_fetch("v1"), store_raw=False)
+    second = _make_run(db_session, mon)
+
+    result = apply_fetch_result(
+        db_session, monitor=mon, run=second, result=_fetch("v2"), store_raw=False
+    )
+
+    assert sent == [str(result.change_event_id)]
+    assert result.outbox_ids == []
+
+
+def test_global_ai_disabled_does_not_defer_notifications(db_session, monkeypatch):
+    from app.config import Settings
+    from app.workers.ai_enrich import enrich_change_event
+
+    settings = Settings()
+    settings.ai_async_enrichment = True
+    settings.ai_summaries_enabled = False
+    settings.llm_api_key = "server-key"
+    monkeypatch.setattr("app.config.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.pipeline.put_bytes", lambda **kwargs: kwargs["key"])
+    monkeypatch.setattr(
+        enrich_change_event,
+        "send",
+        lambda *_args: pytest.fail("AI worker must not be queued while global AI is disabled"),
+    )
+    _ws, mon = _seed_monitor(db_session)
+    first = _make_run(db_session, mon)
+    apply_fetch_result(db_session, monitor=mon, run=first, result=_fetch("v1"), store_raw=False)
+    second = _make_run(db_session, mon)
+
+    result = apply_fetch_result(
+        db_session, monitor=mon, run=second, result=_fetch("v2"), store_raw=False
+    )
+
+    assert result.outbox_ids is not None
+    assert len(result.outbox_ids) == 1
+
+
+def test_async_conditional_suppression_is_final(db_session, monkeypatch):
+    from app.config import Settings
+    from app.workers.ai_enrich import enrich_change_event
+
+    settings = Settings()
+    settings.ai_async_enrichment = True
+    settings.ai_summaries_enabled = True
+    settings.llm_api_key = "server-key"
+    monkeypatch.setattr("app.config.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.pipeline.put_bytes", lambda **kwargs: kwargs["key"])
+    monkeypatch.setattr(
+        enrich_change_event,
+        "send",
+        lambda *_args: pytest.fail("Conditionally suppressed changes must not queue AI"),
+    )
+    _ws, mon = _seed_monitor(db_session)
+    mon.alert_config = {"min_diff_chars": 10_000}
+    first = _make_run(db_session, mon)
+    apply_fetch_result(db_session, monitor=mon, run=first, result=_fetch("v1"), store_raw=False)
+    second = _make_run(db_session, mon)
+
+    result = apply_fetch_result(
+        db_session, monitor=mon, run=second, result=_fetch("v2"), store_raw=False
+    )
+    change = db_session.get(ChangeEvent, result.change_event_id)
+
+    assert change is not None
+    assert change.is_noise is True
+    assert (change.ai_summary or "").startswith("[Conditional]")
+    assert result.outbox_ids == []
+
+
 def test_unchanged_no_duplicate_alert(db_session, monkeypatch):
     monkeypatch.setattr("app.services.pipeline.put_bytes", lambda **kwargs: kwargs["key"])
     _ws, mon = _seed_monitor(db_session)

@@ -11,12 +11,20 @@ import json
 import logging
 import re
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 import httpx
 
 from app.config import get_settings
+from app.security.ssrf import (
+    PinnedIPTransport,
+    SSRFError,
+    resolve_and_validate,
+    validate_url_for_fetch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +40,67 @@ CATEGORIES = (
 )
 
 
-def _effective_llm(llm: dict | None) -> dict:
-    """Resolve per-workspace (bring-your-own) LLM config over server defaults.
+def validate_provider_base(value: str, *, resolve_dns: bool = True) -> str:
+    """Validate a user-controlled OpenAI-compatible provider URL."""
+    base = (value or "").strip().rstrip("/")
+    parsed = urlparse(base)
+    if parsed.scheme != "https":
+        raise ValueError("llm_api_base must use HTTPS")
+    if parsed.query or parsed.fragment:
+        raise ValueError("llm_api_base must not include a query or fragment")
+    try:
+        validate_url_for_fetch(base, resolve_dns=resolve_dns)
+    except SSRFError as exc:
+        raise ValueError(str(exc)) from exc
+    return base
 
-    ``llm`` may carry any of: api_key, api_base, model, max_output_tokens.
-    Each missing key falls back to the server-managed Settings value.
+
+def workspace_llm_config(workspace: object) -> dict | None:
+    """Return BYOK config without ever combining overrides with the global key."""
+    from app.services.crypto import decrypt_secret
+
+    encrypted_key = getattr(workspace, "llm_api_key", None)
+    workspace_key = decrypt_secret(encrypted_key) if encrypted_key else None
+    if not workspace_key:
+        return None
+    base = getattr(workspace, "llm_api_base", None)
+    if base:
+        base = validate_provider_base(base)
+    return {
+        "api_key": workspace_key,
+        "api_base": base,
+        "model": getattr(workspace, "llm_model", None),
+        "workspace_key": True,
+    }
+
+
+def _effective_llm(llm: dict | None) -> dict:
+    """Resolve an all-workspace or all-server provider configuration.
+
+    A workspace base/model is honored only when that same configuration carries
+    a workspace API key. This prevents a legacy or malformed override from
+    redirecting the server-managed credential to an attacker-controlled host.
     """
     settings = get_settings()
-    llm = llm or {}
+    workspace_key = (llm or {}).get("api_key")
+    if workspace_key:
+        custom_base = (llm or {}).get("api_base")
+        return {
+            "api_key": workspace_key,
+            "api_base": (
+                validate_provider_base(custom_base) if custom_base else settings.llm_api_base
+            ),
+            "model": (llm or {}).get("model") or settings.llm_model,
+            "max_output_tokens": (llm or {}).get("max_output_tokens")
+            or settings.ai_max_output_tokens,
+            "scope": "workspace",
+        }
     return {
-        "api_key": llm.get("api_key") or settings.llm_api_key,
-        "api_base": llm.get("api_base") or settings.llm_api_base,
-        "model": llm.get("model") or settings.llm_model,
-        "max_output_tokens": llm.get("max_output_tokens") or settings.ai_max_output_tokens,
+        "api_key": settings.llm_api_key,
+        "api_base": settings.llm_api_base,
+        "model": settings.llm_model,
+        "max_output_tokens": settings.ai_max_output_tokens,
+        "scope": "server",
     }
 
 
@@ -165,24 +221,36 @@ def _redis_client():
 
 def _dedup_key(
     *,
+    workspace_id: uuid.UUID | str,
+    provider_scope: str,
+    api_base: str | None,
+    model: str | None,
+    monitor_name: str,
+    url: str,
+    deterministic_summary: str,
     diff_text: str,
     mode: str | None,
     watch_note: str | None,
     brand: dict | None,
     semantic_trigger: str | None = None,
 ) -> str:
-    h = hashlib.sha256()
-    h.update((diff_text or "").encode())
-    h.update(b"|")
-    h.update((mode or "").encode())
-    h.update(b"|")
-    h.update(((watch_note or "").strip()).encode())
-    h.update(b"|")
-    h.update(((semantic_trigger or "").strip()).encode())
-    h.update(b"|")
-    if brand:
-        h.update(str(brand.get("title") or "").encode())
-    return h.hexdigest()[:32]
+    prompt_inputs = {
+        "version": 2,
+        "workspace_id": str(workspace_id),
+        "provider_scope": provider_scope,
+        "api_base": (api_base or "").rstrip("/").lower(),
+        "model": model or "",
+        "monitor_name": monitor_name,
+        "url": url,
+        "deterministic_summary": deterministic_summary,
+        "diff_text": diff_text,
+        "mode": mode or "",
+        "watch_note": (watch_note or "").strip(),
+        "semantic_trigger": (semantic_trigger or "").strip(),
+        "brand": brand or {},
+    }
+    encoded = json.dumps(prompt_inputs, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest()[:32]
 
 
 def _dedup_get(key: str) -> AIEnrichment | None:
@@ -191,7 +259,7 @@ def _dedup_get(key: str) -> AIEnrichment | None:
         r = _redis_client()
         if r is not None:
             raw = r.get(f"ai_dedup:{key}")
-            if raw:
+            if isinstance(raw, (str, bytes, bytearray)) and raw:
                 data = json.loads(raw)
                 return AIEnrichment(
                     summary=data.get("summary", ""),
@@ -413,6 +481,31 @@ def _extract_usage(data: dict) -> int:
     return 0
 
 
+def _pinned_post(url: str, *, headers: dict, payload: dict, timeout: float) -> httpx.Response:
+    """POST to a freshly validated, pinned public IP without following redirects."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if hostname is None:
+        raise ValueError("LLM provider URL must include a hostname")
+    resolved_ips = resolve_and_validate(url)
+    last_exc: Exception | None = None
+    for ip in resolved_ips:
+        try:
+            transport = PinnedIPTransport(pinned_ip=ip, server_hostname=hostname)
+            with httpx.Client(
+                transport=transport,
+                timeout=timeout,
+                follow_redirects=False,
+            ) as client:
+                return client.post(url, headers=headers, json=payload)
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            last_exc = exc
+            continue
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("LLM provider resolved no usable public addresses")
+
+
 def _post_with_retries(
     url: str,
     headers: dict,
@@ -424,15 +517,7 @@ def _post_with_retries(
     last_exc: Exception | None = None
     for attempt in range(max_attempts):
         try:
-            from app.security.ssl_context import get_ssl_context
-
-            resp = httpx.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=timeout,
-                verify=get_ssl_context(),
-            )
+            resp = _pinned_post(url, headers=headers, payload=payload, timeout=timeout)
             # retry on 429 and 5xx
             if resp.status_code == 429 or 500 <= resp.status_code < 600:
                 if attempt < max_attempts - 1:
@@ -696,6 +781,9 @@ def _request_chat_with_failover(
     temperature: float,
     max_tokens: int,
     timeout: float = 30.0,
+    max_total_attempts: int = 4,
+    deadline_seconds: float = 45.0,
+    json_mode: bool = True,
 ) -> tuple[str, int, str]:
     """POST /chat/completions with per-model failover.
 
@@ -705,11 +793,14 @@ def _request_chat_with_failover(
     """
     candidates = _candidate_models(primary_model, base)
     last_exc: Exception | None = None
+    attempts = 0
+    deadline = time.monotonic() + deadline_seconds
 
     for idx, model_candidate in enumerate(candidates):
         first_exc: Exception | None = None
-        use_json = True
-        for attempt in ("json", "plain"):
+        use_json = json_mode
+        attempts_for_model = ("json", "plain") if json_mode else ("plain",)
+        for attempt in attempts_for_model:
             payload: dict = {
                 "model": model_candidate,
                 "temperature": temperature,
@@ -718,6 +809,10 @@ def _request_chat_with_failover(
             }
             if use_json:
                 payload["response_format"] = {"type": "json_object"}
+            remaining = deadline - time.monotonic()
+            if attempts >= max_total_attempts or remaining <= 0:
+                raise last_exc or TimeoutError("LLM failover attempt budget exhausted")
+            attempts += 1
             try:
                 resp = _post_with_retries(
                     f"{base}/chat/completions",
@@ -726,7 +821,8 @@ def _request_chat_with_failover(
                         "Content-Type": "application/json",
                     },
                     payload=payload,
-                    timeout=timeout,
+                    timeout=min(timeout, remaining),
+                    max_attempts=1,
                 )
             except Exception as exc:
                 if use_json:
@@ -927,6 +1023,7 @@ def _call_llm_triage(
 
 def enrich_change(
     *,
+    workspace_id: uuid.UUID | str,
     monitor_name: str,
     url: str,
     mode: str | None,
@@ -982,6 +1079,13 @@ def enrich_change(
 
     # P1: dedup — identical diffs within TTL reuse previous LLM result
     dedup_key = _dedup_key(
+        workspace_id=workspace_id,
+        provider_scope=cfg["scope"],
+        api_base=cfg["api_base"],
+        model=cfg["model"],
+        monitor_name=monitor_name,
+        url=url,
+        deterministic_summary=deterministic_summary,
         diff_text=capped,
         mode=mode,
         watch_note=watch_note,

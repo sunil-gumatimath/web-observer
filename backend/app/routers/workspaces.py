@@ -24,7 +24,7 @@ from app.schemas import (
     WorkspaceOut,
     WorkspaceUpdate,
 )
-from app.services.crypto import decrypt_secret, encrypt_secret
+from app.services.crypto import encrypt_secret
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
@@ -105,6 +105,32 @@ def update_workspace(
         "email_from",
     }
     data = body.model_dump(exclude_unset=True)
+    if "llm_api_key" in data and not str(data.get("llm_api_key") or "").strip():
+        # Clearing a BYO key atomically clears its provider overrides and falls
+        # back to the managed server configuration.
+        data["llm_api_base"] = None
+        data["llm_model"] = None
+    if {"llm_api_key", "llm_api_base", "llm_model"}.intersection(data):
+        supplied_key = data.get("llm_api_key") if "llm_api_key" in data else workspace.llm_api_key
+        final_base = data.get("llm_api_base", workspace.llm_api_base)
+        final_model = data.get("llm_model", workspace.llm_model)
+        has_key = bool(supplied_key and str(supplied_key).strip())
+        has_override = bool(
+            (final_base and str(final_base).strip()) or (final_model and str(final_model).strip())
+        )
+        if has_override and not has_key:
+            raise HTTPException(
+                status_code=422,
+                detail="A workspace LLM API key is required for custom base/model overrides",
+            )
+        if final_base and str(final_base).strip():
+            from app.services.ai_summary import validate_provider_base
+
+            try:
+                validate_provider_base(str(final_base), resolve_dns=True)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     for key, value in data.items():
         if key not in allowed:
             continue

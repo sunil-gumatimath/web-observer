@@ -57,9 +57,9 @@ class WorkspaceUpdate(BaseModel):
     ai_summaries_enabled: bool | None = None
     # Per-account (bring-your-own) integration keys. Sent to override the
     # server-managed defaults; the stored keys are never returned in API output.
-    llm_api_key: str | None = None
-    llm_api_base: str | None = None
-    llm_model: str | None = None
+    llm_api_key: str | None = Field(default=None, max_length=8192)
+    llm_api_base: str | None = Field(default=None, max_length=2048)
+    llm_model: str | None = Field(default=None, max_length=128)
     resend_api_key: str | None = None
     email_from: str | None = None
 
@@ -74,8 +74,9 @@ class WorkspaceUpdate(BaseModel):
     @classmethod
     def validate_llm_base(cls, v: str | None) -> str | None:
         if v is not None and v.strip():
-            if not (v.startswith("http://") or v.startswith("https://")):
-                raise ValueError("llm_api_base must be an http(s) URL")
+            from app.services.ai_summary import validate_provider_base
+
+            return validate_provider_base(v, resolve_dns=False)
         if v == "":  # allow clearing
             return ""
         return v

@@ -478,7 +478,7 @@ export default function NewMonitorPage() {
 								placeholder="e.g. Alert only if pricing increases or a new tier is added"
 							/>
 							<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
-								Plain-English AI trigger. Changes that do not satisfy this condition are filtered out.
+								Requires a configured LLM. Non-matching changes are filtered out; if AI evaluation is unavailable or fails, the change is allowed through (fail-open).
 							</p>
 						</div>
 						<ThresholdEditor mode={mode} value={alertConfig} onChange={setAlertConfig} />
