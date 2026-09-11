@@ -42,6 +42,7 @@ Capture rules (both paths):
   similarity comparison against `VISUAL_AHASH_THRESHOLD` (default hamming distance 5).
 - Works for every mode; `js_required` monitors additionally use the same Playwright stack for
   page rendering.
+Current behavior (post-roadmap): captures happen only on non-noise signal changes; needs 2 signal changes for before/after comparison.
 
 ## Config
 

@@ -46,17 +46,22 @@ Staging/production are not configured (hosting config removed).
 | `CLERK_*` | api, web |
 | `S3_*` / `R2_*` | workers, api (optional object storage) |
 | `RESEND_API_KEY` | notification worker |
-| `SENTRY_DSN` | all apps |
 | `INTERNAL_API_TOKEN` | admin |
 
-## Snapshot retention (default proposal)
+## Snapshot retention (matches `backend/app/services/retention.py`)
 
-| Data | Default retention |
-| ------ | ------------------- |
-| Raw HTML | 30 days |
-| Normalized text in DB | 90 days or last N per monitor |
-| Monitor runs | 90 days |
-| Change events | 180 days |
-| Outbox / deliveries | 30–90 days |
+| Data | Default |
+| ---- | ------- |
+| Raw HTML + normalized-text objects | 30 days (`SNAPSHOT_RETENTION_DAYS`, purged with snapshot) |
+| Snapshots (DB rows) | 30 days (same window) |
+| Monitor runs | 90 days (`RUN_RETENTION_DAYS`) |
+| Change events | Not purged by `retention_job` (only cascade when its snapshot is deleted) |
+| Outbox / deliveries | Not purged by `retention_job` |
 
 User delete monitor → delete associated history + enqueue object deletes.
+
+## Production / hosting
+
+- Hosting config was removed — the app runs as local processes only.
+- Staging / production are not configured (no deploy target, no pipeline).
+- Enterprise deploy is undecided — see roadmap Phase 10.

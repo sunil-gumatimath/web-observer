@@ -30,7 +30,7 @@ project overview and quickstart.
 
 ## Decisions
 
-[adrs/](./adrs/) — architecture decision records (ADR 001–006).
+[adrs/](./adrs/) — architecture decision records (ADR 001–007).
 
 ## Phase records
 

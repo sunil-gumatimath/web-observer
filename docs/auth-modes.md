@@ -2,7 +2,7 @@
   <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
 </p>
 
-# Phase 2 Auth Setup (Clerk)
+# Auth modes
 
 ## Modes
 

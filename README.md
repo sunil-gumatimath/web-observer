@@ -189,7 +189,7 @@ Use **`--threads 1`** on Windows. Playwright runs in a **subprocess** (`playwrig
 | Job | Command | Purpose |
 |-----|---------|---------|
 | Digest | `python -m app.digest_job --loop` | Sends daily/weekly workspace digests (Phase 5) |
-| Retention | `python -m app.retention_job` | Purges runs/snapshots older than `RUN_RETENTION_DAYS` (default 90) |
+| Retention | `python -m app.retention_job` | Purges snapshots (default 30 days) and runs (default 90 days) |
 
 These are separate processes. Run them on a schedule/cron.
 
@@ -239,7 +239,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | RBAC & audit | Owner / admin / member / viewer roles, member management, audit log |
 | Plans / billing | free / pro / business / enterprise tiers; Stripe or simulated checkout (solo: skip Stripe) |
 | Adaptive scheduling | Interval auto-stretches after quiet runs |
-| Retention | Background `retention_job` purges old runs / snapshots (default 90 days) |
+| Retention | Background `retention_job` purges snapshots (default 30 days) and runs (default 90 days) — `docs/operations/local-setup-and-ops.md` retention table is the source of truth |
 | Brand-aware dashboard | Adding a website auto-fills logo/title/description/hero from page `<meta>` (`og:*`, favicon) and re-hosts via `brand-assets/` for dashboard + public share pages (no external Context.dev dependency). Alert inbox items carry `monitor_brand`; `BrandLogo` falls back to the domain favicon before initials, so a real mark shows even before enrichment runs |
 | Design system | Cohere-inspired tokens (`frontend/src/app/globals.css`): 22px cards, pill buttons (dark solid primary, ghost secondary), `#1863dc` hover/focus blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator + page fade on tab switch |
 | Managed or self-serve keys | Server provides global `LLM_API_*`/`RESEND_API_KEY`; or each workspace brings its own keys in Settings → Workspace keys (overrides global) |

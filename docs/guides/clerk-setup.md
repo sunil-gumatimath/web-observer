@@ -4,7 +4,7 @@
 
 # Clerk setup (this project)
 
-Linked app: **Web Observer** (`app_3GJz6qgIFDXNyyMSm9ayJgXpZ6q`)  
+Example (as of 2026-09): linked app **Web Observer** (`app_3GJz6qgIFDXNyyMSm9ayJgXpZ6q`)  
 Frontend API host: `suited-emu-70.clerk.accounts.dev` (development)
 
 ## What was configured
@@ -27,7 +27,7 @@ cd frontend
 npm run dev
 ```
 
-1. Open <http://localhost:3000> → **Sign up** → create your first user  
+1. Open <http://127.0.0.1:3000> → **Sign up** → create your first user  
 2. Dashboard should load; API calls use Bearer session JWT  
 
 ## Re-sync keys later
@@ -45,4 +45,4 @@ node scripts/wire-clerk-backend.mjs
 
 If you see **Configure your application**, click it and finish any checklist items (allowed origins, etc.).
 
-Add `http://localhost:3000` to allowed origins if auth redirects fail.
+Add `http://localhost:3000` and `http://127.0.0.1:3000` to allowed origins if auth redirects fail.

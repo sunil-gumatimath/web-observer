@@ -161,7 +161,7 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 
 ---
 
-## 5b. Notable endpoints & behavior (post-roadmap additions)
+## 6. Notable endpoints & behavior (post-roadmap additions)
 
 | Capability | Endpoint / notes |
 | ------------ | ------------------ |
@@ -190,7 +190,7 @@ STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storag
 
 ---
 
-## 6. Minimum set
+## 7. Minimum set
 
 | Process | Required? |
 | --------- | ----------- |
