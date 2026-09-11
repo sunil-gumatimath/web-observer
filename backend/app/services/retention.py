@@ -32,8 +32,12 @@ def purge_expired_snapshots(
 ) -> RetentionResult:
     """Delete snapshots older than retention window (and raw objects).
 
-    Change events referencing deleted snapshots are left with SET NULL / CASCADE
-    per FK rules. Runs older than run retention are removed when no longer needed.
+    Change events are inbox history: ``ChangeEvent.new_snapshot_id`` is
+    NOT NULL with ON DELETE CASCADE, so deleting a snapshot it points at
+    would destroy the event. Snapshots still referenced as ``new_snapshot``
+    are therefore *kept* (event and its metadata survive intact); only
+    unreferenced snapshots are purged. Runs older than run retention are
+    removed when no longer needed.
     """
     settings = get_settings()
     now = now or datetime.now(UTC)
@@ -45,8 +49,31 @@ def purge_expired_snapshots(
         snap_q = snap_q.where(Snapshot.workspace_id == workspace_id)
 
     snapshots = list(db.scalars(snap_q).all())
-    objects_deleted = 0
+    # Snapshots referenced by a change event must survive: the event's
+    # new_snapshot_id cannot be nulled (NOT NULL) and the FK cascades, so
+    # purging them would silently delete inbox history.
+    referenced: set = set()
+    if snapshots:
+        snap_ids = [snap.id for snap in snapshots]
+        referenced = set(
+            db.scalars(
+                select(ChangeEvent.new_snapshot_id).where(
+                    ChangeEvent.new_snapshot_id.in_(snap_ids)
+                )
+            ).all()
+        )
+    skipped_referenced = 0
+    purged: list = []
     for snap in snapshots:
+        if snap.id in referenced:
+            skipped_referenced += 1
+            logger.info(
+                "retention_keep_referenced_snapshot snapshot_id=%s", snap.id
+            )
+            continue
+        purged.append(snap)
+    objects_deleted = 0
+    for snap in purged:
         # Raw HTML snapshot, normalized-text object, and (when captured) the
         # screenshot for this run all live in object storage under different
         # keys — purge all of them so retention actually frees space.
@@ -62,16 +89,13 @@ def purge_expired_snapshots(
         runs = db.scalars(select(MonitorRun).where(MonitorRun.snapshot_id == snap.id)).all()
         for run in runs:
             run.snapshot_id = None
-        # Null out change event snapshot refs where SET NULL applies
+        # Null out change event previous-snapshot refs (SET NULL, nullable).
+        # new_snapshot refs can no longer dangle here: referenced snapshots
+        # are skipped above, so events are never deleted by retention.
         for ce in db.scalars(
             select(ChangeEvent).where(ChangeEvent.previous_snapshot_id == snap.id)
         ).all():
             ce.previous_snapshot_id = None
-        # new_snapshot_id is NOT NULL CASCADE — delete change events that only point at this snap
-        for ce in db.scalars(
-            select(ChangeEvent).where(ChangeEvent.new_snapshot_id == snap.id)
-        ).all():
-            db.delete(ce)
         db.delete(snap)
 
     # Old runs (keep recent history)
@@ -87,14 +111,15 @@ def purge_expired_snapshots(
 
     db.commit()
     result = RetentionResult(
-        snapshots_deleted=len(snapshots),
+        snapshots_deleted=len(purged),
         runs_deleted=len(old_runs),
         objects_deleted=objects_deleted,
     )
     logger.info(
-        "retention_purge snapshots=%s runs=%s objects=%s",
+        "retention_purge snapshots=%s runs=%s objects=%s kept_referenced=%s",
         result.snapshots_deleted,
         result.runs_deleted,
         result.objects_deleted,
+        skipped_referenced,
     )
     return result

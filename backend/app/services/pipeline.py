@@ -772,19 +772,13 @@ def _queue_notifications(
         logger.warning("rate_limit_eval_failed monitor_id=%s error=%s", monitor.id, exc)
 
     # webdog.ai parity: optional screenshot attached to every check/alert.
-    # Best-effort and non-fatal — a missing Playwright browser must never fail
-    # the content check. opt-in via monitor.screenshots_enabled.
+    # The object key is deterministic; the bytes are captured asynchronously
+    # on the browser_checks queue AFTER commit (see capture_alert_screenshot),
+    # so a slow Playwright launch never blocks check workers or delays
+    # notifications. A failed/disabled capture simply leaves the key dangling.
     screenshot_path: str | None = None
     if monitor.screenshots_enabled:
-        try:
-            from app.services.visual import capture_screenshot
-
-            cap = capture_screenshot(monitor.url, timeout_seconds=30, full_page=True)
-            screenshot_path = f"screenshots/{monitor.id}/{change.run_id}.png"
-            put_bytes(key=screenshot_path, data=cap.png_bytes, content_type="image/png")
-        except Exception:  # noqa: BLE001
-            logger.warning("screenshot_capture_failed monitor_id=%s", monitor.id)
-            screenshot_path = None
+        screenshot_path = f"screenshots/{monitor.id}/{change.run_id}.png"
 
     channels = db.scalars(
         select(NotificationChannel).where(
@@ -875,6 +869,31 @@ def _queue_notifications(
 # ---------------------------------------------------------------------------
 
 
+def _live_run_status(db: Session, run: MonitorRun) -> str | None:
+    """Re-read the run's status straight from the database.
+
+    The reaper may mark a run FAILED while its worker is still fetching;
+    without this fence the worker would commit SUCCEEDED over it afterwards
+    ("resurrecting" a dead run) and double-count outcomes.
+    """
+    return db.scalar(select(MonitorRun.status).where(MonitorRun.id == run.id))
+
+
+def _enqueue_alert_screenshot(change_id: object, monitor_id: object) -> None:
+    """Hand a screenshot capture to the browser_checks queue (never raises)."""
+    try:
+        from app.workers.browser_checks import capture_alert_screenshot
+
+        capture_alert_screenshot.send(str(change_id))
+        logger.info(
+            "screenshot_enqueued change_id=%s monitor_id=%s", change_id, monitor_id
+        )
+    except Exception as exc:  # noqa: BLE001 - advisory; notifications already queued
+        logger.warning(
+            "screenshot_enqueue_failed change_id=%s error=%s", change_id, exc
+        )
+
+
 def apply_fetch_result(
     db: Session,
     *,
@@ -884,6 +903,21 @@ def apply_fetch_result(
     store_raw: bool = True,
 ) -> PipelineResult:
     """Persist run outcome from an already-fetched response. Commits the session."""
+    # Reaper fence (entry): the run may have been reaped while fetching. If
+    # it is no longer RUNNING, do not resurrect it — drop everything.
+    live_status = _live_run_status(db, run)
+    if live_status != RunStatus.RUNNING.value:
+        logger.warning(
+            "run_fenced run_id=%s status=%s — skipping commit (reaped?)",
+            run.id,
+            live_status,
+        )
+        db.rollback()
+        return PipelineResult(
+            status=live_status or RunStatus.FAILED.value,
+            error_code="run_reaped",
+            error_message="Run was reaped or superseded before results could commit.",
+        )
     increment_checks(db, monitor.workspace_id)
 
     # Step 1 – extract & store snapshot
@@ -916,6 +950,8 @@ def apply_fetch_result(
         change_id = change.id
         diff_text = ctx.diff_text
         db.commit()
+        if monitor.screenshots_enabled:
+            _enqueue_alert_screenshot(change_id, monitor.id)
         try:
             from app.workers.ai_enrich import enrich_change_event
 
@@ -931,7 +967,26 @@ def apply_fetch_result(
         )
     outbox_ids, webhook_ids = _queue_notifications(db, monitor, change, ctx)
 
+    # Reaper fence (pre-commit): re-read status in-transaction; a run reaped
+    # during the pipeline must not be resurrected — roll back the snapshot,
+    # change event and outbox rows instead of committing them.
+    live_status = _live_run_status(db, run)
+    if live_status != RunStatus.RUNNING.value:
+        logger.warning(
+            "run_fenced run_id=%s status=%s — rolling back results (reaped?)",
+            run.id,
+            live_status,
+        )
+        db.rollback()
+        return PipelineResult(
+            status=live_status or RunStatus.FAILED.value,
+            error_code="run_reaped",
+            error_message="Run was reaped or superseded before results could commit.",
+        )
     db.commit()
+
+    if monitor.screenshots_enabled:
+        _enqueue_alert_screenshot(change.id, monitor.id)
 
     # enqueue webhook deliveries after commit
     if webhook_ids:

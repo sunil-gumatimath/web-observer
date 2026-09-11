@@ -13,6 +13,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, or_, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.config import get_settings
 from app.db import SessionLocal
@@ -37,6 +38,17 @@ def _handle_signal(signum: int, _frame: object) -> None:
     global _running
     logger.info("shutdown_signal signum=%s", signum)
     _running = False
+
+
+def _claim_slot(now: datetime, interval_minutes: int) -> datetime:
+    """Truncate *now* down to the monitor's schedule grid.
+
+    A retry/double-claim minutes later lands on the same slot, so the
+    idempotency key derived from it is stable across duplicate claims.
+    """
+    interval_seconds = max(int(interval_minutes or 60), 1) * 60
+    epoch = int(now.timestamp())
+    return datetime.fromtimestamp(epoch - (epoch % interval_seconds), tz=UTC)
 
 
 def claim_due_monitors(limit: int) -> list[tuple[uuid.UUID, bool]]:
@@ -100,7 +112,25 @@ def claim_due_monitors(limit: int) -> list[tuple[uuid.UUID, bool]]:
             monitor.lease_expires_at = lease_until
             monitor.next_run_at = now + interval + timedelta(seconds=jitter)
 
-            idempotency_key = f"{monitor.id}:{int(now.timestamp())}:{uuid.uuid4().hex[:8]}"
+            # Deterministic per (monitor, scheduled slot): a retry or a second
+            # scheduler instance claiming the same slot reuses this key, so the
+            # uq_monitor_run_idempotency constraint (plus the in-transaction
+            # existence check below) collapses duplicates into ONE queued run.
+            slot = _claim_slot(now, monitor.schedule_interval_minutes)
+            idempotency_key = f"{monitor.id}:{int(slot.timestamp())}"
+            existing_id = db.scalar(
+                select(MonitorRun.id)
+                .where(MonitorRun.idempotency_key == idempotency_key)
+                .limit(1)
+            )
+            if existing_id is not None:
+                logger.info(
+                    "duplicate_claim_skipped monitor_id=%s slot=%s run_id=%s",
+                    monitor.id,
+                    slot.isoformat(),
+                    existing_id,
+                )
+                continue
             run = MonitorRun(
                 monitor_id=monitor.id,
                 workspace_id=monitor.workspace_id,
@@ -112,7 +142,19 @@ def claim_due_monitors(limit: int) -> list[tuple[uuid.UUID, bool]]:
                 attempt=1,
             )
             db.add(run)
-            db.flush()
+            try:
+                # Savepoint: two schedulers racing past the SELECT above still
+                # collide on the unique constraint — the loser rolls back just
+                # the insert and skips instead of failing the whole batch.
+                with db.begin_nested():
+                    db.flush()
+            except IntegrityError:
+                logger.info(
+                    "duplicate_claim_race_skipped monitor_id=%s slot=%s",
+                    monitor.id,
+                    slot.isoformat(),
+                )
+                continue
             needs_browser = bool(monitor.js_required or monitor.mode == "visual")
             claimed.append((run.id, needs_browser))
             logger.info(

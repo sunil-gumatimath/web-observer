@@ -8,8 +8,9 @@ from datetime import UTC, datetime
 import dramatiq
 
 from app.config import get_settings
-from app.models import Monitor
-from app.models.entities import RunStatus
+from app.db import SessionLocal
+from app.models import ChangeEvent, Monitor, NotificationOutbox
+from app.models.entities import OutboxStatus, RunStatus
 from app.services.browser_fetch import fetch_url_browser
 from app.services.domain_guard import _redis
 from app.workers.broker import redis_broker  # noqa: F401
@@ -103,3 +104,76 @@ def run_browser_check(run_id: str) -> None:
         pre_run_hook=_pre_run_hook,
         worker_label="browser_check",
     )
+
+
+@dramatiq.actor(queue_name="browser_checks", max_retries=2, time_limit=120_000)
+def capture_alert_screenshot(change_event_id: str) -> None:
+    """Capture a change-alert screenshot off the critical check path.
+
+    Enqueued post-commit by the pipeline when ``screenshots_enabled`` is on,
+    so a slow (~30s) Playwright capture never blocks HTTP check workers or
+    notification queuing. Best-effort: failures are logged, never raised —
+    the change notification was already queued without the attachment.
+    """
+    from uuid import UUID
+
+    from sqlalchemy import select
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.services.storage import put_bytes
+
+    try:
+        change_uuid = UUID(str(change_event_id))
+    except ValueError:
+        logger.warning("screenshot_bad_change_id change_id=%s", change_event_id)
+        return
+
+    with SessionLocal() as db:
+        change = db.get(ChangeEvent, change_uuid)
+        if change is None:
+            logger.warning("screenshot_change_missing change_id=%s", change_event_id)
+            return
+        monitor = db.get(Monitor, change.monitor_id)
+        if monitor is None:
+            logger.warning("screenshot_monitor_missing change_id=%s", change_event_id)
+            return
+        try:
+            from app.services.visual import capture_screenshot
+
+            cap = capture_screenshot(
+                monitor.url, timeout_seconds=30, full_page=True
+            )
+            screenshot_path = f"screenshots/{monitor.id}/{change.run_id}.png"
+            put_bytes(
+                key=screenshot_path,
+                data=cap.png_bytes,
+                content_type="image/png",
+            )
+        except Exception as exc:  # noqa: BLE001 - screenshot is advisory
+            logger.warning(
+                "screenshot_capture_failed monitor_id=%s change_id=%s error=%s",
+                monitor.id,
+                change_event_id,
+                exc,
+            )
+            return
+        # Stitch the attachment into still-pending outbox payloads so the
+        # delivered notification carries the screenshot when it made it in
+        # time; already-sent messages keep their original payload.
+        pending = db.scalars(
+            select(NotificationOutbox).where(
+                NotificationOutbox.change_event_id == change.id,
+                NotificationOutbox.status == OutboxStatus.PENDING.value,
+            )
+        ).all()
+        for outbox in pending:
+            payload = dict(outbox.payload or {})
+            payload["screenshot_path"] = screenshot_path
+            outbox.payload = payload
+            flag_modified(outbox, "payload")
+        db.commit()
+        logger.info(
+            "screenshot_captured change_id=%s outbox_updated=%s",
+            change_event_id,
+            len(pending),
+        )
