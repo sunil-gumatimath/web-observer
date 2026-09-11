@@ -58,7 +58,7 @@ def _cors_origins() -> list[str]:
     raw = (getattr(settings, "cors_origins", "") or "").strip()
     if not raw:
         return ["http://localhost:3000", "http://127.0.0.1:3000"]
-    # Split on commas AND any whitespace — gcloud Run flattens commas to
+    # Split on commas AND any whitespace — some platforms flatten commas to
     # spaces in env values, so space-separated must also work in prod.
     return [o.strip() for o in re.split(r"[,\s]+", raw) if o.strip()]
 
@@ -136,14 +136,21 @@ def metrics(db: Db):
     from app.models import WebhookDelivery as _WD
 
     try:
-        from datetime import UTC as _UTC, datetime as _dt, timedelta as _td
+        from datetime import UTC as _UTC
+        from datetime import datetime as _dt
+        from datetime import timedelta as _td
 
         monitors_total = db.scalar(select(_func.count()).select_from(_Mon)) or 0
         since = _dt.now(_UTC) - _td(hours=24)
-        runs_24h = db.scalar(select(_func.count()).select_from(_Run).where(_Run.created_at >= since)) or 0
-        changes_24h = db.scalar(select(_func.count()).select_from(_CE).where(_CE.created_at >= since)) or 0
+        runs_24h = (
+            db.scalar(select(_func.count()).select_from(_Run).where(_Run.created_at >= since)) or 0
+        )
+        changes_24h = (
+            db.scalar(select(_func.count()).select_from(_CE).where(_CE.created_at >= since)) or 0
+        )
         pending_outbox = (
-            db.scalar(select(_func.count()).select_from(_Outbox).where(_Outbox.status == "pending")) or 0
+            db.scalar(select(_func.count()).select_from(_Outbox).where(_Outbox.status == "pending"))
+            or 0
         )
         pending_webhooks = (
             db.scalar(select(_func.count()).select_from(_WD).where(_WD.status == "pending")) or 0

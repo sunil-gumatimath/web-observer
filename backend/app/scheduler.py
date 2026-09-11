@@ -167,7 +167,7 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--once", action="store_true", help="single pass then exit (for Cloud Run Jobs)")
+    parser.add_argument("--once", action="store_true", help="single pass then exit (cron/one-shot)")
     args = parser.parse_args()
 
     if args.once:
