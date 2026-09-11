@@ -16,7 +16,7 @@ WS=$(echo "$SEED" | python -c "import sys,json; print(json.load(sys.stdin)['work
 
 echo "== create monitor =="
 MON=$(curl -sf -X POST -H "$H" -H "Content-Type: application/json" \
-  -d '{"name":"Smoke example.com","url":"https://example.com/","mode":"whole_page","schedule_interval_minutes":60,"notification_email":"smoke@example.com"}' \
+  -d '{"name":"Smoke example.com","url":"https://example.com/","mode":"page_content","schedule_interval_minutes":60,"notification_email":"smoke@example.com"}' \
   "$BASE/api/v1/workspaces/$WS/monitors")
 echo "$MON"
 MID=$(echo "$MON" | python -c "import sys,json; print(json.load(sys.stdin)['id'])")
