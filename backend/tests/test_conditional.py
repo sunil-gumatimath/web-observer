@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-from app.services.conditional import check_rate_limits, should_alert
+from app.services.conditional import check_rate_limits, parse_monitor_value, should_alert
 
 
 def _monitor(**kw):
@@ -17,6 +17,14 @@ def _monitor(**kw):
 def test_no_config_alerts():
     ok, reason = should_alert(_monitor(), "a", "b")
     assert (ok, reason) == (True, None)
+
+
+def test_parse_monitor_value():
+    assert parse_monitor_value("USD 19.99", "product_price") == 19.99
+    assert parse_monitor_value("42.5", "json_field") == 42.5
+    assert parse_monitor_value("not a number", "json_field") is None
+    assert parse_monitor_value("whatever", "page_content") is None
+    assert parse_monitor_value("", "product_price") is None
 
 
 def test_rate_limits_no_config_allowed_without_db():

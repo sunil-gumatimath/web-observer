@@ -29,6 +29,7 @@ import type {
   SelectorPreview,
   SnapshotAccess,
   Usage,
+  ValueHistory,
   WebhookDelivery,
   WebhookOut,
   WorkspaceMemberRow,
@@ -308,6 +309,11 @@ export const api = {
 
   listChanges: (workspaceId: string, monitorId: string) =>
     request<ChangeEvent[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/changes`),
+
+  getValueHistory: (workspaceId: string, monitorId: string) =>
+    request<ValueHistory>(
+      `/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/value-history`,
+    ),
 
   getChange: (workspaceId: string, changeId: string) =>
     request<ChangeEventDetail>(`/api/v1/workspaces/${workspaceId}/changes/${changeId}`),

@@ -144,6 +144,17 @@ export type ChangeEventDetail = ChangeEvent & {
   mode: string | null;
 };
 
+export type ValuePoint = {
+  t: string;
+  value: number;
+};
+
+export type ValueHistory = {
+  monitor_id: string;
+  mode: string;
+  points: ValuePoint[];
+};
+
 export type Usage = {
   workspace_id: string;
   period_start: string;

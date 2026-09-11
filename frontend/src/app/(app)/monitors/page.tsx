@@ -18,6 +18,7 @@ import { useToast } from "@/components/toasts";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonTable } from "@/components/skeleton";
 import { api } from "@/lib/api";
+import { relativeTime } from "@/lib/format";
 import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -46,6 +47,26 @@ function lastCheckKey(m: Monitor): number {
 	return Number.isNaN(t) ? 0 : t;
 }
 
+/** Status dot: green = checking, red = recent check failures, grey = paused. */
+function statusDot(m: Monitor): { cls: string; label: string } {
+	if (!m.enabled) return { cls: "bg-slate-300 dark:bg-slate-600", label: "Paused" };
+	if ((m.consecutive_failures ?? 0) > 0)
+		return { cls: "bg-rose-500", label: `${m.consecutive_failures} recent check failures` };
+	return { cls: "bg-emerald-500", label: "Active" };
+}
+
+function MonitorStatusDot({ monitor }: { monitor: Monitor }) {
+	const s = statusDot(monitor);
+	return (
+		<span
+			role="img"
+			aria-label={s.label}
+			title={s.label}
+			className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.cls}`}
+		/>
+	);
+}
+
 export default function MonitorsPage() {
 	usePageTitle("Monitors");
 	const router = useRouter();
@@ -60,6 +81,8 @@ export default function MonitorsPage() {
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [sortKey, setSortKey] = useState<SortKey>("name");
 	const [sortDir, setSortDir] = useState<SortDir>("asc");
+	const [refreshTick, setRefreshTick] = useState(0);
+	const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -67,7 +90,10 @@ export default function MonitorsPage() {
 			try {
 				const ws = await ensureWorkspace();
 				const list = await api.listMonitors(ws);
-				if (!cancelled) setMonitors(list);
+				if (!cancelled) {
+					setMonitors(list);
+					setLastUpdated(new Date());
+				}
 			} catch (e) {
 				if (!cancelled)
 					setError(e instanceof Error ? e.message : "Failed to load monitors");
@@ -78,6 +104,11 @@ export default function MonitorsPage() {
 		return () => {
 			cancelled = true;
 		};
+	}, [refreshTick]);
+
+	useEffect(() => {
+		const t = setInterval(() => setRefreshTick((n) => n + 1), 60000);
+		return () => clearInterval(t);
 	}, []);
 
 	const filtered = useMemo(() => {
@@ -263,6 +294,19 @@ export default function MonitorsPage() {
 								{filtered.length} of {monitors.length} monitor
 								{monitors.length === 1 ? "" : "s"}
 							</span>
+							{lastUpdated ? (
+								<span title={lastUpdated.toLocaleString()}>
+									· updated {relativeTime(lastUpdated.toISOString())}
+								</span>
+							) : null}
+							<Button
+								type="button"
+								size="sm"
+								variant="ghost"
+								onClick={() => setRefreshTick((n) => n + 1)}
+							>
+								Refresh
+							</Button>
 							{filtersActive && (
 								<Button
 									type="button"
@@ -356,6 +400,7 @@ export default function MonitorsPage() {
 														</td>
 														<td className="px-4 py-3.5">
 															<div className="flex items-center gap-2.5">
+																<MonitorStatusDot monitor={m} />
 																<BrandLogo brand={m.brand} name={m.name} domain={m.url} size={24} />
 																<Link
 																	href={`/monitors/${m.id}`}
@@ -363,6 +408,9 @@ export default function MonitorsPage() {
 																>
 																	{m.name}
 																</Link>
+																{m.latest_change && !m.latest_change.is_read ? (
+																	<Badge tone="info">new</Badge>
+																) : null}
 															</div>
 														</td>
 														<td className="max-w-xs truncate px-4 py-3.5 text-slate-600 dark:text-slate-400">
@@ -415,10 +463,14 @@ export default function MonitorsPage() {
 														onClick={(e) => e.stopPropagation()}
 													/>
 												</span>
+												<MonitorStatusDot monitor={m} />
 												<BrandLogo brand={m.brand} name={m.name} domain={m.url} size={24} />
 												<p className="truncate font-medium text-[var(--fg)]">
 													{m.name}
 												</p>
+												{m.latest_change && !m.latest_change.is_read ? (
+													<Badge tone="info">new</Badge>
+												) : null}
 											</div>
 											<Badge tone={m.enabled ? "success" : "warn"}>
 												{m.enabled ? "active" : "paused"}

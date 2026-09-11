@@ -10,6 +10,22 @@ from app.services.structured import diff_lists, items_from_normalized
 
 def _parse_price_value(text: str) -> float | None:
     """Extract numeric value from normalized price like 'USD 19.99'."""
+    return parse_monitor_value(text, "product_price")
+
+
+def parse_monitor_value(text: str, mode: str) -> float | None:
+    """Numeric value of a snapshot's normalized text for chartable modes.
+
+    ``product_price`` reuses the price-token parser; ``json_field`` parses a
+    bare number. Returns *None* for other modes or unparsable text.
+    """
+    if mode == "json_field":
+        try:
+            return float((text or "").strip())
+        except (ValueError, TypeError):
+            return None
+    if mode != "product_price":
+        return None
     import re as _re
 
     m = _re.search(r"([0-9][0-9,]*\.?[0-9]*)", text.replace(",", ""))

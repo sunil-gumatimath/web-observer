@@ -49,6 +49,7 @@ from app.schemas import (
     NoiseFeedbackIn,
     ReadStateIn,
     SnapshotAccessOut,
+    ValueHistoryOut,
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.branding import fetch_brand_info, store_brand_assets
@@ -1079,6 +1080,49 @@ def list_changes(
             .limit(limit)
         ).all()
     )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/monitors/{monitor_id}/value-history",
+    response_model=ValueHistoryOut,
+)
+def value_history(
+    workspace_id: UUID,
+    monitor_id: UUID,
+    db: Db,
+    _workspace: AnyWs,
+    limit: int = Query(default=100, ge=2, le=500),
+) -> ValueHistoryOut:
+    """Chartable value series for ``product_price`` / ``json_field`` monitors.
+
+    Parses each stored snapshot's normalized text server-side (same parser as
+    conditional thresholds) and returns oldest-first ``(t, value)`` points.
+    Other modes return an empty series — no error, so the UI can call it
+    blindly.
+    """
+    from app.schemas import ValuePoint
+    from app.services.conditional import parse_monitor_value
+
+    monitor = _get_monitor(db, workspace_id, monitor_id)
+    if monitor.mode not in ("product_price", "json_field"):
+        return ValueHistoryOut(monitor_id=monitor.id, mode=monitor.mode, points=[])
+    rows = list(
+        db.execute(
+            select(Snapshot.created_at, Snapshot.normalized_text)
+            .where(
+                Snapshot.monitor_id == monitor_id,
+                Snapshot.workspace_id == workspace_id,
+            )
+            .order_by(Snapshot.created_at.desc())
+            .limit(limit)
+        ).all()
+    )
+    points = []
+    for created_at, text in reversed(rows):
+        v = parse_monitor_value(text or "", monitor.mode)
+        if v is not None and created_at is not None:
+            points.append(ValuePoint(t=created_at, value=v))
+    return ValueHistoryOut(monitor_id=monitor.id, mode=monitor.mode, points=points)
 
 
 UNCATEGORIZED_ACTIVITY = "uncategorized"

@@ -9,42 +9,43 @@ import {
 	CategoryBadge,
 	EmptyState,
 	ErrorBox,
+	ImpactBadge,
 	Input,
 	PageHeader,
 	SegmentedControl,
 	Select,
 	Spinner,
+	parseImpact,
 } from "@/components/ui";
 import { BrandLogo } from "@/components/brand-logo";
 import { GithubDiff } from "@/components/github-diff";
 import { useToast } from "@/components/toasts";
 import { api } from "@/lib/api";
+import { relativeTime } from "@/lib/format";
 import type { AlertInboxItem, AlertsSummary, ChangeEventDetail } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
 import { ensureWorkspace } from "@/lib/workspace";
 import { config } from "@/lib/config";
 
 type Filter = "all" | "unread" | "noise";
+type ImpactFilter = "all" | "high" | "medium" | "low";
 
 const PAGE_SIZE = 100;
-
-function relativeTime(iso: string): string {
-	const ms = Date.now() - new Date(iso).getTime();
-	const m = Math.floor(ms / 60000);
-	if (m < 1) return "just now";
-	if (m < 60) return `${m}m ago`;
-	const h = Math.floor(m / 60);
-	if (h < 24) return `${h}h ago`;
-	const d = Math.floor(h / 24);
-	if (d < 30) return `${d}d ago`;
-	return new Date(iso).toLocaleDateString();
-}
 
 /** Pull the AI triage reason out of a noise item's summary, if present. */
 function triageReason(summary: string | null): string | null {
 	if (!summary) return null;
 	const m = summary.match(/^\[AI triage\]\s*(.+)$/i);
 	return m ? m[1] : null;
+}
+
+/** Normalized impact level: critical folds into high. Null when unknown. */
+function impactLevel(a: AlertInboxItem): ImpactFilter | null {
+	const raw = (a.impact ?? parseImpact(a.ai_summary) ?? "").toLowerCase();
+	if (!raw) return null;
+	if (raw === "critical") return "high";
+	if (raw === "high" || raw === "medium" || raw === "low") return raw;
+	return null;
 }
 
 export default function AlertsPage() {
@@ -55,12 +56,15 @@ export default function AlertsPage() {
 	const [filter, setFilter] = useState<Filter>("all");
 	const [query, setQuery] = useState("");
 	const [monitorFilter, setMonitorFilter] = useState<string>("all");
+	const [impactFilter, setImpactFilter] = useState<ImpactFilter>("all");
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [busy, setBusy] = useState(false);
 	const [limit, setLimit] = useState(PAGE_SIZE);
+	const [refreshTick, setRefreshTick] = useState(0);
+	const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
 	// Cache of fetched diff details for inline expansion
 	const [expandedDiffs, setExpandedDiffs] = useState<Record<string, ChangeEventDetail>>({});
@@ -95,6 +99,7 @@ export default function AlertsPage() {
 				if (cancelled) return;
 				setWorkspaceId(ws);
 				await load(ws, filter, limit);
+				if (!cancelled) setLastUpdated(new Date());
 			} catch (e) {
 				if (!cancelled)
 					setError(e instanceof Error ? e.message : "Failed to load alerts");
@@ -105,7 +110,12 @@ export default function AlertsPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [filter, limit, load]);
+	}, [filter, limit, load, refreshTick]);
+
+	useEffect(() => {
+		const t = setInterval(() => setRefreshTick((n) => n + 1), 60000);
+		return () => clearInterval(t);
+	}, []);
 
 	// Distinct monitors present in the inbox, for the monitor filter dropdown.
 	const monitorOptions = useMemo(() => {
@@ -123,6 +133,8 @@ export default function AlertsPage() {
 			: null;
 		return alerts.filter((a) => {
 			if (monitorFilter !== "all" && a.monitor_id !== monitorFilter)
+				return false;
+			if (impactFilter !== "all" && impactLevel(a) !== impactFilter)
 				return false;
 			const ts = new Date(a.created_at).getTime();
 			if (fromMs != null && ts < fromMs) return false;
@@ -142,7 +154,7 @@ export default function AlertsPage() {
 			}
 			return true;
 		});
-	}, [alerts, query, monitorFilter, dateFrom, dateTo]);
+	}, [alerts, query, monitorFilter, impactFilter, dateFrom, dateTo]);
 	const toast = useToast();
 
 	async function markRead(alert: AlertInboxItem, isRead = true) {
@@ -309,12 +321,12 @@ export default function AlertsPage() {
 					aria-label="Search alerts"
 					className="h-9 w-full max-w-xs"
 				/>
-				<div className="max-w-[14rem] flex-1">
+				<div className="w-full sm:w-60 sm:shrink-0">
 					<Select
 						value={monitorFilter}
 						onChange={(e) => setMonitorFilter(e.target.value)}
 						aria-label="Filter by monitor"
-						className="h-9"
+						className="h-9 w-full"
 					>
 						<option value="all">All monitors</option>
 						{monitorOptions.map((m) => (
@@ -322,6 +334,19 @@ export default function AlertsPage() {
 								{m.name}
 							</option>
 						))}
+					</Select>
+				</div>
+				<div className="w-full sm:w-44 sm:shrink-0">
+					<Select
+						value={impactFilter}
+						onChange={(e) => setImpactFilter(e.target.value as ImpactFilter)}
+						aria-label="Filter by impact"
+						className="h-9 w-full"
+					>
+						<option value="all">All impacts</option>
+						<option value="high">High impact</option>
+						<option value="medium">Medium impact</option>
+						<option value="low">Low impact</option>
 					</Select>
 				</div>
 				<Input
@@ -338,7 +363,7 @@ export default function AlertsPage() {
 					aria-label="To date"
 					className="h-9 w-auto"
 				/>
-				{(query || monitorFilter !== "all" || dateFrom || dateTo) && (
+				{(query || monitorFilter !== "all" || impactFilter !== "all" || dateFrom || dateTo) && (
 					<Button
 						type="button"
 						variant="ghost"
@@ -346,6 +371,7 @@ export default function AlertsPage() {
 						onClick={() => {
 							setQuery("");
 							setMonitorFilter("all");
+							setImpactFilter("all");
 							setDateFrom("");
 							setDateTo("");
 						}}
@@ -353,6 +379,21 @@ export default function AlertsPage() {
 						Clear
 					</Button>
 				)}
+				<div className="ml-auto flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+					{lastUpdated ? (
+						<span title={lastUpdated.toLocaleString()}>
+							Updated {relativeTime(lastUpdated.toISOString())}
+						</span>
+					) : null}
+					<Button
+						type="button"
+						size="sm"
+						variant="ghost"
+						onClick={() => setRefreshTick((n) => n + 1)}
+					>
+						Refresh
+					</Button>
+				</div>
 			</div>
 
 			{/* Alerts Feed */}
@@ -377,6 +418,21 @@ export default function AlertsPage() {
 				<EmptyState
 					title="No matching alerts"
 					body="No alerts match your current search or filters. Try clearing them."
+					action={
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={() => {
+								setQuery("");
+								setMonitorFilter("all");
+								setImpactFilter("all");
+								setDateFrom("");
+								setDateTo("");
+							}}
+						>
+							Clear filters
+						</Button>
+					}
 				/>
 			) : (
 				<div className="space-y-3">
@@ -417,6 +473,9 @@ export default function AlertsPage() {
 												) : (
 													<CategoryBadge category={a.change_category} />
 												)}
+												{a.is_noise ? null : (
+													<ImpactBadge impact={a.impact ?? parseImpact(a.ai_summary)} />
+												)}
 												<Link
 													href={`/monitors/${a.monitor_id}`}
 													className="text-sm font-semibold text-[var(--fg)] hover:text-[var(--accent)] truncate"
@@ -430,7 +489,10 @@ export default function AlertsPage() {
 											</div>
 
 											{/* AI Summary / Headline */}
-											<p className="text-[15px] font-medium leading-snug text-[var(--fg)]">
+											<p
+												className="text-[15px] font-medium leading-snug text-[var(--fg)] line-clamp-3"
+												title={reason ?? headline}
+											>
 												{reason ?? headline}
 											</p>
 											{reason ? (

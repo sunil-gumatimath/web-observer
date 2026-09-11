@@ -18,6 +18,9 @@ describe("keysForMode", () => {
 			"min_diff_chars",
 			"regex_must_match",
 			"regex_must_not_match",
+			"cooldown_minutes",
+			"flap_window_minutes",
+			"flap_max_alerts",
 		]);
 	});
 
@@ -45,6 +48,9 @@ describe("keysForMode", () => {
 				"min_diff_chars",
 				"regex_must_match",
 				"regex_must_not_match",
+				"cooldown_minutes",
+				"flap_window_minutes",
+				"flap_max_alerts",
 			]);
 		}
 	});

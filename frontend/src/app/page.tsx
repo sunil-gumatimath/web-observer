@@ -61,7 +61,7 @@ export default function HomePage() {
       </header>
 
       <main className="relative z-10 mx-auto max-w-[1440px] px-8 pb-24" suppressHydrationWarning>
-        <section className="grid gap-12 pt-[60px] lg:grid-cols-[1.4fr_1fr] lg:items-end">
+        <section className="max-w-[880px] pb-[60px] pt-[60px]">
           <div suppressHydrationWarning>
             <p className="eyebrow">Web change detection · high-signal alerts</p>
             <h1
@@ -99,17 +99,6 @@ export default function HomePage() {
               </Link>
             </div>
           </div>
-          <aside className="rounded-[22px] border border-[var(--border-soft)] bg-[var(--surface)] p-4" aria-label="System status">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-[var(--muted)]">Platform status</span>
-              <span className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
-                Operational
-              </span>
-            </div>
-            <p className="mt-3 text-sm text-[var(--muted)]">Deterministic diffs · AI summaries · ⌘K search</p>
-            <p className="mt-1 text-xs text-[var(--muted)]">Press <kbd>⌘</kbd> <kbd>K</kbd> anywhere in the app.</p>
-          </aside>
         </section>
 
         <section className="border-t border-[var(--border-soft)] pt-[60px]">
@@ -158,6 +147,26 @@ export default function HomePage() {
           </p>
         </section>
       </main>
+
+      <footer className="relative z-10 mx-auto max-w-[1440px] px-8 pb-10" suppressHydrationWarning>
+        <div className="flex flex-col gap-4 border-t border-[var(--border-soft)] pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <Logo compact iconSize={24} />
+            <span className="text-sm text-[var(--muted)]">© 2026 Web Observer</span>
+          </div>
+          <nav className="flex items-center gap-5 text-sm text-[var(--muted)]" aria-label="Footer">
+            <Link href="/docs" className="transition hover:text-[var(--accent)]">
+              Docs
+            </Link>
+            <Link href="/dashboard" className="transition hover:text-[var(--accent)]">
+              Dashboard
+            </Link>
+            <Link href="/sign-in" className="transition hover:text-[var(--accent)]">
+              Sign in
+            </Link>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }

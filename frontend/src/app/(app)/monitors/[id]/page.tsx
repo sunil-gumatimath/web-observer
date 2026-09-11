@@ -22,7 +22,8 @@ import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
 import { api, ApiError, brandAssetUrl } from "@/lib/api";
-import type { ChangeEvent, Monitor, MonitorRun } from "@/lib/types";
+import type { ChangeEvent, Monitor, MonitorRun, ValuePoint } from "@/lib/types";
+import { ValueChart } from "@/components/value-chart";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
@@ -55,6 +56,7 @@ function MonitorDetailInner() {
 	usePageTitle(monitor ? monitor.name : "Monitor detail");
 	const [runs, setRuns] = useState<MonitorRun[]>([]);
 	const [changes, setChanges] = useState<ChangeEvent[]>([]);
+	const [valuePoints, setValuePoints] = useState<ValuePoint[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [loading, setLoading] = useState(true);
@@ -94,6 +96,14 @@ function MonitorDetailInner() {
 		setMonitor(m);
 		setRuns(r);
 		setChanges(c);
+		if (m.mode === "product_price" || m.mode === "json_field") {
+			try {
+				const h = await api.getValueHistory(ws, monitorId);
+				setValuePoints(h.points);
+			} catch {
+				// History is a bonus panel — never fail the page for it.
+			}
+		}
 		return { ws, runs: r };
 	}, [monitorId]);
 
@@ -804,6 +814,39 @@ function MonitorDetailInner() {
 				)}
 			</section>
 
+		{/* Failing is not changing: an outage banner visually distinct from content changes */}
+			{(monitor.consecutive_failures ?? 0) > 0 ? (() => {
+				const lastFailed = runs.find((r) => r.status === "failed");
+				return (
+					<div
+						role="alert"
+						className="mb-8 rounded-2xl border border-rose-500/30 bg-rose-50/60 p-5 shadow-sm dark:bg-rose-950/20"
+					>
+						<div className="flex items-start gap-3">
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-base font-bold text-rose-600 dark:text-rose-400">
+								!
+							</span>
+							<div className="min-w-0 flex-1">
+								<h3 className="text-sm font-semibold text-[var(--fg)]">
+									Monitor is failing — an outage, not a content change
+								</h3>
+								<p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+									Failed {monitor.consecutive_failures} time{(monitor.consecutive_failures ?? 0) === 1 ? "" : "s"} in a row
+									{lastFailed?.finished_at ? ` · last failure ${new Date(lastFailed.finished_at).toLocaleString()}` : ""}.
+									No change alerts fire while checks fail — a separate failure notice goes to your channels instead.
+								</p>
+								{lastFailed?.error_code || lastFailed?.error_message ? (
+									<p className="mt-1.5 truncate font-mono text-xs text-rose-700 dark:text-rose-300">
+										{lastFailed.error_code}
+										{lastFailed.error_message ? ` — ${lastFailed.error_message}` : ""}
+									</p>
+								) : null}
+							</div>
+						</div>
+					</div>
+				);
+			})() : null}
+
 			{/* Latest captured content — always visible when a successful snapshot exists */}
 			{hasSuccessfulSnapshot ? (
 				<section className="mb-8">
@@ -931,6 +974,15 @@ function MonitorDetailInner() {
 					</p>
 				</Card>
 			</div>
+
+			{(monitor.mode === "product_price" || monitor.mode === "json_field") ? (
+				<section className="mb-10">
+					<SectionTitle>Value history</SectionTitle>
+					<Card>
+						<ValueChart points={valuePoints} />
+					</Card>
+				</section>
+			) : null}
 
 			<section className="mb-10">
 				<SectionTitle>Recent runs</SectionTitle>

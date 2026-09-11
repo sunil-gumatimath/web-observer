@@ -413,6 +413,17 @@ class NoiseFeedbackIn(BaseModel):
     is_noise: bool
 
 
+class ValuePoint(BaseModel):
+    t: datetime
+    value: float
+
+
+class ValueHistoryOut(BaseModel):
+    monitor_id: uuid.UUID
+    mode: str
+    points: list[ValuePoint] = []
+
+
 class ReadStateIn(BaseModel):
     is_read: bool = True
 
