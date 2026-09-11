@@ -78,4 +78,4 @@ Plus: workspace isolation, SSRF protection, idempotent retries, no duplicate ale
 - Zero successful SSRF to blocked destinations  
 - ≥30% four-week workspace retention in beta  
 
-See `08-kpis-and-quotas.md` for full metrics and quota defaults.
+See `phase-00-kpis-and-quotas.md` for full metrics and quota defaults.

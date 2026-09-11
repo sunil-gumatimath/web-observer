@@ -54,7 +54,7 @@ Until Clerk + Next.js exist:
 ## States the user sees
 
 | Concept | User-visible meaning |
-|---------|----------------------|
+| --------- | ---------------------- |
 | Baseline set | First success; monitoring active |
 | Unchanged | Check succeeded; no alert |
 | Changed | Alert sent; diff available |

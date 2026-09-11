@@ -176,7 +176,7 @@ Fetch behavior worth knowing while debugging:
 
 - The SSRF-pinned fetcher tries **every** validated IP in turn — one dead CDN PoP won't fail a check; only connect-level errors trigger failover (`backend/app/services/fetcher.py:_pinned_get`).
 - `readme` monitors hit the GitHub API first (resolves the default branch in 1 request), then fall back to capped raw probes.
-- LLM summaries fail over across `LLM_FALLBACK_MODELS`; empty disables failover (see `docs/phase-5.md` env).
+- LLM summaries fail over across `LLM_FALLBACK_MODELS`; empty disables failover (see `docs/phases/phase-05-ai-and-alerts.md` env).
 
 Optional env (defaults work locally):
 

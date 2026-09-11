@@ -120,4 +120,4 @@ Separate concurrency, timeout, and retry per queue.
 
 - Kubernetes not required  
 - Kafka not required  
-- Browser workers were out of scope for the MVP; shipped in Phase 3 (see `docs/phase-3.md`).  
+- Browser workers were out of scope for the MVP; shipped in Phase 3 (see `docs/phases/phase-03-browser-and-js.md`).  

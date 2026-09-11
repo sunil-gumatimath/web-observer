@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+  <img src="../../assets/web-observer.svg" alt="Web Observer logo" width="320" />
 </p>
 
 # Phase 3 — Reliability & JavaScript Rendering
@@ -9,7 +9,7 @@
 | Capability | Implementation |
 | ------------ | ---------------- |
 | JS monitors | `monitors.js_required` → `browser_checks` queue |
-| Opt-in screenshots | `monitors.screenshots_enabled` → full-page screenshot attached to checks/alerts (any mode); a first-class `visual` monitor mode was added later (perceptual aHash comparison) — see `docs/phase-4.md` |
+| Opt-in screenshots | `monitors.screenshots_enabled` → full-page screenshot attached to checks/alerts (any mode); a first-class `visual` monitor mode was added later (perceptual aHash comparison) — see `docs/phases/phase-04-structured-and-visual.md` |
 | Playwright fetch | `app/services/browser_fetch.py` |
 | Playwright screenshot | `app/services/visual.py` |
 | Isolated jobs | `app/services/playwright_job.py` (subprocess; avoids Windows EBADF) |
@@ -36,7 +36,7 @@
 
 Or: `powershell -File .\scripts\restart-stack.ps1`
 
-Create a monitor with **JavaScript rendering required** in the UI (screenshots are a separate opt-in via `screenshots_enabled`; a first-class `visual` mode also exists now — see `docs/phase-4.md`).
+Create a monitor with **JavaScript rendering required** in the UI (screenshots are a separate opt-in via `screenshots_enabled`; a first-class `visual` mode also exists now — see `docs/phases/phase-04-structured-and-visual.md`).
 
 ## Migration
 

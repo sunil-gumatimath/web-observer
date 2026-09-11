@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+  <img src="../../assets/web-observer.svg" alt="Web Observer logo" width="320" />
 </p>
 
 # Phase 5 — AI Summaries & Alert Expansion
@@ -7,7 +7,7 @@
 ## Features
 
 | Feature | Behavior |
-|---------|----------|
+| --------- | ---------- |
 | **AI summary** | After deterministic change; never detects alone |
 | **Category** | pricing, availability, legal, content, design, api, other |
 | **Title & Impact** | Short title + severity (`critical`, `high`, `medium`, `low`) + confidence (`0.0–1.0`) stored as first-class DB columns on `ChangeEvent` |

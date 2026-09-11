@@ -118,7 +118,7 @@ Scope: MVP public monitoring
 
 ## Security requirements checklist (Phase 1 exit)
 
-Status: **implemented** — controls shipped (see `docs/phase-3.md`, `docs/phase-6-7.md`).
+Status: **implemented** — controls shipped (see `docs/phases/phase-03-browser-and-js.md`, `docs/phases/phase-06-07-monetization-enterprise.md`).
 
 - [x] SSRF suite green  
 - [x] No private/metadata IP access in tests  

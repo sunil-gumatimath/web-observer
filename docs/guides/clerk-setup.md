@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+  <img src="../../assets/web-observer.svg" alt="Web Observer logo" width="320" />
 </p>
 
 # Clerk setup (this project)
@@ -10,7 +10,7 @@ Frontend API host: `suited-emu-70.clerk.accounts.dev` (development)
 ## What was configured
 
 | Layer | What |
-|-------|------|
+| ------- | ------ |
 | **Frontend** | `@clerk/nextjs`, `ClerkProvider` in layout, middleware protect, sign-in/up pages |
 | **frontend/.env.local** | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` (via `clerk env pull`) |
 | **Backend .env** | `CLERK_JWKS_URL`, `CLERK_ISSUER`, `CLERK_SECRET_KEY` for FastAPI JWT verify (set in `backend/.env`) |
@@ -27,8 +27,8 @@ cd frontend
 npm run dev
 ```
 
-4. Open http://localhost:3000 → **Sign up** → create your first user  
-5. Dashboard should load; API calls use Bearer session JWT  
+1. Open <http://localhost:3000> → **Sign up** → create your first user  
+2. Dashboard should load; API calls use Bearer session JWT  
 
 ## Re-sync keys later
 
@@ -41,7 +41,7 @@ node scripts/wire-clerk-backend.mjs
 
 ## Dashboard
 
-https://dashboard.clerk.com/
+<https://dashboard.clerk.com/>
 
 If you see **Configure your application**, click it and finish any checklist items (allowed origins, etc.).
 

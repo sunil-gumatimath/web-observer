@@ -16,14 +16,14 @@ Base path: `/api/v1`
 ## Health
 
 | Method | Path | Notes |
-|--------|------|--------|
+| -------- | ------ | -------- |
 | GET | `/health` | Liveness |
 | GET | `/ready` | DB + Redis readiness |
 
 ## Workspaces
 
 | Method | Path | Notes |
-|--------|------|--------|
+| -------- | ------ | -------- |
 | GET | `/workspaces` | List memberships |
 | POST | `/workspaces` | Create workspace |
 | GET | `/workspaces/{id}` | Detail |
@@ -32,7 +32,7 @@ Base path: `/api/v1`
 ## Monitors
 
 | Method | Path | Notes |
-|--------|------|--------|
+| -------- | ------ | -------- |
 | GET | `/workspaces/{id}/monitors` | List |
 | POST | `/workspaces/{id}/monitors` | Create (enforce quotas) |
 | GET | `/workspaces/{id}/monitors/{monitor_id}` | Detail |
@@ -60,14 +60,14 @@ Base path: `/api/v1`
 ## Runs
 
 | Method | Path | Notes |
-|--------|------|--------|
+| -------- | ------ | -------- |
 | GET | `/workspaces/{id}/monitors/{monitor_id}/runs` | History |
 | GET | `/workspaces/{id}/runs/{run_id}` | Detail + error |
 
 ## Changes & diffs
 
 | Method | Path | Notes |
-|--------|------|--------|
+| -------- | ------ | -------- |
 | GET | `/workspaces/{id}/monitors/{monitor_id}/changes` | Change events |
 | GET | `/workspaces/{id}/changes/{change_id}` | Detail + diff payload |
 | GET | `/workspaces/{id}/snapshots/{snapshot_id}/content` | Signed URL or streamed normalized text |
@@ -75,7 +75,7 @@ Base path: `/api/v1`
 ## Notification channels
 
 | Method | Path | Notes |
-|--------|------|--------|
+| -------- | ------ | -------- |
 | GET | `/workspaces/{id}/notification-channels` | List |
 | POST | `/workspaces/{id}/notification-channels` | Add email |
 | DELETE | `/workspaces/{id}/notification-channels/{channel_id}` | Remove |
@@ -89,7 +89,7 @@ Base path: `/api/v1`
 ## Internal / admin (Phase 1)
 
 | Method | Path | Notes |
-|--------|------|--------|
+| -------- | ------ | -------- |
 | POST | `/internal/seed` | Dev only |
 | GET | `/internal/queues` | Optional diagnostics |
 

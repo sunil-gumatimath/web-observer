@@ -18,20 +18,18 @@ Verified end-to-end: backend unit tests pass (140 passed, 2 skipped, 8 integrati
 
 | Doc | Topic |
 | ----- | -------- |
+| [docs/](docs/) | Documentation index |
 | [docs/local-dev.md](docs/local-dev.md) | Run locally (full process list) |
-| [docs/clerk-setup.md](docs/clerk-setup.md) | Clerk auth (dev) |
-| [docs/clerk-production.md](docs/clerk-production.md) | Clerk production hardening |
-| [docs/phase-2-auth.md](docs/phase-2-auth.md) | Auth modes (dev token / Clerk) |
-| [docs/resend-setup.md](docs/resend-setup.md) | Email alerts |
-| [docs/r2-setup.md](docs/r2-setup.md) | Cloudflare R2 snapshots (optional object storage) |
-| [docs/phase-3.md](docs/phase-3.md) | JS / Playwright / browser queue |
-| [docs/phase-4.md](docs/phase-4.md) | Structured + visual modes |
-| [docs/phase-5.md](docs/phase-5.md) | AI summaries, semantic triggers, Slack/Discord, digests |
-| [docs/phase-6-7.md](docs/phase-6-7.md) | Plans, webhooks, API keys, RBAC |
-| [docs/phase-0/](docs/phase-0/) | Discovery: scope, ERD, threat model, API outline |
+| [docs/guides/clerk-setup.md](docs/guides/clerk-setup.md) | Clerk auth (dev) |
+| [docs/guides/clerk-production.md](docs/guides/clerk-production.md) | Clerk production hardening |
+| [docs/auth-modes.md](docs/auth-modes.md) | Auth modes (dev token / Clerk) |
+| [docs/guides/resend-setup.md](docs/guides/resend-setup.md) | Email alerts |
+| [docs/guides/r2-setup.md](docs/guides/r2-setup.md) | Cloudflare R2 snapshots (optional object storage) |
+| [docs/phases/](docs/phases/) | Historical phase records (discovery → enterprise) |
+| [docs/roadmap.md](docs/roadmap.md) | Feature roadmap (Phases 8–10) |
 | [docs/adrs/](docs/adrs/) | Architecture decision records |
 | [docs/integrations/n8n-zapier.md](docs/integrations/n8n-zapier.md) | n8n / Zapier automation |
-| [docs/architecture-uml.md](docs/architecture-uml.md) | Architecture diagrams |
+| [docs/architecture.md](docs/architecture.md) | Architecture diagrams |
 
 ## How monitoring works (short)
 
@@ -91,7 +89,7 @@ sequenceDiagram
 - Due-monitor claiming is Postgres-driven (`SELECT ... FOR UPDATE SKIP LOCKED`, 60s lease + jitter: `backend/app/config.py`, `backend/app/scheduler.py`), so multiple schedulers never double-claim.
 - Snapshots store raw HTML + normalized text with a SHA256 `content_hash`; change rows carry `is_noise` / `is_read`; webhooks are HMAC-signed (`X-MTW-Signature`).
 - An external LLM is only called when `LLM_API_KEY` is set; otherwise summaries/triage use fast local heuristics.
-- Full diagrams (components, ERD, sequence): `docs/architecture-uml.md`.
+- Full diagrams (components, ERD, sequence): `docs/architecture.md`.
 
 </details>
 

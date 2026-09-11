@@ -56,5 +56,5 @@ Restart API after changing env.
 
 ## Related
 
-- [docs/clerk-setup.md](clerk-setup.md)  
-- [docs/clerk-production.md](clerk-production.md)  
+- [docs/guides/clerk-setup.md](guides/clerk-setup.md)  
+- [docs/guides/clerk-production.md](guides/clerk-production.md)  
