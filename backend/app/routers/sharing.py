@@ -49,7 +49,7 @@ from app.schemas import (
 from app.services.audit import write_audit
 from app.services.branding import brand_asset_allowed, sniff_image_type
 from app.services.storage import get_bytes
-from app.services.tokens import hash_token, new_token
+from app.services.tokens import candidate_hashes, new_token
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
@@ -192,7 +192,9 @@ def revoke_share_link(
 @router.get("/public/share/{token}", response_model=PublicShareOut)
 @limiter.limit("30/minute")
 def get_public_share(request: Request, token: str, db: Db) -> PublicShareOut:
-    row = db.scalar(select(ShareLink).where(ShareLink.token_hash == hash_token(token)))
+    # Dual-verify: match new HMAC-scheme rows and legacy unsalted rows so
+    # old links keep working; new links are issued with the HMAC scheme only.
+    row = db.scalar(select(ShareLink).where(ShareLink.token_hash.in_(candidate_hashes(token))))
     now = datetime.now(UTC)
     if row is None or not row.enabled or (row.expires_at and row.expires_at < now):
         raise HTTPException(status_code=404, detail="Share link not found")
@@ -355,7 +357,9 @@ def revoke_invite(
 @router.get("/invites/{token}/preview")
 @limiter.limit("30/minute")
 def preview_invite(request: Request, token: str, db: Db) -> dict:
-    row = db.scalar(select(WorkspaceInvite).where(WorkspaceInvite.token_hash == hash_token(token)))
+    row = db.scalar(
+        select(WorkspaceInvite).where(WorkspaceInvite.token_hash.in_(candidate_hashes(token)))
+    )
     now = datetime.now(UTC)
     if row is None or (row.expires_at and row.expires_at < now):
         raise HTTPException(status_code=404, detail="Invite link not found")
@@ -386,7 +390,7 @@ def redeem_invite(
     claim_stmt = (
         sa_update(WorkspaceInvite)
         .where(
-            WorkspaceInvite.token_hash == hash_token(token),
+            WorkspaceInvite.token_hash.in_(candidate_hashes(token)),
             (WorkspaceInvite.expires_at.is_(None)) | (WorkspaceInvite.expires_at >= now),
             WorkspaceInvite.use_count < WorkspaceInvite.max_uses,
         )
@@ -399,7 +403,9 @@ def redeem_invite(
         db.rollback()
         raise HTTPException(status_code=410, detail="Invite link has expired")
 
-    row = db.scalar(select(WorkspaceInvite).where(WorkspaceInvite.token_hash == hash_token(token)))
+    row = db.scalar(
+        select(WorkspaceInvite).where(WorkspaceInvite.token_hash.in_(candidate_hashes(token)))
+    )
     if row is None or (row.expires_at and row.expires_at < now):
         db.rollback()
         raise HTTPException(status_code=404, detail="Invite link not found")

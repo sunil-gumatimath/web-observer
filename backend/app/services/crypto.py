@@ -31,9 +31,11 @@ def _fernet() -> object | None:
 
 
 def encrypt_secret(plaintext: str) -> str:
+    # Fail closed: never silently persist plaintext when the crypto backend
+    # is unavailable. Callers (webhook writes) must surface the error.
     f = _fernet()
     if f is None:
-        return plaintext
+        raise RuntimeError("cannot encrypt secret: cryptography backend missing")
     token = f.encrypt(plaintext.encode()).decode()  # type: ignore[attr-defined]
     return f"{_ENCRYPTED_PREFIX}{token}"
 
@@ -42,7 +44,9 @@ def decrypt_secret(value: str | None) -> str | None:
     if not value:
         return None
     if not value.startswith(_ENCRYPTED_PREFIX):
-        # Legacy plaintext
+        # Legacy plaintext rows pre-dating encryption-at-rest stay readable.
+        # Dual-read only: new writes always go through encrypt_secret, and
+        # legacy values are re-encrypted on next write (model validator).
         return value
     f = _fernet()
     if f is None:

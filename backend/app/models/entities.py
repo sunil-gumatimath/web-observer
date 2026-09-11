@@ -20,7 +20,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db import Base
 
@@ -539,9 +539,26 @@ class WebhookEndpoint(Base):
         index=True,
     )
     url: Mapped[str] = mapped_column(Text, nullable=False)
-    secret: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Fernet ciphertext (~120+ chars with scheme prefix) exceeds the old
+    # VARCHAR(128); Text fits it. Values are encrypted at rest via the
+    # validator below; legacy plaintext rows remain readable (dual-read).
+    secret: Mapped[str] = mapped_column(Text, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @validates("secret")
+    def _encrypt_secret_at_rest(self, _key: str, value: str) -> str:
+        # Encrypt plaintext webhook secrets on every Python-side write
+        # (covers the create path without touching its router). Already
+        # encrypted values pass through; legacy rows re-encrypt on next
+        # write. Validators do not fire on DB load, so reads are unaffected.
+        # Lazy import avoids a module-level cycle with services.
+        if value:
+            from app.services.crypto import encrypt_secret, is_encrypted
+
+            if not is_encrypted(value):
+                return encrypt_secret(value)
+        return value
 
 
 class WebhookDelivery(Base):

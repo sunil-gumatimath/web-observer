@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models import WebhookDelivery, WebhookEndpoint
 from app.security.ssrf import PinnedIPTransport, SSRFError, validate_url_for_fetch
+from app.services.crypto import decrypt_secret, is_encrypted
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,21 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
     }
     body = json.dumps(body_obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
     ts = str(int(datetime.now(UTC).timestamp()))
-    sig = sign_payload(endpoint.secret, body, ts)
+    # Dual-read: decrypts enc:v1 ciphertext, passes legacy plaintext
+    # through. A None result means corrupt ciphertext (or no crypto
+    # backend) — fail the delivery, never sign with the stored blob.
+    secret = decrypt_secret(endpoint.secret)
+    if secret is None:
+        delivery.status = "failed"
+        delivery.last_error = "webhook secret undecryptable"
+        db.commit()
+        logger.warning(
+            "webhook_delivery_no_secret id=%s encrypted=%s",
+            delivery_id,
+            is_encrypted(endpoint.secret),
+        )
+        return
+    sig = sign_payload(secret, body, ts)
 
     # SSRF validation at delivery time: block private/internal targets before
     # making the outbound request.
