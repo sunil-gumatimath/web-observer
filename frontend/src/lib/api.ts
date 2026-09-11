@@ -318,6 +318,15 @@ export const api = {
   getChange: (workspaceId: string, changeId: string) =>
     request<ChangeEventDetail>(`/api/v1/workspaces/${workspaceId}/changes/${changeId}`),
 
+  askChangeAi: (workspaceId: string, changeId: string, prompt: string) =>
+    request<{ text: string }>(
+      `/api/v1/workspaces/${workspaceId}/changes/${changeId}/ask-ai`,
+      {
+        method: "POST",
+        body: JSON.stringify({ prompt }),
+      },
+    ),
+
   listAlerts: (
     workspaceId: string,
     opts?: { unread_only?: boolean; include_noise?: boolean; limit?: number },

@@ -318,6 +318,7 @@ export type InviteRow = {
 export type WorkspaceSettings = {
   workspace_id: string;
   ai_summaries_enabled: boolean;
+  ai_assistant_available: boolean;
   as_llm_api_key: boolean;
   llm_api_base: string | null;
   llm_model: string | null;

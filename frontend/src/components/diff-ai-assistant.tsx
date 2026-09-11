@@ -1,17 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
-import { useCompletion } from "@ai-sdk/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui";
+import { api } from "@/lib/api";
 
 interface DiffAiAssistantProps {
-  monitorName?: string;
-  changeTitle?: string | null;
-  impact?: string | null;
-  category?: string | null;
-  diffText?: string | null;
+  workspaceId: string;
+  changeId: string;
 }
 
 const QUICK_PROMPTS = [
@@ -21,40 +18,40 @@ const QUICK_PROMPTS = [
   "Write a Slack team update",
 ];
 
-export function DiffAiAssistant({
-  monitorName,
-  changeTitle,
-  impact,
-  category,
-  diffText,
-}: DiffAiAssistantProps) {
+export function DiffAiAssistant({ workspaceId, changeId }: DiffAiAssistantProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [completion, setCompletion] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const { completion, input, setInput, complete, isLoading, error, stop } = useCompletion({
-    api: "/api/ai/ask-diff",
-    streamProtocol: "text",
-    body: {
-      monitorName,
-      changeTitle,
-      impact,
-      category,
-      diffText: diffText || "",
-    },
-  });
+  const askAi = async (promptText: string) => {
+    const prompt = promptText.trim();
+    if (!prompt || isLoading) return;
+
+    setActivePrompt(prompt);
+    setError(null);
+    setIsLoading(true);
+    try {
+      const response = await api.askChangeAi(workspaceId, changeId, prompt);
+      setCompletion(response.text);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "AI analysis failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleQuickPrompt = (promptText: string) => {
     setInput(promptText);
-    setActivePrompt(promptText);
-    complete(promptText);
+    void askAi(promptText);
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
-    setActivePrompt(input);
-    complete(input);
+    void askAi(input);
   };
 
   const handleCopy = () => {
@@ -81,11 +78,11 @@ export function DiffAiAssistant({
                 Ask AI Analyst
               </h3>
               <span className="rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)]">
-                Vercel AI SDK
+                Workspace AI
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Interactive streaming analysis of this diff &amp; web change
+              Ask questions about this diff &amp; web change
             </p>
           </div>
         </div>
@@ -103,6 +100,10 @@ export function DiffAiAssistant({
       {/* Expandable Body */}
       {isOpen && (
         <div className="p-5 flex flex-col gap-4">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Your change diff is sent to the workspace-configured external AI provider.
+          </p>
+
           {/* Quick Prompts */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -130,11 +131,6 @@ export function DiffAiAssistant({
                   {activePrompt ? `Analysis: "${activePrompt}"` : "AI Intelligence Analysis"}
                 </span>
                 <div className="flex items-center gap-2">
-                  {isLoading && (
-                    <Button size="sm" variant="secondary" onClick={stop} className="text-xs h-6 px-2">
-                      Stop generating
-                    </Button>
-                  )}
                   <Button size="sm" variant="ghost" onClick={handleCopy} className="text-xs h-6 px-2">
                     {copied ? "✓ Copied" : "Copy"}
                   </Button>
@@ -210,14 +206,14 @@ export function DiffAiAssistant({
             <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 text-center">
               <div className="flex items-center justify-center gap-2 text-xs text-[var(--accent)] font-medium">
                 <div className="size-2 rounded-full bg-[var(--accent)] animate-pulse" />
-                <span>AI Analyst is streaming analysis…</span>
+                <span>AI Analyst is preparing analysis…</span>
               </div>
             </div>
           ) : null}
 
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
-              Analysis error: {error.message}
+              Analysis error: {error}
             </div>
           )}
 

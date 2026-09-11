@@ -39,15 +39,20 @@ export default function ChangeDetailPage() {
 	const [newSnap, setNewSnap] = useState<SnapshotAccess | null>(null);
 	const [run, setRun] = useState<MonitorRun | null>(null);
 	const [monitor, setMonitor] = useState<Monitor | null>(null);
+	const [aiSummariesEnabled, setAiSummariesEnabled] = useState(false);
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
 			try {
 				const ws = await ensureWorkspace();
-				const c = await api.getChange(ws, params.id);
+				const [c, settings] = await Promise.all([
+					api.getChange(ws, params.id),
+					api.getWorkspaceSettings(ws).catch(() => null),
+				]);
 				if (!cancelled) {
 					setWorkspaceId(ws);
 					setChange(c);
+					setAiSummariesEnabled(settings?.ai_assistant_available === true);
 				}
 				// Opening a change directly (e.g. from an email link) marks it read.
 				if (!c.is_read) {
@@ -220,15 +225,11 @@ export default function ChangeDetailPage() {
 				</div>
 			) : null}
 
-			<div className="mb-6">
-				<DiffAiAssistant
-					monitorName={monitor?.name}
-					changeTitle={change.title}
-					impact={change.impact}
-					category={change.change_category}
-					diffText={change.diff || change.diff_summary}
-				/>
-			</div>
+			{workspaceId && aiSummariesEnabled ? (
+				<div className="mb-6">
+					<DiffAiAssistant workspaceId={workspaceId} changeId={change.id} />
+				</div>
+			) : null}
 
 			<div className="mb-4 grid gap-3 sm:grid-cols-2">
 				<Card className="!p-4">

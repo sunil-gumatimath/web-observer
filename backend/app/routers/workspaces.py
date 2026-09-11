@@ -166,13 +166,25 @@ def get_workspace_settings(
     from app.config import get_settings
 
     server = get_settings()
+    has_workspace_llm_key = bool(workspace.llm_api_key)
     return {
         "workspace_id": str(workspace.id),
         "ai_summaries_enabled": workspace.ai_summaries_enabled,
+        "ai_assistant_available": bool(
+            server.ai_summaries_enabled
+            and workspace.ai_summaries_enabled
+            and (has_workspace_llm_key or server.llm_api_key)
+        ),
         # Masked booleans — the actual stored keys are never returned.
-        "as_llm_api_key": bool(workspace.llm_api_key),
-        "llm_api_base": workspace.llm_api_base or server.llm_api_base,
-        "llm_model": workspace.llm_model or server.llm_model,
+        "as_llm_api_key": has_workspace_llm_key,
+        "llm_api_base": (
+            workspace.llm_api_base if has_workspace_llm_key and workspace.llm_api_base
+            else server.llm_api_base
+        ),
+        "llm_model": (
+            workspace.llm_model if has_workspace_llm_key and workspace.llm_model
+            else server.llm_model
+        ),
         "as_resend_api_key": bool(workspace.resend_api_key),
         "email_from": workspace.email_from or server.email_from,
     }

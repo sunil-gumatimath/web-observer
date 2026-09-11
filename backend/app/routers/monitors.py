@@ -89,6 +89,24 @@ router = APIRouter(prefix="/api/v1", tags=["monitors"])
 logger = logging.getLogger(__name__)
 
 
+class AskChangeIn(BaseModel):
+    prompt: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("prompt")
+    @classmethod
+    def normalize_prompt(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("prompt must not be blank")
+        return value
+
+
+class AskChangeOut(BaseModel):
+    text: str
+    model: str
+    tokens_used: int
+
+
 def _get_monitor(db: Session, workspace_id: UUID, monitor_id: UUID) -> Monitor:
     monitor = db.scalar(
         select(Monitor).where(Monitor.id == monitor_id, Monitor.workspace_id == workspace_id)
@@ -263,6 +281,9 @@ def list_monitors(
                 change_category=ce.change_category,
                 ai_summary=ce.ai_summary,
                 diff_summary=ce.diff_summary,
+                title=ce.title,
+                impact=ce.impact,
+                confidence=ce.confidence,
                 is_read=ce.is_read,
                 is_noise=ce.is_noise,
                 created_at=ce.created_at,
@@ -1338,6 +1359,66 @@ def get_change(
         new_text=new_text,
         mode=mode,
     )
+
+
+@router.post(
+    "/workspaces/{workspace_id}/changes/{change_id}/ask-ai",
+    response_model=AskChangeOut,
+)
+@limiter.limit("5/minute")
+def ask_change(
+    request: Request,
+    workspace_id: UUID,
+    change_id: UUID,
+    body: AskChangeIn,
+    db: Db,
+    workspace: MemberWs,
+) -> AskChangeOut:
+    """Answer a question about an authorized change using its server-side diff."""
+    from app.config import get_settings
+    from app.services.ai_summary import ask_about_change, workspace_llm_config
+    from app.services.usage import increment_ai_tokens
+
+    settings = get_settings()
+    if not settings.ai_summaries_enabled or not workspace.ai_summaries_enabled:
+        raise HTTPException(status_code=409, detail="AI is disabled for this workspace")
+
+    detail = get_change(workspace_id, change_id, db, workspace)
+    monitor = db.get(Monitor, detail.monitor_id)
+    if monitor is None or monitor.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Monitor not found")
+
+    try:
+        llm_cfg = workspace_llm_config(workspace)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid workspace LLM provider: {exc}",
+        ) from exc
+    if llm_cfg is None and not settings.llm_api_key:
+        raise HTTPException(status_code=409, detail="No LLM API key is configured")
+
+    try:
+        text, tokens, model = ask_about_change(
+            prompt=body.prompt,
+            diff_text=detail.diff or detail.diff_summary or "",
+            monitor_name=monitor.name,
+            url=monitor.url,
+            llm=llm_cfg,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "ask_change_failed workspace_id=%s change_id=%s error=%s",
+            workspace_id,
+            change_id,
+            exc,
+        )
+        raise HTTPException(status_code=502, detail="AI provider request failed") from exc
+
+    if tokens:
+        increment_ai_tokens(db, workspace_id, n=tokens)
+        db.commit()
+    return AskChangeOut(text=text, model=model, tokens_used=tokens)
 
 
 @router.get(
