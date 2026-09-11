@@ -181,6 +181,8 @@ To expand from developer-centric change detection into an all-in-one web intelli
 
 ### 5.2 Stealth Browser Automation
 
+Status: Proposed only — see ADR 007; threat model still prohibits until accepted.
+
 * **Problem:** Cloudflare Turnstile, DataDome, and Akamai detect default headless Chromium instances.
 * **Proposed Solution:**
   * Implement `playwright-stealth` evasions:
@@ -268,13 +270,12 @@ gantt
     dateFormat  YYYY-MM-DD
     section Phase 8 (Immediate High-ROI)
     Telegram Bot Channel                   :p8telegram, 2026-09-08, 7d
-    Async Brand Fetch & DB Query Fixes     :p8hard, after p8telegram, 5d
-    Interactive Point-and-Click Selector   :p8selector, after p8hard, 14d
+    Interactive Point-and-Click Selector   :p8selector, after p8telegram, 14d
     section Phase 9 (Advanced Automation)
-    Multi-Step User Journeys (Logins/Clicks) :2026-10-01, 14d
-    Visual Bounding-Box Cropping           :2026-10-10, 10d
-    Diff Heatmap + Flicker (4.1 remainder) :2026-10-15, 8d
-    Web Push (PWA) Notifications           :2026-10-20, 7d
+    Multi-Step User Journeys (Logins/Clicks) :2026-10-06, 14d
+    Visual Bounding-Box Cropping           :2026-10-15, 10d
+    Diff Heatmap + Flicker (4.1 remainder) :2026-10-20, 8d
+    Web Push (PWA) Notifications           :2026-10-25, 7d
     section Phase 10 (Enterprise & Ecosystem)
     Stealth Evasion & Proxy Rotation       :2026-11-01, 14d
     Chrome/Firefox Extension               :2026-11-10, 14d
