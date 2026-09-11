@@ -21,6 +21,18 @@ class HealthResponse(BaseModel):
     version: str
 
 
+def normalize_tags(v: list[str] | None) -> list[str] | None:
+    """Lowercase, strip, dedupe, drop empties; None/empty -> None (untagged)."""
+    if v is None:
+        return None
+    seen: list[str] = []
+    for raw in v:
+        t = str(raw or "").strip().lower()
+        if t and t not in seen:
+            seen.append(t)
+    return seen[:10] or None
+
+
 class WorkspaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
 
@@ -101,6 +113,7 @@ class MonitorCreate(BaseModel):
     ignore_regexes: list[str] | None = None
     screenshots_enabled: bool = False
     alert_config: dict | None = None
+    tags: list[str] | None = Field(default=None, max_length=10)
     # If true, enqueue an initial check in the same request (avoids a second
     # round-trip from the frontend). The worker still re-validates the URL.
     run_now: bool = False
@@ -214,6 +227,7 @@ class MonitorUpdate(BaseModel):
     ignore_regexes: list[str] | None = None
     screenshots_enabled: bool | None = None
     alert_config: dict | None = None
+    tags: list[str] | None = Field(default=None, max_length=10)
 
     @field_validator("mode")
     @classmethod
@@ -320,6 +334,7 @@ class MonitorOut(BaseModel):
     ignore_regexes: list[str] | None = None
     alert_config: dict | None = None
     consecutive_failures: int = 0
+    tags: list[str] | None = None
     screenshots_enabled: bool = False
     brand: dict | None = None
     created_at: datetime

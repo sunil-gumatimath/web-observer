@@ -178,6 +178,9 @@ class Monitor(Base):
     # Examples: {"price_below": 99.99, "percent_change": 5, "regex_must_match": "in stock",
     #            "min_diff_chars": 100, "list_min_added": 1}
     alert_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Free-form fleet organization labels (e.g. ["pricing", "competitors"]).
+    # Null = untagged. Normalized (lowercase, unique) at the API layer.
+    tags: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     # webdog.ai-style brand-aware dashboard info (auto-filled on add):
     # {title, description, logo_url, hero_url} with URLs pointing at our storage.
     brand: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

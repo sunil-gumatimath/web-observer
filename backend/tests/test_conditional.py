@@ -27,6 +27,17 @@ def test_parse_monitor_value():
     assert parse_monitor_value("", "product_price") is None
 
 
+def test_normalize_tags():
+    from app.schemas import normalize_tags
+
+    assert normalize_tags(None) is None
+    assert normalize_tags([]) is None
+    assert normalize_tags(["Pricing", " pricing ", "", "Competitors", "pricing"]) == [
+        "pricing",
+        "competitors",
+    ]
+
+
 def test_rate_limits_no_config_allowed_without_db():
     ok, reason = check_rate_limits(None, _monitor())
     assert (ok, reason) == (True, None)

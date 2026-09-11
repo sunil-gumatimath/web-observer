@@ -50,6 +50,7 @@ from app.schemas import (
     ReadStateIn,
     SnapshotAccessOut,
     ValueHistoryOut,
+    normalize_tags,
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.branding import fetch_brand_info, store_brand_assets
@@ -361,6 +362,7 @@ def create_monitor(
         ignore_selectors=body.ignore_selectors,
         ignore_regexes=body.ignore_regexes,
         alert_config=body.alert_config,
+        tags=normalize_tags(body.tags),
         screenshots_enabled=body.screenshots_enabled,
         base_interval_minutes=body.schedule_interval_minutes,
     )
@@ -678,6 +680,8 @@ def update_monitor(
                 ) from exc
 
     for key, value in data.items():
+        if key == "tags":
+            value = normalize_tags(value)
         setattr(monitor, key, value)
 
     if "schedule_interval_minutes" in data and data["schedule_interval_minutes"] is not None:
