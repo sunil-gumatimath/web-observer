@@ -10,7 +10,10 @@ export type ThresholdKey =
 	| "list_min_removed"
 	| "min_diff_chars"
 	| "regex_must_match"
-	| "regex_must_not_match";
+	| "regex_must_not_match"
+	| "cooldown_minutes"
+	| "flap_window_minutes"
+	| "flap_max_alerts";
 
 export const ALL_THRESHOLD_KEYS: ThresholdKey[] = [
 	"price_below",
@@ -21,6 +24,9 @@ export const ALL_THRESHOLD_KEYS: ThresholdKey[] = [
 	"min_diff_chars",
 	"regex_must_match",
 	"regex_must_not_match",
+	"cooldown_minutes",
+	"flap_window_minutes",
+	"flap_max_alerts",
 ];
 
 /** Fields valid for each mode — mirrors backend/app/services/conditional.py. */
@@ -38,7 +44,14 @@ export function keysForMode(mode: MonitorMode): ThresholdKey[] {
 		keys.push("list_min_added", "list_min_removed");
 	}
 	// Common to every mode.
-	keys.push("min_diff_chars", "regex_must_match", "regex_must_not_match");
+	keys.push(
+		"min_diff_chars",
+		"regex_must_match",
+		"regex_must_not_match",
+		"cooldown_minutes",
+		"flap_window_minutes",
+		"flap_max_alerts",
+	);
 	return keys;
 }
 

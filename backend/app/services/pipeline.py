@@ -743,6 +743,24 @@ def _queue_notifications(
     if change.is_noise:
         return [], []
 
+    # Cooldown / flapping guard (opt-in via alert_config): the change stays a
+    # visible signal in the inbox, but outbound notify is skipped while the
+    # quiet period holds or the monitor flaps between states.
+    try:
+        from app.services.conditional import check_rate_limits
+
+        _allowed, _rate_reason = check_rate_limits(db, monitor, exclude_change_id=change.id)
+        if not _allowed:
+            logger.info(
+                "notify_rate_limited monitor_id=%s change_id=%s reason=%s",
+                monitor.id,
+                change.id,
+                _rate_reason,
+            )
+            return [], []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("rate_limit_eval_failed monitor_id=%s error=%s", monitor.id, exc)
+
     # webdog.ai parity: optional screenshot attached to every check/alert.
     # Best-effort and non-fatal — a missing Playwright browser must never fail
     # the content check. opt-in via monitor.screenshots_enabled.

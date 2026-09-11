@@ -97,6 +97,33 @@ const FIELD_META: Record<ThresholdKey, FieldMeta> = {
 		help: "Skip the alert when the new content matches this pattern.",
 		kind: "regex",
 	},
+	cooldown_minutes: {
+		key: "cooldown_minutes",
+		label: "Quiet period after alert (min)",
+		placeholder: "e.g. 180",
+		help: "After an alert, skip further notifications for this many minutes. Changes are still recorded.",
+		kind: "float",
+		min: "0",
+		step: "any",
+	},
+	flap_window_minutes: {
+		key: "flap_window_minutes",
+		label: "Flap window (min)",
+		placeholder: "e.g. 60",
+		help: "Look-back window for flapping detection — use together with max alerts.",
+		kind: "float",
+		min: "0",
+		step: "any",
+	},
+	flap_max_alerts: {
+		key: "flap_max_alerts",
+		label: "Max alerts in flap window",
+		placeholder: "e.g. 3",
+		help: "Bundle notifications when this many alerts fire inside the flap window (page flipping between states).",
+		kind: "int",
+		min: "0",
+		step: "1",
+	},
 };
 
 function helpFor(meta: FieldMeta, mode: MonitorMode): string {

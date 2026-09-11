@@ -148,3 +148,82 @@ def should_alert(
             pass
 
     return True, None
+
+
+def check_rate_limits(session: Any, monitor: Any, exclude_change_id: Any = None) -> tuple[bool, str | None]:
+    """Cooldown + flapping guard, driven by ``alert_config``.
+
+    Supported keys (all optional, all opt-in):
+
+    - ``cooldown_minutes`` — after a signal alert, skip notifications for this
+      many minutes. The change is still recorded in the inbox; only the
+      outbound notify is skipped.
+    - ``flap_window_minutes`` + ``flap_max_alerts`` — when at least
+      ``flap_max_alerts`` signal changes fired inside the last
+      ``flap_window_minutes`` minutes, the monitor is flapping between states;
+      skip notifications until it settles.
+
+    Returns ``(allowed, reason_if_suppressed)``. Fails open (allows) on any
+    error or missing/invalid config — alerting must never silently die.
+    """
+    try:
+        cfg: dict[str, Any] = getattr(monitor, "alert_config", None) or {}
+        cooldown = _positive_float(cfg.get("cooldown_minutes"))
+        flap_window = _positive_float(cfg.get("flap_window_minutes"))
+        flap_max = _positive_int(cfg.get("flap_max_alerts"))
+        if not cooldown and not (flap_window and flap_max):
+            return True, None
+
+        from datetime import UTC, datetime, timedelta
+
+        from sqlalchemy import select
+
+        from app.models import ChangeEvent
+
+        now = datetime.now(UTC)
+        monitor_id = getattr(monitor, "id", None)
+
+        def _recent_signal_count(since: datetime) -> int:
+            q = select(ChangeEvent.id).where(
+                ChangeEvent.monitor_id == monitor_id,
+                ChangeEvent.is_noise.is_(False),
+                ChangeEvent.created_at >= since,
+            )
+            if exclude_change_id is not None:
+                q = q.where(ChangeEvent.id != exclude_change_id)
+            return len(list(session.execute(q).all()))
+
+        if cooldown:
+            cutoff = now - timedelta(minutes=cooldown)
+            if _recent_signal_count(cutoff) > 0:
+                return False, f"cooldown active ({cooldown:g} min quiet period)"
+
+        if flap_window and flap_max:
+            cutoff = now - timedelta(minutes=flap_window)
+            hits = _recent_signal_count(cutoff)
+            if hits >= flap_max:
+                return (
+                    False,
+                    f"flapping: {hits} alerts in last {flap_window:g} min "
+                    f"(limit {flap_max}); notifications bundled until settled",
+                )
+
+        return True, None
+    except Exception:
+        return True, None
+
+
+def _positive_float(v: Any) -> float | None:
+    try:
+        f = float(v)
+    except (ValueError, TypeError):
+        return None
+    return f if f > 0 else None
+
+
+def _positive_int(v: Any) -> int | None:
+    try:
+        i = int(v)
+    except (ValueError, TypeError):
+        return None
+    return i if i > 0 else None
