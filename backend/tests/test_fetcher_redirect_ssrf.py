@@ -12,7 +12,9 @@ class _RedirectToPrivateTransport(httpx.BaseTransport):
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
         if url.endswith("/start"):
-            return httpx.Response(302, headers={"Location": "http://127.0.0.1/secret"}, request=request)
+            return httpx.Response(
+                302, headers={"Location": "http://127.0.0.1/secret"}, request=request
+            )
         return httpx.Response(200, text="ok", request=request)
 
 

@@ -76,11 +76,10 @@ def _client():
     )
 
 
-def snapshot_object_key(*, workspace_id: uuid.UUID, monitor_id: uuid.UUID, run_id: uuid.UUID) -> str:
-    return (
-        f"workspaces/{workspace_id}/monitors/{monitor_id}/"
-        f"runs/{run_id}/{uuid.uuid4().hex}.html"
-    )
+def snapshot_object_key(
+    *, workspace_id: uuid.UUID, monitor_id: uuid.UUID, run_id: uuid.UUID
+) -> str:
+    return f"workspaces/{workspace_id}/monitors/{monitor_id}/runs/{run_id}/{uuid.uuid4().hex}.html"
 
 
 def put_bytes(
@@ -112,6 +111,7 @@ def put_bytes(
         raise StorageError("storage_failed", f"Failed to store object: {exc}") from exc
     return key
 
+
 def get_bytes(key: str) -> bytes | None:
     if _use_local():
         path = _resolve_local_path(key)
@@ -125,6 +125,7 @@ def get_bytes(key: str) -> bytes | None:
         return None
 
     from botocore.exceptions import BotoCoreError, ClientError
+
     settings = get_settings()
     try:
         response = _client().get_object(Bucket=settings.s3_bucket, Key=key)

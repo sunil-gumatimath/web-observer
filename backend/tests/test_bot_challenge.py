@@ -56,7 +56,4 @@ def test_classic_interstitial_needs_two_weak_markers() -> None:
 
 
 def test_single_weak_marker_is_ignored() -> None:
-    assert (
-        detect_bot_challenge(status_code=200, text="Just a moment please, loading...")
-        is None
-    )
+    assert detect_bot_challenge(status_code=200, text="Just a moment please, loading...") is None

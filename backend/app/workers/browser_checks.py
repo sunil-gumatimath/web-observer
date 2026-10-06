@@ -140,9 +140,7 @@ def capture_alert_screenshot(change_event_id: str) -> None:
         try:
             from app.services.visual import capture_screenshot
 
-            cap = capture_screenshot(
-                monitor.url, timeout_seconds=30, full_page=True
-            )
+            cap = capture_screenshot(monitor.url, timeout_seconds=30, full_page=True)
             screenshot_path = f"screenshots/{monitor.id}/{change.run_id}.png"
             put_bytes(
                 key=screenshot_path,

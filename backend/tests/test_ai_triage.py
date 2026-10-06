@@ -115,7 +115,10 @@ def test_queue_notifications_skips_noise() -> None:
     change = ChangeEvent(is_noise=True)
     monitor = object()  # not touched in the noise branch
     outbox_ids, webhook_ids = _queue_notifications(
-        db=None, monitor=monitor, change=change, ctx=_Ctx()  # type: ignore[arg-type]
+        db=None,
+        monitor=monitor,
+        change=change,
+        ctx=_Ctx(),  # type: ignore[arg-type]
     )
     assert outbox_ids == []
     assert webhook_ids == []

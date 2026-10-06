@@ -20,18 +20,14 @@ class Settings(BaseSettings):
     # Ephemeral per-process defaults are fine for local dev; production
     # MUST pin SECRET_KEY / INTERNAL_API_TOKEN via environment.
     secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
-    internal_api_token: str = Field(
-        default_factory=lambda: secrets.token_urlsafe(24)
-    )
+    internal_api_token: str = Field(default_factory=lambda: secrets.token_urlsafe(24))
 
     database_url: str = "postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
     redis_url: str = "redis://localhost:6379/0"
 
     default_timeout_seconds: int = 30
     default_max_response_bytes: int = 2_000_000
-    http_user_agent: str = (
-        "WebObserver/0.1 (+https://example.com/bot; contact=ops@example.com)"
-    )
+    http_user_agent: str = "WebObserver/0.1 (+https://example.com/bot; contact=ops@example.com)"
 
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     # Canonical frontend origin (e.g. https://app.example.com or a fixed
@@ -86,9 +82,7 @@ class Settings(BaseSettings):
     # Comma-separated server-level fallback models tried in order after the
     # primary. Empty string disables failover (primary only).
     llm_fallback_models: str = (
-        "openrouter/free,"
-        "stepfun/step-3.7-flash:free,"
-        "nex-agi/nex-n2.5-pro:free"
+        "openrouter/free,stepfun/step-3.7-flash:free,nex-agi/nex-n2.5-pro:free"
     )
     ai_max_diff_chars: int = 6000
     ai_max_output_tokens: int = 200

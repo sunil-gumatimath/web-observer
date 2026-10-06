@@ -33,7 +33,9 @@ def run_once() -> int:
                 deliver_outbox_message.send(str(oid))
                 sent += 1
             if ids:
-                logger.info("digest_enqueued workspace=%s period=%s n=%s", ws.id, period_key, len(ids))
+                logger.info(
+                    "digest_enqueued workspace=%s period=%s n=%s", ws.id, period_key, len(ids)
+                )
     return sent
 
 

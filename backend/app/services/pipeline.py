@@ -118,8 +118,7 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
         if not path:
             raise ExtractionError(
                 "extraction_failed",
-                "css_selector is required for json_field monitors "
-                "(a JSON path like $.data.price)",
+                "css_selector is required for json_field monitors (a JSON path like $.data.price)",
             )
         return extract_json_field(result.text, path), None
 
@@ -516,8 +515,13 @@ def _detect_change(
                 monitor.id,
                 prev_snapshot.id if prev_snapshot else None,
             )
-            ctx.summary = "Content changed (previous full content unavailable – diff limited to preview)"
-            ctx.diff_text = unified_diff(prev_text, normalized) + "\n\n[note: previous content was truncated to preview; diff may be incomplete]"
+            ctx.summary = (
+                "Content changed (previous full content unavailable – diff limited to preview)"
+            )
+            ctx.diff_text = (
+                unified_diff(prev_text, normalized)
+                + "\n\n[note: previous content was truncated to preview; diff may be incomplete]"
+            )
         else:
             ctx.diff_text = unified_diff(prev_text, normalized)
             ctx.summary = short_summary(prev_text, normalized)
@@ -530,14 +534,14 @@ def _detect_change(
             monitor,
             prev_text,
             normalized,
-            items_before=items_from_normalized(prev_text) if monitor.mode in LIST_DIFF_MODES else None,
+            items_before=items_from_normalized(prev_text)
+            if monitor.mode in LIST_DIFF_MODES
+            else None,
             items_after=items if monitor.mode in LIST_DIFF_MODES else None,
         )
         if not _ok:
             ctx.suppressed_reason = _reason
-            logger.info(
-                "conditional_suppressed monitor_id=%s reason=%s", monitor.id, _reason
-            )
+            logger.info("conditional_suppressed monitor_id=%s reason=%s", monitor.id, _reason)
     except Exception as exc:  # noqa: BLE001
         logger.warning("conditional_eval_failed monitor_id=%s error=%s", monitor.id, exc)
 
@@ -885,13 +889,9 @@ def _enqueue_alert_screenshot(change_id: object, monitor_id: object) -> None:
         from app.workers.browser_checks import capture_alert_screenshot
 
         capture_alert_screenshot.send(str(change_id))
-        logger.info(
-            "screenshot_enqueued change_id=%s monitor_id=%s", change_id, monitor_id
-        )
+        logger.info("screenshot_enqueued change_id=%s monitor_id=%s", change_id, monitor_id)
     except Exception as exc:  # noqa: BLE001 - advisory; notifications already queued
-        logger.warning(
-            "screenshot_enqueue_failed change_id=%s error=%s", change_id, exc
-        )
+        logger.warning("screenshot_enqueue_failed change_id=%s error=%s", change_id, exc)
 
 
 def apply_fetch_result(

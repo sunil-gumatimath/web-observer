@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import ApiKey, User, Workspace, WorkspaceMember
+from app.models import ApiKey, User, Workspace
 
 
 def _hash_key(raw: str) -> str:

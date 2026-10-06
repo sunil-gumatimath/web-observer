@@ -164,7 +164,7 @@ _NAV_ARTICLE_HTML = """
 
 
 def test_main_markdown_strips_nav_and_boilerplate() -> None:
-    trafilatura = pytest.importorskip("trafilatura")
+    pytest.importorskip("trafilatura")
     md = extract_main_markdown(_NAV_ARTICLE_HTML, base_url="https://example.test/")
     assert md is not None
     assert "cheese" in md.lower()
@@ -182,6 +182,6 @@ def test_main_markdown_keeps_article_images_and_resolves_relative_urls() -> None
 
 def test_main_markdown_falls_back_to_none_on_shell_page() -> None:
     """A page with no detectable article returns None so callers fall back."""
-    trafilatura = pytest.importorskip("trafilatura")
+    pytest.importorskip("trafilatura")
     shell = "<html><body><div>hi</div><span>loading…</span></body></html>"
     assert extract_main_markdown(shell) is None

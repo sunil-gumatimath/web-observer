@@ -28,7 +28,6 @@ from app.services.pipeline import apply_fetch_result
 from app.services.retention import purge_expired_snapshots
 from app.services.usage import assert_can_run_check, get_or_create_counter
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -161,7 +160,9 @@ def test_failed_run_does_not_replace_baseline(db_session, monkeypatch):
     _ws, mon = _seed_monitor(db_session)
 
     run1 = _make_run(db_session, mon)
-    r1 = apply_fetch_result(db_session, monitor=mon, run=run1, result=_fetch("baseline"), store_raw=False)
+    r1 = apply_fetch_result(
+        db_session, monitor=mon, run=run1, result=_fetch("baseline"), store_raw=False
+    )
     assert r1.is_baseline
 
     baseline_hash = run1.content_hash
@@ -319,7 +320,9 @@ def test_unchanged_no_duplicate_alert(db_session, monkeypatch):
     apply_fetch_result(db_session, monitor=mon, run=run1, result=_fetch("same"), store_raw=False)
 
     run2 = _make_run(db_session, mon)
-    r2 = apply_fetch_result(db_session, monitor=mon, run=run2, result=_fetch("same"), store_raw=False)
+    r2 = apply_fetch_result(
+        db_session, monitor=mon, run=run2, result=_fetch("same"), store_raw=False
+    )
 
     assert r2.unchanged is True
     assert r2.change_event_id is None

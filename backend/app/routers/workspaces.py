@@ -178,11 +178,13 @@ def get_workspace_settings(
         # Masked booleans — the actual stored keys are never returned.
         "as_llm_api_key": has_workspace_llm_key,
         "llm_api_base": (
-            workspace.llm_api_base if has_workspace_llm_key and workspace.llm_api_base
+            workspace.llm_api_base
+            if has_workspace_llm_key and workspace.llm_api_base
             else server.llm_api_base
         ),
         "llm_model": (
-            workspace.llm_model if has_workspace_llm_key and workspace.llm_model
+            workspace.llm_model
+            if has_workspace_llm_key and workspace.llm_model
             else server.llm_model
         ),
         "as_resend_api_key": bool(workspace.resend_api_key),

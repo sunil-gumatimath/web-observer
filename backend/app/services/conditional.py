@@ -28,7 +28,6 @@ def parse_monitor_value(text: str, mode: str) -> float | None:
         return None
     import re as _re
 
-    m = _re.search(r"([0-9][0-9,]*\.?[0-9]*)", text.replace(",", ""))
     # Better: find last number
     nums = _re.findall(r"[0-9]+\.?[0-9]*", text.replace(",", ""))
     if not nums:
@@ -166,7 +165,9 @@ def should_alert(
     return True, None
 
 
-def check_rate_limits(session: Any, monitor: Any, exclude_change_id: Any = None) -> tuple[bool, str | None]:
+def check_rate_limits(
+    session: Any, monitor: Any, exclude_change_id: Any = None
+) -> tuple[bool, str | None]:
     """Cooldown + flapping guard, driven by ``alert_config``.
 
     Supported keys (all optional, all opt-in):

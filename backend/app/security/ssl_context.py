@@ -21,9 +21,7 @@ def get_ssl_context() -> ssl.SSLContext:
                 for cert, enc, _trust in ssl.enum_certificates(store):
                     if enc == "x509_asn":
                         try:
-                            ctx.load_verify_locations(
-                                cadata=ssl.DER_cert_to_PEM_cert(cert)
-                            )
+                            ctx.load_verify_locations(cadata=ssl.DER_cert_to_PEM_cert(cert))
                         except Exception:
                             pass
             except Exception:

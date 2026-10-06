@@ -52,7 +52,10 @@ def generate_ai_digest_summary(workspace: Workspace, event_bullets: list[str]) -
             api_key=cfg["api_key"],
             primary_model=cfg["model"],
             messages=[
-                {"role": "system", "content": "You are an executive intelligence analyst. Deliver concise, high-value briefings."},
+                {
+                    "role": "system",
+                    "content": "You are an executive intelligence analyst. Deliver concise, high-value briefings.",
+                },
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
@@ -124,7 +127,9 @@ def enqueue_workspace_digest(
     outbox_ids: list[uuid.UUID] = []
     for channel in channels:
         idem = f"digest:{workspace.id}:{period_key}:channel:{channel.id}"
-        existing = db.scalar(select(NotificationOutbox).where(NotificationOutbox.idempotency_key == idem))
+        existing = db.scalar(
+            select(NotificationOutbox).where(NotificationOutbox.idempotency_key == idem)
+        )
         if existing is not None:
             continue
         outbox = NotificationOutbox(
@@ -149,7 +154,9 @@ def enqueue_workspace_digest(
     return outbox_ids
 
 
-def due_digest_workspaces(db: Session, *, now: datetime | None = None) -> list[tuple[Workspace, str, datetime]]:
+def due_digest_workspaces(
+    db: Session, *, now: datetime | None = None
+) -> list[tuple[Workspace, str, datetime]]:
     """Return workspaces that should receive a digest now: (workspace, period_key, since)."""
     now = now or datetime.now(UTC)
     results: list[tuple[Workspace, str, datetime]] = []

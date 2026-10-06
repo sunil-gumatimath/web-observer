@@ -58,9 +58,7 @@ def deliver_outbox_message(outbox_id: str) -> None:
         ]
         if payload.get("watch_note"):
             body_lines.append(f"*Watching:* {payload.get('watch_note')}")
-        summary_text = (
-            payload.get('ai_summary') or payload.get('summary') or 'Content changed'
-        )
+        summary_text = payload.get("ai_summary") or payload.get("summary") or "Content changed"
         body_lines.append(f"*Summary:* {summary_text}")
         # list_items diffs are link-rich ("+ [title](url)") — render them as
         # plain mrkdwn so Slack/Discord turn them into clickable links, mirroring
@@ -81,10 +79,7 @@ def deliver_outbox_message(outbox_id: str) -> None:
             body_lines.append(str(payload.get("body"))[:8000])
         body = "\n".join(line for line in body_lines if line is not None)
         # Plain-text variant for email (strip simple markdown markers)
-        plain_body = (
-            body.replace("*", "")
-            .replace("```", "")
-        )
+        plain_body = body.replace("*", "").replace("```", "")
         to_addr = payload.get("to") or channel.address
 
         try:
@@ -204,9 +199,7 @@ def _pinned_post(url: str, payload: dict, *, timeout: float = 30.0) -> httpx.Res
         pinned_ip=validated.resolved_ips[0],
         server_hostname=hostname,
     )
-    with httpx.Client(
-        transport=transport, timeout=timeout, follow_redirects=False
-    ) as client:
+    with httpx.Client(transport=transport, timeout=timeout, follow_redirects=False) as client:
         return client.post(url, json=payload)
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from urllib.parse import urldefrag, urljoin, urlparse
+from urllib.parse import urldefrag, urlparse
 
 from app.config import get_settings
 from app.services.fetcher import FetchError, fetch_url
@@ -88,9 +88,7 @@ def _fetch_text(url: str, *, timeout_seconds: int, max_bytes: int) -> str:
     except FetchError as exc:
         raise SitemapError("fetch_failed", f"Failed to fetch {url}: {exc.message}") from exc
     if result.status_code >= 400:
-        raise SitemapError(
-            "http_error", f"Fetching {url} returned HTTP {result.status_code}"
-        )
+        raise SitemapError("http_error", f"Fetching {url} returned HTTP {result.status_code}")
     return result.text
 
 
@@ -143,7 +141,9 @@ def discover_sitemap_urls(
             continue
         seen.add(loc)
         try:
-            text = _fetch_text(loc, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes)
+            text = _fetch_text(
+                loc, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes
+            )
         except SitemapError as exc:
             logger.debug("sitemap_location_failed loc=%s error=%s", loc, exc.code)
             continue
@@ -159,12 +159,16 @@ def discover_sitemap_urls(
 
     # 2) Fall back to robots.txt Sitemap: directives if nothing found yet.
     if not page_urls and not child_sitemaps:
-        for sm in _robots_sitemap_urls(base_url, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes):
+        for sm in _robots_sitemap_urls(
+            base_url, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes
+        ):
             if sm in seen:
                 continue
             seen.add(sm)
             try:
-                text = _fetch_text(sm, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes)
+                text = _fetch_text(
+                    sm, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes
+                )
             except SitemapError as exc:
                 logger.debug("robots_sitemap_failed loc=%s error=%s", sm, exc.code)
                 continue
@@ -186,7 +190,9 @@ def discover_sitemap_urls(
                 continue
             seen.add(child)
             try:
-                text = _fetch_text(child, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes)
+                text = _fetch_text(
+                    child, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes
+                )
             except SitemapError as exc:
                 logger.debug("child_sitemap_failed loc=%s error=%s", child, exc.code)
                 continue
@@ -259,9 +265,7 @@ def sitemap_monitor_text(
     max_urls: int = 5000,
 ) -> str:
     """Convenience wrapper: sitemap page URLs joined by newlines (stable order)."""
-    urls = sitemap_monitor_urls(
-        base_url, timeout_seconds=timeout_seconds, max_urls=max_urls
-    )
+    urls = sitemap_monitor_urls(base_url, timeout_seconds=timeout_seconds, max_urls=max_urls)
     return "\n".join(urls)
 
 

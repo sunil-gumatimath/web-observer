@@ -137,7 +137,7 @@ def monitor_events(
         last_run_status: str | None = None
         last_change_id: str | None = None
         # Send initial hello
-        yield "event: connected\ndata: {\"ok\": true}\n\n"
+        yield 'event: connected\ndata: {"ok": true}\n\n'
         for _ in range(120):  # ~3 min max (1.5s * 120)
             await asyncio.sleep(1.5)
             try:
@@ -183,17 +183,29 @@ def monitor_events(
                             }
                         )
                         yield f"event: change\ndata: {payload}\n\n"
-                    if run and run.status in ("succeeded", "failed", "cancelled") and run.finished_at:
+                    if (
+                        run
+                        and run.status in ("succeeded", "failed", "cancelled")
+                        and run.finished_at
+                    ):
                         # finish streaming after terminal state observed twice
                         pass
             except asyncio.CancelledError:
                 break
             except Exception:
-                yield "event: error\ndata: {\"error\": \"stream error\"}\n\n"
+                yield 'event: error\ndata: {"error": "stream error"}\n\n'
                 break
         yield "event: done\ndata: {}\n\n"
 
-    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"})
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.get("/workspaces/{workspace_id}/monitors/{monitor_id}/badge.svg")
@@ -235,7 +247,9 @@ def monitor_badge(
         label = "paused"
     # Simple badge svg
     svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="140" height="20"><rect width="70" height="20" fill="#555"/><rect x="70" width="70" height="20" fill="{color}"/><text x="35" y="14" fill="#fff" text-anchor="middle" font-family="Verdana" font-size="11">monitor</text><text x="105" y="14" fill="#fff" text-anchor="middle" font-family="Verdana" font-size="11">{label}</text></svg>'
-    return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=60"})
+    return Response(
+        content=svg, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=60"}
+    )
 
 
 @router.get(
@@ -455,12 +469,15 @@ def create_monitor(
             db.add(run)
             db.commit()
             db.refresh(run)
-            enqueue_check(str(run.id), needs_browser=bool(monitor.js_required or monitor.mode == "visual"))
+            enqueue_check(
+                str(run.id), needs_browser=bool(monitor.js_required or monitor.mode == "visual")
+            )
         except Exception as exc:  # noqa: BLE001
             db.rollback()
             logger.warning("create_auto_run_enqueue_failed monitor_id=%s error=%s", monitor.id, exc)
 
     return monitor
+
 
 class SitemapDiscoverIn(BaseModel):
     url: str
@@ -882,7 +899,9 @@ def bulk_action(
         mid = m.id
         # Reuse bulk delete logic from single delete
         snapshots = db.scalars(
-            select(Snapshot).where(Snapshot.monitor_id == mid, Snapshot.workspace_id == workspace_id)
+            select(Snapshot).where(
+                Snapshot.monitor_id == mid, Snapshot.workspace_id == workspace_id
+            )
         ).all()
         for snap in snapshots:
             for obj_key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
@@ -1330,7 +1349,9 @@ def get_change(
         if prev_truncated or new_truncated:
             logger.warning(
                 "change_diff_degraded_truncated change_id=%s prev_truncated=%s new_truncated=%s",
-                change.id, prev_truncated, new_truncated,
+                change.id,
+                prev_truncated,
+                new_truncated,
             )
         diff = unified_diff(prev_text, new_text)
     elif new_text is not None:
@@ -1620,7 +1641,6 @@ def get_snapshot(
 
     full_text = snap.normalized_text or ""
     snap_key = getattr(snap, "text_object_key", None)
-    storage_miss = False
     if snap_key:
         stored = get_bytes(snap_key)
         if stored is not None:
@@ -1629,13 +1649,11 @@ def get_snapshot(
             from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS
 
             if full_text and len(full_text) >= SNAPSHOT_DB_PREVIEW_CHARS:
-                storage_miss = True
                 full_text = full_text + "\n…[preview truncated – full content unavailable]"
     else:
         from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS
 
         if full_text and len(full_text) >= SNAPSHOT_DB_PREVIEW_CHARS:
-            storage_miss = True
             full_text = full_text + "\n…[preview truncated – full content unavailable]"
 
     full_text = _cap_text(full_text)

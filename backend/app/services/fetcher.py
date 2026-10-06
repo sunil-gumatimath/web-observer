@@ -102,7 +102,9 @@ def _check_robots(url: str, user_agent: str, client: httpx.Client) -> None:
         rp = RobotFileParser()
         rp.parse(resp.text.splitlines())
         if not rp.can_fetch(user_agent, url):
-            logger.debug("robots_disallowed_soft_skip url=%s robots disallows fetch, proceeding", url)
+            logger.debug(
+                "robots_disallowed_soft_skip url=%s robots disallows fetch, proceeding", url
+            )
             return
     # pi-lens-ignore: unreachable-except - sibling exceptions
     except FetchError:
@@ -179,9 +181,7 @@ def _is_connect_failure(exc: BaseException) -> bool:
     return isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
 
 
-def _pinned_get(
-    url: str, *, timeout: httpx.Timeout, headers: dict[str, str]
-) -> httpx.Response:
+def _pinned_get(url: str, *, timeout: httpx.Timeout, headers: dict[str, str]) -> httpx.Response:
     """GET ``url`` trying each validated IP in turn (SSRF-pinned).
 
     Raises SSRFError if the URL/host is blocked, FetchError if every IP fails
@@ -215,8 +215,12 @@ def _pinned_get(
     if isinstance(last_exc, httpx.ConnectTimeout) or (
         last_exc is not None and "timed out" in str(last_exc).lower()
     ):
-        raise FetchError("connection_timeout", f"All {len(ips)} IPs for {hostname} timed out: {last_exc}")
-    raise FetchError("connection_timeout", f"All {len(ips)} IPs for {hostname} unreachable: {last_exc}")
+        raise FetchError(
+            "connection_timeout", f"All {len(ips)} IPs for {hostname} timed out: {last_exc}"
+        )
+    raise FetchError(
+        "connection_timeout", f"All {len(ips)} IPs for {hostname} unreachable: {last_exc}"
+    )
 
 
 def fetch_binary(
@@ -361,10 +365,7 @@ def fetch_url(
         ):
             # Soft allow empty content-type and application/octet-stream (may be mislabelled HTML);
             # sniff HTML after buffering content. Hard block obvious binary types only.
-            if any(
-                t in content_type.lower()
-                for t in ("image/", "video/", "audio/", "pdf")
-            ):
+            if any(t in content_type.lower() for t in ("image/", "video/", "audio/", "pdf")):
                 response.close()
                 raise FetchError(
                     "unsupported_content_type",

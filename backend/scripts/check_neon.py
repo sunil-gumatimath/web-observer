@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
 import re
+import sys
+
+# Ensure backend root is on sys.path when script is run directly
+backend_root = str(Path(__file__).resolve().parent.parent)
+if backend_root not in sys.path:
+    sys.path.insert(0, backend_root)
 
 from sqlalchemy import create_engine, text
 

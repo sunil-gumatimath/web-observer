@@ -118,9 +118,7 @@ def execute_monitored_run(
             sa_update(MonitorRun)
             .where(
                 MonitorRun.id == run.id,
-                MonitorRun.status.in_(
-                    (RunStatus.SCHEDULED.value, RunStatus.QUEUED.value)
-                ),
+                MonitorRun.status.in_((RunStatus.SCHEDULED.value, RunStatus.QUEUED.value)),
             )
             .values(
                 status=RunStatus.RUNNING.value,
@@ -160,9 +158,7 @@ def execute_monitored_run(
                 )
                 db.commit()
 
-            outbox_ids = list(pipeline.outbox_ids or []) + [
-                str(x) for x in outbox_extra
-            ]
+            outbox_ids = list(pipeline.outbox_ids or []) + [str(x) for x in outbox_extra]
             for oid in outbox_ids:
                 deliver_outbox_message.send(str(oid))
 

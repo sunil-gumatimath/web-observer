@@ -18,7 +18,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-
+ignore = ["B008", "E501"]
 [tool.pyright]
 # Type-check against the project virtualenv so typed/compiled deps like
 # selectolax resolve; keep `app.*` importable with backend/ as the root.

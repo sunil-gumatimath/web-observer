@@ -90,7 +90,15 @@ def _candidate_raw_urls(owner: str, repo: str, branch_hint: str | None) -> list[
         if b not in seen:
             seen.add(b)
             uniq_branches.append(b)
-    filenames = ["README.md", "readme.md", "README.MD", "README", "Readme.md", "README.rst", "README.txt"]
+    filenames = [
+        "README.md",
+        "readme.md",
+        "README.MD",
+        "README",
+        "Readme.md",
+        "README.rst",
+        "README.txt",
+    ]
     urls: list[str] = []
     for branch in uniq_branches:
         for fname in filenames:

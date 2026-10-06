@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hmac
 import logging
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -391,7 +390,3 @@ def fetch_clerk_user_email(clerk_user_id: str, settings: Settings) -> str | None
     except Exception as exc:  # noqa: BLE001
         logger.debug("clerk_user_lookup_failed error=%s", exc)
     return None
-
-
-# silence unused import if tree-shakers complain in some tools
-_ = time

@@ -176,8 +176,7 @@ def classify_heuristic(diff_text: str, mode: str | None = None) -> str:
 
 def template_summary(*, monitor_name: str, category: str, deterministic_summary: str) -> str:
     return (
-        f"{monitor_name}: likely {category} change. "
-        f"{deterministic_summary or 'Content changed.'}"
+        f"{monitor_name}: likely {category} change. {deterministic_summary or 'Content changed.'}"
     )
 
 
@@ -211,9 +210,12 @@ _DEDUP_CACHE: dict[str, tuple[AIEnrichment, datetime]] = {}
 def _redis_client():
     try:
         import redis
+
         settings = get_settings()
         if settings.redis_url:
-            return redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=0.5)
+            return redis.Redis.from_url(
+                settings.redis_url, decode_responses=True, socket_connect_timeout=0.5
+            )
     except Exception:
         pass
     return None
@@ -592,12 +594,16 @@ def _parse_llm_content(
     try:
         data = json.loads(raw)
         if isinstance(data, dict):
-            cat = str(
-                data.get("category")
-                or data.get("CATEGORY")
-                or data.get("change_category")
-                or suggested_category
-            ).lower().strip()
+            cat = (
+                str(
+                    data.get("category")
+                    or data.get("CATEGORY")
+                    or data.get("change_category")
+                    or suggested_category
+                )
+                .lower()
+                .strip()
+            )
             # summary may be under multiple keys
             summary = data.get("summary") or data.get("SUMMARY") or data.get("ai_summary")
             if summary is None:
@@ -656,10 +662,16 @@ def _parse_llm_content(
                     elif isinstance(s_val, int):
                         should_alert = bool(s_val)
                     break
-            trigger_reason = data.get("trigger_reason") or data.get("alert_reason") or data.get("condition_reason")
+            trigger_reason = (
+                data.get("trigger_reason")
+                or data.get("alert_reason")
+                or data.get("condition_reason")
+            )
             if should_alert is False:
                 is_noise = True
-                tr_str = str(trigger_reason).strip() if trigger_reason else "Condition not satisfied"
+                tr_str = (
+                    str(trigger_reason).strip() if trigger_reason else "Condition not satisfied"
+                )
                 noise_reason = f"Semantic condition not met: {tr_str}"
 
             return cat, summary, is_noise, noise_reason, title, impact, confidence
@@ -839,8 +851,7 @@ def _request_chat_with_failover(
                     use_json = False
                     continue
                 logger.warning(
-                    "llm_candidate_failed model=%s first_error=%s error=%s; "
-                    "trying next candidate",
+                    "llm_candidate_failed model=%s first_error=%s error=%s; trying next candidate",
                     model_candidate,
                     first_exc,
                     exc,
@@ -1129,8 +1140,12 @@ def enrich_change(
             # pipeline will format display.
             pass
         # Build actionable display summary: prefix title and suffix impact when available
-        base_summary = summary[:1000] if summary else template_summary(
-            monitor_name=monitor_name, category=cat, deterministic_summary=deterministic_summary
+        base_summary = (
+            summary[:1000]
+            if summary
+            else template_summary(
+                monitor_name=monitor_name, category=cat, deterministic_summary=deterministic_summary
+            )
         )
         display_summary = base_summary
         if title:
@@ -1246,6 +1261,3 @@ def _call_llm(
         llm=llm,
     )
     return summary, cat
-
-
-

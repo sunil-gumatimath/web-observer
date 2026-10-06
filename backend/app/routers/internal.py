@@ -29,7 +29,9 @@ def require_internal_token(x_internal_token: str | None = Header(default=None)) 
         )
 
 
-@router.post("/internal/seed", response_model=SeedResponse, dependencies=[Depends(require_internal_token)])
+@router.post(
+    "/internal/seed", response_model=SeedResponse, dependencies=[Depends(require_internal_token)]
+)
 def seed_dev_workspace(
     email: str = "dev@example.com",
     workspace_name: str = "Dev Workspace",

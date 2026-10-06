@@ -119,9 +119,7 @@ def claim_due_monitors(limit: int) -> list[tuple[uuid.UUID, bool]]:
             slot = _claim_slot(now, monitor.schedule_interval_minutes)
             idempotency_key = f"{monitor.id}:{int(slot.timestamp())}"
             existing_id = db.scalar(
-                select(MonitorRun.id)
-                .where(MonitorRun.idempotency_key == idempotency_key)
-                .limit(1)
+                select(MonitorRun.id).where(MonitorRun.idempotency_key == idempotency_key).limit(1)
             )
             if existing_id is not None:
                 logger.info(

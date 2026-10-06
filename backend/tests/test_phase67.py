@@ -1,7 +1,7 @@
+from app.models.entities import Workspace
 from app.services.bulk_import import _normalize_row, parse_csv
 from app.services.plans import PLANS, get_plan
 from app.services.webhooks import new_webhook_secret, sign_payload
-from app.models.entities import Workspace
 
 
 def test_plans_exist() -> None:

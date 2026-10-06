@@ -17,7 +17,9 @@ def period_start_utc(now: datetime | None = None) -> datetime:
     return now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-def get_or_create_counter(db: Session, workspace_id: uuid.UUID, *, now: datetime | None = None) -> UsageCounter:
+def get_or_create_counter(
+    db: Session, workspace_id: uuid.UUID, *, now: datetime | None = None
+) -> UsageCounter:
     start = period_start_utc(now)
     counter = db.scalar(
         select(UsageCounter).where(

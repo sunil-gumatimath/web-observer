@@ -183,10 +183,30 @@ def export_monitors(
     if format == "csv":
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["id", "name", "url", "mode", "css_selector", "schedule_interval_minutes", "enabled", "js_required"])
+        w.writerow(
+            [
+                "id",
+                "name",
+                "url",
+                "mode",
+                "css_selector",
+                "schedule_interval_minutes",
+                "enabled",
+                "js_required",
+            ]
+        )
         for m in monitors:
             w.writerow(
-                [m.id, m.name, m.url, m.mode, m.css_selector or "", m.schedule_interval_minutes, m.enabled, m.js_required]
+                [
+                    m.id,
+                    m.name,
+                    m.url,
+                    m.mode,
+                    m.css_selector or "",
+                    m.schedule_interval_minutes,
+                    m.enabled,
+                    m.js_required,
+                ]
             )
         return Response(content=buf.getvalue(), media_type="text/csv")
     data = [
@@ -295,9 +315,7 @@ def delete_key(
     principal: Principal,
     workspace: Workspace = Depends(require_role("admin")),
 ) -> None:
-    key = db.scalar(
-        select(ApiKey).where(ApiKey.id == key_id, ApiKey.workspace_id == workspace_id)
-    )
+    key = db.scalar(select(ApiKey).where(ApiKey.id == key_id, ApiKey.workspace_id == workspace_id))
     if key is None:
         raise HTTPException(status_code=404, detail="API key not found")
     revoke_api_key(db, key)
@@ -443,7 +461,12 @@ def retry_webhook_delivery(
     if delivery is None:
         raise HTTPException(status_code=404, detail="Webhook delivery not found")
     if delivery.status == "sent":
-        return {"id": str(delivery.id), "status": delivery.status, "retried": False, "message": "Already sent"}
+        return {
+            "id": str(delivery.id),
+            "status": delivery.status,
+            "retried": False,
+            "message": "Already sent",
+        }
 
     delivery.status = "pending"
     delivery.attempts = 0
@@ -462,7 +485,12 @@ def retry_webhook_delivery(
     from app.workers.webhooks import deliver_webhook_message
 
     deliver_webhook_message.send(str(delivery.id))
-    return {"id": str(delivery.id), "status": "pending", "retried": True, "message": "Re-enqueued for delivery"}
+    return {
+        "id": str(delivery.id),
+        "status": "pending",
+        "retried": True,
+        "message": "Re-enqueued for delivery",
+    }
 
 
 @router.get("/workspaces/{workspace_id}/audit-logs")
@@ -528,14 +556,17 @@ def update_member_role(
     if membership is None:
         raise HTTPException(status_code=404, detail="Member not found")
     if membership.role == "owner" and body.role != "owner":
-        owner_count = db.scalar(
-            select(func.count())
-            .select_from(WorkspaceMember)
-            .where(
-                WorkspaceMember.workspace_id == workspace_id,
-                WorkspaceMember.role == "owner",
+        owner_count = (
+            db.scalar(
+                select(func.count())
+                .select_from(WorkspaceMember)
+                .where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.role == "owner",
+                )
             )
-        ) or 0
+            or 0
+        )
         if owner_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot remove the last owner")
     membership.role = body.role
@@ -570,14 +601,17 @@ def remove_member(
     if membership is None:
         raise HTTPException(status_code=404, detail="Member not found")
     if membership.role == "owner":
-        owner_count = db.scalar(
-            select(func.count())
-            .select_from(WorkspaceMember)
-            .where(
-                WorkspaceMember.workspace_id == workspace_id,
-                WorkspaceMember.role == "owner",
+        owner_count = (
+            db.scalar(
+                select(func.count())
+                .select_from(WorkspaceMember)
+                .where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.role == "owner",
+                )
             )
-        ) or 0
+            or 0
+        )
         if owner_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot remove the last owner")
     db.delete(membership)

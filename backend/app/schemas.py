@@ -118,6 +118,7 @@ class MonitorCreate(BaseModel):
     # If true, enqueue an initial check in the same request (avoids a second
     # round-trip from the frontend). The worker still re-validates the URL.
     run_now: bool = False
+
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
@@ -159,8 +160,7 @@ class MonitorCreate(BaseModel):
     def check_json_field_path(self) -> MonitorCreate:
         if self.mode == "json_field" and not (self.css_selector or "").strip():
             raise ValueError(
-                "css_selector is required for json_field monitors "
-                "(a JSON path like $.data.price)"
+                "css_selector is required for json_field monitors (a JSON path like $.data.price)"
             )
         return self
 
@@ -179,7 +179,9 @@ class MonitorCreate(BaseModel):
                 return self
             if re.match(r"^[\w.\-]+/[\w.\-]+$", s):
                 return self
-            raise ValueError("readme monitors require a GitHub repo: 'owner/repo' or 'https://github.com/owner/repo'")
+            raise ValueError(
+                "readme monitors require a GitHub repo: 'owner/repo' or 'https://github.com/owner/repo'"
+            )
         else:
             # Non-readme modes must be http(s)
             if not (self.url.startswith("http://") or self.url.startswith("https://")):
@@ -195,9 +197,13 @@ class MonitorCreate(BaseModel):
                 "js_required is not supported"
             )
         if self.mode == "rss_feed" and self.js_required:
-            raise ValueError("rss_feed monitors fetch RSS over plain HTTP; js_required is not supported")
+            raise ValueError(
+                "rss_feed monitors fetch RSS over plain HTTP; js_required is not supported"
+            )
         if self.mode == "readme" and self.js_required:
-            raise ValueError("readme monitors fetch the README over plain HTTP; js_required is not supported")
+            raise ValueError(
+                "readme monitors fetch the README over plain HTTP; js_required is not supported"
+            )
         return self
 
     @model_validator(mode="after")
@@ -275,8 +281,7 @@ class MonitorUpdate(BaseModel):
             self.css_selector is None or not self.css_selector.strip()
         ):
             raise ValueError(
-                "css_selector is required for json_field monitors "
-                "(a JSON path like $.data.price)"
+                "css_selector is required for json_field monitors (a JSON path like $.data.price)"
             )
         return self
 
@@ -288,9 +293,13 @@ class MonitorUpdate(BaseModel):
                 "js_required is not supported"
             )
         if self.mode == "rss_feed" and self.js_required:
-            raise ValueError("rss_feed monitors fetch RSS over plain HTTP; js_required is not supported")
+            raise ValueError(
+                "rss_feed monitors fetch RSS over plain HTTP; js_required is not supported"
+            )
         if self.mode == "readme" and self.js_required:
-            raise ValueError("readme monitors fetch the README over plain HTTP; js_required is not supported")
+            raise ValueError(
+                "readme monitors fetch the README over plain HTTP; js_required is not supported"
+            )
         return self
 
     @model_validator(mode="after")
@@ -304,15 +313,23 @@ class MonitorUpdate(BaseModel):
                 import re
 
                 s = url.strip()
-                if not (s.startswith("http://") or s.startswith("https://") or re.match(r"^[\w.\-]+/[\w.\-]+$", s)):
-                    raise ValueError("readme monitors require a GitHub repo: 'owner/repo' or 'https://github.com/owner/repo'")
+                if not (
+                    s.startswith("http://")
+                    or s.startswith("https://")
+                    or re.match(r"^[\w.\-]+/[\w.\-]+$", s)
+                ):
+                    raise ValueError(
+                        "readme monitors require a GitHub repo: 'owner/repo' or 'https://github.com/owner/repo'"
+                    )
             elif url and not (url.startswith("http://") or url.startswith("https://")):
                 # For non-readme updates, shorthand is not allowed
                 import re
 
                 if re.match(r"^[\w.\-]+/[\w.\-]+$", url.strip()):
                     # Could be user trying to set readme shorthand without changing mode — block
-                    raise ValueError("url must start with http:// or https:// (owner/repo only for readme mode)")
+                    raise ValueError(
+                        "url must start with http:// or https:// (owner/repo only for readme mode)"
+                    )
         return self
 
 

@@ -166,6 +166,7 @@ def normalize_text(text: str) -> str:
     text = _BLANK_RE.sub("\n\n", text)
     return text.strip()
 
+
 # Minimum readable size for a main-content extraction to be trusted. Below this
 # the detector most likely missed the real content (or the page is a shell), so
 # we fall back to whole-body markdown.

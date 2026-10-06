@@ -21,7 +21,6 @@ import pytest
 from app.services.extract import ExtractionError
 from app.services.structured import ListDiff, diff_lists, extract_html_list
 
-
 # --------------------------------------------------------------------------- #
 # 1) extract_html_list
 # --------------------------------------------------------------------------- #
@@ -62,10 +61,7 @@ def test_extract_html_list_dedupes_whitespace() -> None:
 
 def test_extract_html_list_ignores_script_and_style() -> None:
     """script/style content must not leak into extracted items."""
-    html = (
-        "<ul><li>visible</li>"
-        "<li><script>var x='hidden leaked text';</script></li></ul>"
-    )
+    html = "<ul><li>visible</li><li><script>var x='hidden leaked text';</script></li></ul>"
     items = extract_html_list(html, "li")
     assert items == ["visible"]
     assert "leaked" not in "\n".join(items)
@@ -109,6 +105,7 @@ def test_extract_html_list_captures_href() -> None:
 # --------------------------------------------------------------------------- #
 # 2) diff_lists -> ListDiff (.summary / .as_text_diff)
 # --------------------------------------------------------------------------- #
+
 
 def test_diff_lists_added_and_removed() -> None:
     before = ["Alpha", "Beta", "Gamma"]
@@ -165,6 +162,7 @@ def test_diff_lists_unchanged() -> None:
 # --------------------------------------------------------------------------- #
 # 3) Single consolidated renderer (as_link_diff was removed)
 # --------------------------------------------------------------------------- #
+
 
 def test_listdiff_renderer_carries_link_text() -> None:
     """Items embed their link targets ([text](url)), so the single

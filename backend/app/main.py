@@ -12,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import __version__
-from app.auth import ensure_default_workspace
 from app.config import get_settings
 from app.db import Base, engine, get_db
 from app.rate_limit import limiter, rate_limit_exceeded_handler
@@ -191,7 +190,3 @@ def metrics(request: Request, db: Db):
     from fastapi.responses import PlainTextResponse
 
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
-
-
-# Keep import used for type checkers / future bootstrap endpoints
-_ = ensure_default_workspace

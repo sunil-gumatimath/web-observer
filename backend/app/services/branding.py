@@ -107,6 +107,8 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
         logo_candidates = list(meta.hero_candidates)
     meta.logo_candidates = logo_candidates
     return meta
+
+
 def fetch_brand_info(url: str, *, timeout_seconds: int = 5) -> BrandMeta:
     """Fetch a page and parse its brand metadata."""
     from urllib.parse import urlparse

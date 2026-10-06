@@ -57,9 +57,7 @@ def purge_expired_snapshots(
         snap_ids = [snap.id for snap in snapshots]
         referenced = set(
             db.scalars(
-                select(ChangeEvent.new_snapshot_id).where(
-                    ChangeEvent.new_snapshot_id.in_(snap_ids)
-                )
+                select(ChangeEvent.new_snapshot_id).where(ChangeEvent.new_snapshot_id.in_(snap_ids))
             ).all()
         )
     skipped_referenced = 0
@@ -67,9 +65,7 @@ def purge_expired_snapshots(
     for snap in snapshots:
         if snap.id in referenced:
             skipped_referenced += 1
-            logger.info(
-                "retention_keep_referenced_snapshot snapshot_id=%s", snap.id
-            )
+            logger.info("retention_keep_referenced_snapshot snapshot_id=%s", snap.id)
             continue
         purged.append(snap)
     objects_deleted = 0

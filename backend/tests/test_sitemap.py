@@ -13,8 +13,6 @@ from app.services.sitemap import (
     name_from_url,
     parse_sitemap_xml,
 )
-from app.models.entities import RunStatus
-
 
 SAMPLE_URLSET = """<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -124,8 +122,13 @@ def test_import_from_sitemap_creates_monitors(db_session) -> None:  # noqa: ANN0
         "https://example.com/pricing",
     ]
     rows = [
-        {"name": name_from_url(u), "url": u, "mode": "page_content",
-         "schedule_interval_minutes": 60, "js_required": False}
+        {
+            "name": name_from_url(u),
+            "url": u,
+            "mode": "page_content",
+            "schedule_interval_minutes": 60,
+            "js_required": False,
+        }
         for u in urls
     ]
     result = import_monitors(db_session, ws, rows)
@@ -148,10 +151,20 @@ def test_import_from_sitemap_dedupes(db_session) -> None:  # noqa: ANN001
     db_session.commit()
 
     rows = [
-        {"name": "A", "url": "https://example.com/x", "mode": "page_content",
-         "schedule_interval_minutes": 60, "js_required": False},
-        {"name": "A2", "url": "https://example.com/x", "mode": "page_content",
-         "schedule_interval_minutes": 60, "js_required": False},
+        {
+            "name": "A",
+            "url": "https://example.com/x",
+            "mode": "page_content",
+            "schedule_interval_minutes": 60,
+            "js_required": False,
+        },
+        {
+            "name": "A2",
+            "url": "https://example.com/x",
+            "mode": "page_content",
+            "schedule_interval_minutes": 60,
+            "js_required": False,
+        },
     ]
     result = import_monitors(db_session, ws, rows)
     db_session.commit()
