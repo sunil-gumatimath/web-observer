@@ -220,9 +220,18 @@ STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storag
 
 ---
 
-## Unit tests
+## Tests & Linting
 
 ```powershell
+# Backend
 cd backend
+.\.venv\Scripts\ruff check app tests
+.\.venv\Scripts\ruff format --check app tests
 .\.venv\Scripts\python -m pytest tests -q -m "not integration"
+
+# Frontend
+cd ..\frontend
+npm run lint
+npm test
+npm run build
 ```

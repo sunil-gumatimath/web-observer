@@ -10,7 +10,7 @@ Web change-detection and alerting platform.
 
 ## Status
 
-**Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `012_add_ai_intelligence_fields` on Neon (post-roadmap work added storage optimization, the alerts inbox, monitor watch notes, brand/workspace-key columns, referential-integrity fixes, per-monitor conditional alert thresholds, natural-language semantic triggers, first-class AI impact/confidence triage, and distributed Redis dedup caching). Billing is optional (solo use: skip Stripe).
+**Phases 0–7 complete.** The original roadmap has been exceeded — the DB schema is at migration `014_webhook_secret_ciphertext` on Neon (post-roadmap work added storage optimization, the alerts inbox, monitor watch notes, brand/workspace-key columns, referential-integrity fixes, per-monitor conditional alert thresholds, natural-language semantic triggers, first-class AI impact/confidence triage, distributed Redis dedup caching, monitor tags, and encrypted webhook secrets at rest). Billing is optional (solo use: skip Stripe).
 
 **Latest:** the frontend was re-themed to the Cohere design system (white canvas, 22px signature cards, ghost buttons, `#1863dc` interaction blue, Space Grotesk/Inter, charcoal dark mode), the alerts inbox now carries monitor brand logos with a domain-favicon fallback, and the app nav has an animated active indicator with a page fade on tab switches.
 
@@ -257,13 +257,19 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 
 The web UI (Next.js) exposes: **Dashboard** (with Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
 
-## Tests
+## Tests & Linting
 
 ```powershell
 cd backend
+.\.venv\Scripts\ruff check app tests
+.\.venv\Scripts\ruff format --check app tests
 .\.venv\Scripts\python -m pytest tests -q -m "not integration"
-```
 
+cd ..\frontend
+npm run lint
+npm test
+npm run build
+```
 Quick smoke test of a running stack (API + worker must be up):
 
 ```sh

@@ -48,7 +48,7 @@ See `docs/integrations/n8n-zapier.md`.
 
 ## Migration
 
-`alembic upgrade head` (Phase 6–7 schema is introduced in revision `004_phase6_7_enterprise`; project head is `012_add_ai_intelligence_fields`).
+`alembic upgrade head` (Phase 6–7 schema is introduced in revision `004_phase6_7_enterprise`; project head is `014_webhook_secret_ciphertext`).
 
 ## Post-Phase-7 endpoints (shipped after this doc was written)
 
