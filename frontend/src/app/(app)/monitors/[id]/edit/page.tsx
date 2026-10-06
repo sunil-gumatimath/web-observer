@@ -15,7 +15,7 @@ import {
 } from "@/components/ui";
 import { ThresholdEditor } from "@/components/threshold-editor";
 import { api, brandAssetUrl } from "@/lib/api";
-import type { BrandInfo, Monitor, MonitorMode } from "@/lib/types";
+import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
@@ -30,6 +30,14 @@ function showsIgnore(mode: MonitorMode): boolean {
 function isReadmeMode(mode: MonitorMode): boolean {
 	return mode === "readme";
 }
+function normalizeUrl(input: string, mode?: MonitorMode): string {
+	const trimmed = input.trim();
+	if (!trimmed) return "";
+	if (/^https?:\/\//i.test(trimmed)) return trimmed;
+	if (mode && isReadmeMode(mode) && /^[\w.\-]+\/[\w.\-]+$/.test(trimmed)) return trimmed;
+	return `https://${trimmed}`;
+}
+
 
 const MIN_INTERVAL_MIN = 15;
 const MAX_INTERVAL_MIN = 24 * 60; // once a day
@@ -121,17 +129,11 @@ export default function EditMonitorPage() {
 		};
 	}, [monitorId]);
 
-	function normalizeUrl(input: string): string {
-		const trimmed = input.trim();
-		if (!trimmed) return "";
-		if (/^https?:\/\//i.test(trimmed)) return trimmed;
-		if (isReadmeMode(mode) && /^[\w.\-]+\/[\w.\-]+$/.test(trimmed)) return trimmed;
-		return `https://${trimmed}`;
-	}
+
 
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
 		if (isReadmeMode(mode)) return;
-		const candidate = normalizeUrl(rawUrl ?? url);
+		const candidate = normalizeUrl(rawUrl ?? url, mode);
 		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
 		try {
 			const ws = await ensureWorkspace();
@@ -146,7 +148,7 @@ export default function EditMonitorPage() {
 	// Auto-lookup brand on URL change with debounce (skip for readme)
 	useEffect(() => {
 		if (isReadmeMode(mode)) return;
-		const candidate = normalizeUrl(url);
+		const candidate = normalizeUrl(url, mode);
 		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
 		const timer = setTimeout(() => {
 			lookupBrand(candidate);
@@ -163,7 +165,7 @@ export default function EditMonitorPage() {
 			setError(intervalProblem);
 			return;
 		}
-		const finalUrl = normalizeUrl(url);
+		const finalUrl = normalizeUrl(url, mode);
 		if (!finalUrl) {
 			setError("A valid URL is required.");
 			return;

@@ -231,7 +231,7 @@ function MonitorDetailInner() {
 				await api.streamMonitorEvents(
 					workspaceId,
 					monitorId,
-					async (event, data) => {
+					async (event) => {
 						if (event === "connected") setSseConnected(true);
 						if (event === "run" || event === "change") {
 							sseLiveRef.current = true;
@@ -399,7 +399,6 @@ function MonitorDetailInner() {
 	// Full result panel: after create (?fresh=1), or while any check is in flight.
 	const showResultCard =
 		showFreshBanner || polling || Boolean(latestRun && isActiveRun(latestRun));
-	const logo = brandAssetUrl(monitor.brand?.logo_path) || monitor.brand?.logo_url;
 	const hero = brandAssetUrl(monitor.brand?.hero_path) || monitor.brand?.hero_url;
 
 	return (

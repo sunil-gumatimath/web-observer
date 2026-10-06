@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, ErrorBox, Label, SectionTitle, Select, SuccessBox } from "@/components/ui";
+import { Badge, Button, Card, ErrorBox, SectionTitle, Select, SuccessBox } from "@/components/ui";
 import { ConfirmButton } from "@/components/confirm-dialog";
 import { api } from "@/lib/api";
 import type { WorkspaceMemberRow } from "@/lib/types";

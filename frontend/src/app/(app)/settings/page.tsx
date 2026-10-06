@@ -23,7 +23,7 @@ import { api, type MeResponse } from "@/lib/api";
 import { useToast } from "@/components/toasts";
 import type { ApiKeyRow, WebhookDelivery, WebhookOut, WorkspaceSettings } from "@/lib/types";
 import { config } from "@/lib/config";
-import { ensureWorkspace, getStoredWorkspaceId, setStoredWorkspaceId } from "@/lib/workspace";
+import { ensureWorkspace, setStoredWorkspaceId } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
 export default function SettingsPage() {

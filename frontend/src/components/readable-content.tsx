@@ -155,9 +155,6 @@ type Block =
   | { type: "image"; alt: string; src: string }
   | { type: "paragraph"; text: string };
 
-function cleanTableCell(cell: string): string {
-  return cell.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
-}
 
 function parseBlocks(raw: string): Block[] {
   const text = prepareReadableText(raw);

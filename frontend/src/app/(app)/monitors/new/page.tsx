@@ -25,6 +25,15 @@ import type {
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
+function normalizeUrl(input: string, mode?: MonitorMode): string {
+	const trimmed = input.trim();
+	if (!trimmed) return "";
+	if (/^https?:\/\//i.test(trimmed)) return trimmed;
+	// readme shorthand like owner/repo must stay as-is
+	if (mode && isReadmeMode(mode) && /^[\w.\-]+\/[\w.\-]+$/.test(trimmed)) return trimmed;
+	return `https://${trimmed}`;
+}
+
 const IGNORE_PRESETS: Record<string, string[]> = {
 	cookies: [
 		".cookie-banner",
@@ -112,18 +121,11 @@ export default function NewMonitorPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 
-	function normalizeUrl(input: string): string {
-		const trimmed = input.trim();
-		if (!trimmed) return "";
-		if (/^https?:\/\//i.test(trimmed)) return trimmed;
-		// readme shorthand like owner/repo must stay as-is
-		if (isReadmeMode(mode) && /^[\w.\-]+\/[\w.\-]+$/.test(trimmed)) return trimmed;
-		return `https://${trimmed}`;
-	}
+
 
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
 		if (isReadmeMode(mode)) return;
-		const candidate = normalizeUrl(rawUrl ?? url);
+		const candidate = normalizeUrl(rawUrl ?? url, mode);
 		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
 		setBrandLoading(true);
 		try {
@@ -141,13 +143,13 @@ export default function NewMonitorPage() {
 	// Auto-lookup brand on typing with debounce (skip for readme)
 	useEffect(() => {
 		if (isReadmeMode(mode)) {
-			setBrand(null);
-			return;
+			const timer = setTimeout(() => setBrand(null), 0);
+			return () => clearTimeout(timer);
 		}
-		const candidate = normalizeUrl(url);
+		const candidate = normalizeUrl(url, mode);
 		if (!candidate || candidate.length < 8 || !candidate.includes(".")) {
-			setBrand(null);
-			return;
+			const timer = setTimeout(() => setBrand(null), 0);
+			return () => clearTimeout(timer);
 		}
 		const timer = setTimeout(() => {
 			lookupBrand(candidate);
@@ -163,7 +165,7 @@ export default function NewMonitorPage() {
 			setError(intervalProblem);
 			return;
 		}
-		const finalUrl = normalizeUrl(url);
+		const finalUrl = normalizeUrl(url, mode);
 		if (!finalUrl) {
 			setError("A valid URL is required.");
 			return;
@@ -600,7 +602,7 @@ export default function NewMonitorPage() {
 					</form>
 					<SelectorPicker
 						open={pickerOpen}
-						initialUrl={normalizeUrl(url)}
+						initialUrl={normalizeUrl(url, mode)}
 						onClose={() => setPickerOpen(false)}
 						onPick={(sel) => {
 							setCssSelector(sel);
