@@ -168,7 +168,7 @@ classDiagram
     class ChangeEvent {
         +UUID id
         +UUID monitor_id
-        +UUID run_id
+        +UUID run_id  (nullable — migration 015 SET NULL; events survive run/monitor cleanup)
         +UUID new_snapshot_id
         +UUID previous_snapshot_id
         +String diff_summary
@@ -201,7 +201,7 @@ classDiagram
         +UUID id
         +UUID workspace_id
         +String url
-        +String secret
+        +String secret  (encrypted at rest — migration 014)
     }
     class WebhookDelivery {
         +UUID id
@@ -414,8 +414,12 @@ flowchart TB
 * **Auth modes** (`auth.py`): Clerk JWT (`Authorization: Bearer`), workspace API keys (`mtw_...`), and internal token (`X-Internal-Token`) for dev/smoke tests. RBAC via `require_workspace_member` / `require_role(min_role)`.
 * **Mode routing** (`workers/enqueue.py`): monitors with the `js_required` flag route to the `browser_checks` queue (Playwright); everything else goes to `http_checks`. (`site_links` rejects `js_required` at the schema layer since sitemaps are fetched over plain HTTP.)
 * **Outbox pattern**: change detection writes `NotificationOutbox` + `WebhookDelivery` rows, then workers fan out. This decouples detection from delivery and gives at-least-once send with retry (`max_retries=5`).
+* **Rate limiting** (`app/rate_limit.py`): default 60/min per verified principal (or IP), enforced on every route by `SlowAPIMiddleware` (decorated endpoints keep stricter limits). Counters are shared via Redis; when Redis is unreachable the limiter **fails open** to per-process in-memory counters with automatic recovery (`in_memory_fallback_enabled`), so a Redis outage cannot turn unrelated requests into 500s.
+* **Delivery reliability (review follow-ups)**: outbox and webhook sends claim rows atomically (`PENDING→PROCESSING`) with an attempts cap and a reaper that re-enqueues abandoned rows; usage counters use Postgres `ON CONFLICT` upserts + atomic increments; the browser-check daily quota is plan-aware with a once-per-run reservation; the stuck-run reaper uses a fenced conditional `UPDATE...WHERE status`, and `run_guard` refuses to run hooks/claims for runs not in `scheduled`/`queued` — preventing double-sends after retries.
 * **SSRF guard** (`security/ssrf.py`): blocks private/loopback/link-local/metadata IPs and credentialed URLs before any fetch; redirects are re-validated in the fetcher. The pinned fetcher (`services/fetcher.py:_pinned_get`) tries every validated IP in turn, so one dead CDN PoP can't fail a check — only connect-level errors trigger failover. `readme` monitors hit the GitHub API first (default-branch aware), then capped raw probes.
 * **Newer endpoints not in the diagrams above**: `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`.
 * **Quotas/plans** (`services/usage.py`, `services/plans.py`): daily check/notification/storage counters per workspace, gated by plan.
+* **Crypto purpose separation** (`services/crypto.py`): Fernet keys, share-link/invite tokens, and API-key hashes are each derived from `SECRET_KEY` via HKDF with distinct purpose labels; `v2` formats keep verifying legacy `v1`/plaintext schemes for backward compatibility (no data migration required).
+* **ReDoS/size caps**: `must_match`/`must_not_match` regexes and CSS selectors are validated and capped at the schema layer (pattern count, length) and enforced again at runtime in `extract.py`/`conditional.py` (`_bounded_search`); oversized/invalid `must_match` patterns suppress with a reason (fail-closed).
 * **Lease + reaper**: scheduler claims monitors with a 60s lease; `run_reaper` recovers stuck runs so HA scheduler/workers don't double-run.
 * **Branding pipeline**: `assets/` is the source of truth; `frontend/public/web-observer.svg` and `web-observer-icon.svg` are the static copies; `frontend/src/app/icon.svg` etc are Next.js metadata routes (generates `/icon.svg`, `/manifest.webmanifest`). `LogoIcon` is inline SVG (not `<img>`) so it inherits Tailwind theming and scales via `size` prop (`shell.tsx:49` `iconSize={36}`). OG image `opengraph-image.svg` (1200×630) is served from `src/app` and referenced in `layout.tsx`.
