@@ -28,6 +28,17 @@ try {
     # Ignore if NetTCPIP cmdlet unavailable
 }
 
+# Fallback port cleanup using netstat in case NetTCPIP module is unavailable
+try {
+    netstat -ano | Select-String ":(8002|3000)\s+.*LISTENING" | ForEach-Object {
+        $parts = ($_ -split '\s+') | Where-Object { $_ -ne '' }
+        $pidToKill = $parts[-1]
+        if ($pidToKill -match '^\d+$' -and [int]$pidToKill -gt 0) {
+            Stop-Process -Id [int]$pidToKill -Force -ErrorAction SilentlyContinue
+        }
+    }
+} catch { }
+
 Start-Sleep -Seconds 1
 
 # ---- Preflight: Redis (may run inside WSL2; reachable via localhost) --------
@@ -49,14 +60,28 @@ if ($redisTest) {
     Write-Host "Redis preflight: NOT reachable on 127.0.0.1:$RedisPort (start it in WSL2; if Windows->WSL localhost forwarding is down, 'wsl --shutdown' then 'wsl' usually restores it)" -ForegroundColor Yellow
 }
 
-$PythonExe = Join-Path $BackendDir ".venv\Scripts\python.exe"
-$UvicornExe = Join-Path $BackendDir ".venv\Scripts\uvicorn.exe"
-$DramatiqExe = Join-Path $BackendDir ".venv\Scripts\dramatiq.exe"
-
-if (-not (Test-Path $PythonExe)) {
-    Write-Error "Virtual environment not found at $BackendDir\.venv. Please create it first."
+$CandidateVenvs = @(
+    (Join-Path $BackendDir ".venv"),
+    (Join-Path $env:LOCALAPPDATA "mtw-venv")
+)
+$FoundVenv = $null
+foreach ($candidate in $CandidateVenvs) {
+    if ((Test-Path (Join-Path $candidate "Scripts\python.exe")) -and (Test-Path (Join-Path $candidate "Scripts\uvicorn.exe"))) {
+        $FoundVenv = $candidate
+        break
+    }
+}
+if (-not $FoundVenv -and (Test-Path (Join-Path $BackendDir ".venv\Scripts\python.exe"))) {
+    $FoundVenv = Join-Path $BackendDir ".venv"
+}
+if (-not $FoundVenv) {
+    Write-Error "Virtual environment not found at $BackendDir\.venv or $env:LOCALAPPDATA\mtw-venv. Please create it first."
     exit 1
 }
+
+$PythonExe = Join-Path $FoundVenv "Scripts\python.exe"
+$UvicornExe = Join-Path $FoundVenv "Scripts\uvicorn.exe"
+$DramatiqExe = Join-Path $FoundVenv "Scripts\dramatiq.exe"
 
 Write-Host "Starting API on http://127.0.0.1:8002..." -ForegroundColor Cyan
 Start-Process -FilePath $UvicornExe -ArgumentList "app.main:app --host 127.0.0.1 --port 8002" -WorkingDirectory $BackendDir -RedirectStandardOutput (Join-Path $LogDir "api.log") -RedirectStandardError (Join-Path $LogDir "api_err.log") -WindowStyle Hidden
@@ -118,7 +143,7 @@ function Wait-Frontend {
     param([int]$TimeoutSeconds)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        if (-not (Test-ProcessAlive -NamePattern "bun" -CmdPattern "next dev")) {
+        if (-not (Test-ProcessAlive -NamePattern "bun|node" -CmdPattern "dev")) {
             Write-Host "Frontend : CRASHED - last error lines:" -ForegroundColor Red
             $errLog = Join-Path $LogDir "frontend_err.log"
             if (Test-Path $errLog) {

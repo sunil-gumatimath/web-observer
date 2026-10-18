@@ -24,4 +24,14 @@ try {
     # Ignore if NetTCPIP cmdlet is unavailable
 }
 
+try {
+    netstat -ano | Select-String ":(8002|3000)\s+.*LISTENING" | ForEach-Object {
+        $parts = ($_ -split '\s+') | Where-Object { $_ -ne '' }
+        $pidToKill = $parts[-1]
+        if ($pidToKill -match '^\d+$' -and [int]$pidToKill -gt 0) {
+            Stop-Process -Id [int]$pidToKill -Force -ErrorAction SilentlyContinue
+        }
+    }
+} catch { }
+
 Write-Host "All Web Observer services stopped." -ForegroundColor Green
