@@ -5,26 +5,28 @@ import { Button, Card, Input, Label, SectionTitle, Select } from "@/components/u
 import { api } from "@/lib/api";
 import type { WorkspaceSettings } from "@/lib/types";
 
+// Live Kilo Gateway catalog filtered to $0 input/output models
+// (`isFree: true` at https://api.kilo.ai/api/gateway/models, checked 2026-10-19).
+// Ordered best-first for diff summarisation: routers, then general-purpose
+// models that return text inside ~200 output tokens, then reasoning-heavy
+// models that can spend the whole budget on reasoning, then niche models.
 const FREE_MODELS: Array<{ value: string; label: string }> = [
   { value: "kilo-auto/free", label: "Auto Free — Kilo · Recommended router · 256K ctx" },
-  { value: "nex-agi/nex-n2.5-pro:free", label: "Nex-N2.5-Pro (free) — Nex AGI · Coding · Vision · 262K ctx" },
-  { value: "cohere/north-mini-code:free", label: "North Mini Code (free) — Cohere · Coding · 256K ctx" },
+  { value: "openrouter/free", label: "Free Models Router — OpenRouter · Vision · 200K ctx" },
+  { value: "reflection/beam-free", label: "Beam 1.0 (free) — Reflection · 1M ctx" },
+  { value: "stealth/glyph-cluster", label: "Glyph Cluster (free) — Stealth · 256K ctx" },
   { value: "poolside/laguna-s-2.1:free", label: "Laguna S 2.1 (free) — Poolside · Coding · 262K ctx" },
-  { value: "stepfun/step-3.7-flash:free", label: "Step 3.7 Flash (free) — StepFun · Vision · 262K ctx" },
-  { value: "thinkingmachines/inkling:free", label: "Inkling (free) — Thinking Machines · Multimodal · 1M ctx" },
-  { value: "thinkingmachines/inkling-small:free", label: "Inkling Small (free) — Thinking Machines · Multimodal · 1M ctx" },
+  { value: "cohere/north-mini-code:free", label: "North Mini Code (free) — Cohere · Coding · 256K ctx" },
+  { value: "dots-studio/dots-3-note-preview:free", label: "Dots3-Note Preview (free) — Dots Studio · Vision · 512K ctx" },
+  { value: "nvidia/nemotron-3.5-super-vl:free", label: "Nemotron 3.5 Super VL (free) — NVIDIA · Vision · Video · 1M ctx" },
   { value: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra (free) — NVIDIA · 550B · 1M ctx" },
   { value: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super (free) — NVIDIA · 120B · 262K ctx" },
-  { value: "nvidia/nemotron-3.5-lightning:free", label: "Nemotron 3.5 Lightning (free) — NVIDIA · 1M ctx" },
   { value: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", label: "Nemotron 3 Nano Omni (free) — NVIDIA · Multimodal · 256K ctx" },
-  { value: "dots-studio/dots-3-note-preview:free", label: "Dots3-Note Preview (free) — Dots Studio · Vision · 512K ctx" },
-  { value: "nex-agi/nex-n2.5-mini:free", label: "Nex-N2.5-Mini (free) — Nex AGI · Coding · Vision · 262K ctx" },
-  { value: "inclusionai/ling-3.0-flash-vl:free", label: "Ling 3.0 Flash VL (free) — inclusionAI · Vision · Video · 262K ctx" },
-  { value: "inclusionai/ling-3.0-flash-sante:free", label: "Ling 3.0 Flash Sante (free) — inclusionAI · Medical · 262K ctx" },
-  { value: "inclusionai/ling-3.0-flash-fin:free", label: "Ling 3.0 Flash Fin (free) — inclusionAI · Finance · 262K ctx" },
+  { value: "nvidia/nemotron-3.5-lightning:free", label: "Nemotron 3.5 Lightning (free) — NVIDIA · Reasoning · 1M ctx" },
   { value: "poolside/laguna-xs-2.1:free", label: "Laguna XS 2.1 (free) — Poolside · Coding · 262K ctx" },
-  { value: "liquid/lfm-2.5-2.6b:free", label: "LFM2.5 2.6B (free) — Liquid AI · Lightweight · 65K ctx" },
-  { value: "openrouter/free", label: "Free Models Router — OpenRouter · 200K ctx" },
+  { value: "thinkingmachines/inkling-small:free", label: "Inkling Small (free) — Thinking Machines · Multimodal · 1M ctx" },
+  { value: "xingchen-agi/xing4.0-29b-a4b:free", label: "Xing4.0 29B A4B (free) — XingChen · Reasoning · 262K ctx" },
+  { value: "liquid/lfm-2.5-2.6b:free", label: "LFM2.5-2.6B (free) — Liquid AI · Lightweight · 65K ctx" },
   { value: "nvidia/nemotron-3.5-content-safety:free", label: "Nemotron 3.5 Content Safety (free) — NVIDIA · Moderation · 128K ctx" },
 ];
 
