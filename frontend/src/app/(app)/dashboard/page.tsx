@@ -36,17 +36,17 @@ import { usePageTitle } from "@/lib/use-page-title";
 
 const CHANGE_COLORS: Record<string, string> = {
   pricing: "bg-emerald-500",
-  availability: "bg-[var(--accent)]",
+  availability: "bg-[var(--primary)]",
   legal: "bg-amber-500",
-  content: "bg-violet-500",
-  design: "bg-pink-500",
-  api: "bg-indigo-500",
-  other: "bg-slate-400",
+  content: "bg-purple-400",
+  design: "bg-pink-400",
+  api: "bg-indigo-400",
+  other: "bg-neutral-500",
 };
 
 function changeDotClass(cat: string | null): string {
-  if (!cat) return "bg-slate-300 dark:bg-slate-600";
-  return CHANGE_COLORS[cat] ?? "bg-slate-400";
+  if (!cat) return "bg-neutral-600";
+  return CHANGE_COLORS[cat] ?? "bg-neutral-500";
 }
 
 export default function DashboardPage() {

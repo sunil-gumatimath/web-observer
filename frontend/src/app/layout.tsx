@@ -1,21 +1,24 @@
 import type { Metadata } from "next";
-import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemedClerkProvider } from "@/components/clerk-theme-provider";
 import { Providers } from "@/components/providers";
 import { ThemeProvider } from "@/components/theme-provider";
 import { config } from "@/lib/config";
 import "./globals.css";
 
-// Cohere design system: CohereText / Unica77 are proprietary, so we use the
-// spec-approved fallbacks — Space Grotesk for display serif, Inter for body.
-const displayFont = Space_Grotesk({
+// Linear design system (DESIGN.md):
+// Inter at weights 500/600/700 is the spec-approved fallback for Linear Display and Linear Text.
+// JetBrains Mono approximates Linear Mono.
+const displayFont = Inter({
   variable: "--font-display",
   subsets: ["latin"],
+  weight: ["500", "600", "700"],
 });
 
 const bodyFont = Inter({
   variable: "--font-body",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 const monoFont = JetBrains_Mono({

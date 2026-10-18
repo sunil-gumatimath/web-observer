@@ -31,7 +31,7 @@ export default function SignInPage() {
 					</p>
 					<Link
 						href="/dashboard"
-						className="btn-cohere btn-cohere-primary mt-6"
+						className="btn-linear btn-linear-primary mt-6"
 					>
 						Go to dashboard
 					</Link>

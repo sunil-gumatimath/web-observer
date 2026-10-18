@@ -26,27 +26,27 @@ export function Button({
 }) {
 	const styles = {
 		primary:
-			"bg-[var(--fg)] text-[var(--bg)] hover:bg-[var(--fg-2)] border border-transparent dark:bg-white dark:text-black dark:hover:bg-neutral-200",
+			"bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] active:bg-[var(--primary-focus)] border border-transparent shadow-xs",
 		secondary:
-			"bg-transparent text-[var(--fg)] border border-[var(--border)] hover:text-[var(--accent)] hover:border-[var(--accent)] hover:opacity-80",
+			"bg-[var(--surface-1)] text-[var(--fg)] border border-[var(--hairline)] hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)]",
 		danger:
-			"bg-[var(--danger)] text-white hover:opacity-90 border border-transparent shadow-sm",
+			"bg-[var(--danger)] text-white hover:opacity-90 border border-transparent shadow-xs",
 		ghost:
-			"bg-transparent text-[var(--fg)] hover:text-[var(--accent)] hover:opacity-80 border border-transparent",
+			"bg-transparent text-[var(--fg)] hover:bg-[var(--surface-2)] border border-transparent",
 	}[variant];
 
 	const sizes = {
-		sm: "px-2.5 py-1.5 text-xs",
-		md: "px-3.5 py-2 text-sm",
-		lg: "px-5 py-2.5 text-sm",
+		sm: "px-2.5 py-1 text-xs rounded-[6px]",
+		md: "px-3.5 py-1.5 text-sm rounded-[8px]",
+		lg: "px-4 py-2 text-sm rounded-[8px]",
 	}[size];
 
 	return (
 		<button
 			className={cn(
-				"inline-flex items-center justify-center gap-1.5 rounded-full font-normal transition",
-				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-1",
-				"disabled:pointer-events-none disabled:opacity-45",
+				"inline-flex items-center justify-center gap-1.5 font-medium transition",
+				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/45 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--canvas)]",
+				"disabled:pointer-events-none disabled:opacity-40",
 				styles,
 				sizes,
 				className,
@@ -84,7 +84,7 @@ export function Select({
 				{children}
 			</select>
 			<svg
-				className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+				className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ink-subtle)]"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -109,7 +109,7 @@ export function Label({
 	return (
 		<label
 			htmlFor={htmlFor}
-			className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted)]"
+			className="mb-1.5 block text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted)]"
 		>
 			{children}
 		</label>
@@ -129,7 +129,7 @@ export function Card({
 		<div
 			className={cn(
 				"glass-card",
-				hover && "transition hover:border-[var(--border)]",
+				hover && "transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]/40",
 				className,
 			)}
 			suppressHydrationWarning
@@ -150,19 +150,19 @@ export function Badge({
 }) {
 	const styles = {
 		neutral:
-			"bg-[var(--surface)] text-[var(--muted)] ring-1 ring-[var(--border)]",
+			"bg-[var(--surface-2)] text-[var(--ink-muted)] border border-[var(--hairline)]",
 		success:
-			"bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/25 dark:text-emerald-300",
+			"bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
 		danger:
-			"bg-rose-500/10 text-rose-700 ring-1 ring-rose-500/25 dark:text-rose-300",
-		warn: "bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/25 dark:text-amber-200",
-		info: "bg-[var(--accent)]/10 text-[var(--accent)] ring-1 ring-[var(--accent)]/25",
+			"bg-rose-500/10 text-rose-400 border border-rose-500/20",
+		warn: "bg-amber-500/10 text-amber-300 border border-amber-500/20",
+		info: "bg-[var(--primary)]/10 text-[var(--primary-hover)] border border-[var(--primary)]/25",
 	}[tone];
 	return (
 		<span
 			title={title}
 			className={cn(
-				"inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+				"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium tracking-wide",
 				styles,
 			)}
 		>
@@ -183,11 +183,11 @@ export function PageHeader({
 	return (
 		<div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 			<div className="min-w-0">
-				<h1 className="font-display text-3xl tracking-tight text-[var(--fg)] sm:text-[48px] sm:leading-[1.2]">
+				<h1 className="font-display text-2xl font-semibold tracking-tight text-[var(--fg)] sm:text-3xl">
 					{title}
 				</h1>
 				{description ? (
-					<p className="mt-1.5 max-w-2xl text-base leading-relaxed text-[var(--muted)]">
+					<p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
 						{description}
 					</p>
 				) : null}
@@ -214,10 +214,10 @@ export function EmptyState({
 }) {
 	return (
 		<Card className="flex flex-col items-center py-12 text-center">
-			<div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[22px] bg-[var(--surface)] text-[var(--fg)] ring-1 ring-[var(--border-soft)]">
+			<div className="mb-4 flex h-10 w-10 items-center justify-center rounded-[10px] bg-[var(--surface-2)] text-[var(--fg)] border border-[var(--hairline)]">
 				{icon ?? (
 					<svg
-						className="h-6 w-6"
+						className="h-5 w-5"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke="currentColor"
@@ -231,18 +231,18 @@ export function EmptyState({
 					</svg>
 				)}
 			</div>
-			<p className="text-base font-medium text-[var(--fg)]">{title}</p>
-			<p className="mt-1.5 max-w-sm text-sm text-[var(--muted)]">{body}</p>
-			{action ? <div className="mt-5">{action}</div> : null}
+			<p className="text-sm font-medium text-[var(--fg)]">{title}</p>
+			<p className="mt-1 max-w-sm text-xs text-[var(--muted)] leading-relaxed">{body}</p>
+			{action ? <div className="mt-4">{action}</div> : null}
 		</Card>
 	);
 }
 
 export function ErrorBox({ message }: { message: string }) {
 	return (
-		<div className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-3 text-sm text-rose-700 dark:border-rose-500/25 dark:text-rose-200">
+		<div className="mb-4 flex items-start gap-2.5 rounded-[8px] border border-rose-500/25 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-300">
 			<svg
-				className="mt-0.5 h-4 w-4 shrink-0"
+				className="mt-0.5 h-4 w-4 shrink-0 text-rose-400"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -261,9 +261,9 @@ export function ErrorBox({ message }: { message: string }) {
 
 export function SuccessBox({ message }: { message: string }) {
 	return (
-		<div className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3 text-sm text-emerald-700 dark:border-emerald-500/25 dark:text-emerald-200">
+		<div className="mb-4 flex items-start gap-2.5 rounded-[8px] border border-emerald-500/25 bg-emerald-500/10 px-3 py-2.5 text-xs text-emerald-300">
 			<svg
-				className="mt-0.5 h-4 w-4 shrink-0"
+				className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -287,7 +287,6 @@ export function Spinner({
 	label?: string;
 	delayMs?: number;
 }) {
-	// Delay showing the spinner so sub-second loads don't flash a loading state.
 	const [visible, setVisible] = useState(delayMs <= 0);
 	useEffect(() => {
 		if (delayMs <= 0) return;
@@ -297,18 +296,17 @@ export function Spinner({
 
 	if (!visible) return null;
 
-	// suppressHydrationWarning: extensions may inject attrs (e.g. rtrvr-ls) before hydrate
 	return (
 		<div
 			className="flex flex-col items-center justify-center gap-3 py-16"
 			suppressHydrationWarning
 		>
 			<div
-				className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--fg)]"
+				className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--hairline-strong)] border-t-[var(--primary)]"
 				suppressHydrationWarning
 			/>
 			<p
-				className="text-sm text-[var(--muted)]"
+				className="text-xs text-[var(--muted)]"
 				suppressHydrationWarning
 			>
 				{label}
@@ -336,16 +334,16 @@ export function StatCard({
 	return (
 		<Card className="relative overflow-hidden">
 			<p className="section-label">{label}</p>
-			<p className="mt-3 font-display text-3xl tracking-tight text-[var(--fg)]">
+			<p className="mt-2 font-display text-2xl font-semibold tracking-tight text-[var(--fg)]">
 				{value}
 			</p>
 			{hint ? (
-				<p className="mt-1.5 text-xs text-[var(--muted)]">{hint}</p>
+				<p className="mt-1 text-xs text-[var(--muted)]">{hint}</p>
 			) : null}
 			{pct != null ? (
-				<div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--border-soft)]">
+				<div className="mt-3 h-1 overflow-hidden rounded-full bg-[var(--surface-3)]">
 					<div
-						className="h-full rounded-full bg-[var(--fg)] transition-all"
+						className="h-full rounded-full bg-[var(--primary)] transition-all"
 						style={{ width: `${pct}%` }}
 					/>
 				</div>
@@ -370,13 +368,9 @@ export function SectionTitle({
 }
 
 const segmentedBtn =
-	"rounded-lg px-3 py-1.5 text-sm transition " +
-	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
+	"rounded-[6px] px-2.5 py-1 text-xs font-medium transition " +
+	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40";
 
-/**
- * Single styled toggle group for 2+ mutually exclusive options.
- * Renders as a segmented control with `aria-pressed` on each option.
- */
 export function SegmentedControl<T extends string>({
 	options,
 	value,
@@ -395,7 +389,7 @@ export function SegmentedControl<T extends string>({
 			role="group"
 			aria-label={ariaLabel}
 			className={cn(
-				"inline-flex flex-wrap gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-bg)] p-0.5",
+				"inline-flex flex-wrap gap-1 rounded-[8px] border border-[var(--hairline)] bg-[var(--canvas)] p-0.5",
 				className,
 			)}
 		>
@@ -410,8 +404,8 @@ export function SegmentedControl<T extends string>({
 						className={cn(
 							segmentedBtn,
 							active
-								? "bg-[var(--fg)] text-[var(--bg)] dark:bg-white dark:text-black"
-								: "border border-transparent text-[var(--muted)] hover:text-[var(--accent)]",
+								? "bg-[var(--surface-2)] text-[var(--fg)] border border-[var(--hairline-strong)] shadow-xs"
+								: "border border-transparent text-[var(--muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-1)]",
 						)}
 					>
 						{opt.label}
@@ -432,23 +426,23 @@ export function DataTable({
 	empty?: ReactNode;
 }) {
 	return (
-		<div className="surface overflow-hidden">
+		<div className="surface overflow-hidden border border-[var(--hairline)]">
 			<div className="relative">
 				<div className="datatable-scroll overflow-x-auto">
 					<table className="w-full text-left text-sm">
 						<thead>
-							<tr className="border-b border-[var(--border)] bg-[var(--surface-bg)]">
+							<tr className="border-b border-[var(--hairline)] bg-[var(--surface-1)]">
 								{headers.map((h) => (
 									<th
 										key={h}
-										className="whitespace-nowrap px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]"
+										className="whitespace-nowrap px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--ink-subtle)]"
 									>
 										{h}
 									</th>
 								))}
 							</tr>
 						</thead>
-						<tbody className="divide-y divide-[var(--border)]">{children}</tbody>
+						<tbody className="divide-y divide-[var(--hairline)]">{children}</tbody>
 					</table>
 				</div>
 				<div aria-hidden className="datatable-edge md:hidden" />

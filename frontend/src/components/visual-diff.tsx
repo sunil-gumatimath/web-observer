@@ -52,7 +52,7 @@ export function VisualDiff({
 
   if (!before || !after) {
     return (
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-bg)] p-4 text-center text-sm text-[var(--muted)]">
+      <div className="rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)] p-4 text-center text-xs text-[var(--muted)]">
         Screenshots will appear here once visual monitoring captures both states.
       </div>
     );
@@ -72,14 +72,14 @@ export function VisualDiff({
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="relative cursor-ew-resize touch-none overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-bg)] select-none"
+        className="relative cursor-ew-resize touch-none overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)] select-none"
         style={{ height: 360 }}
       >
         <img
           src={after}
           alt={`${alt} after`}
           draggable={false}
-          className="absolute inset-0 h-full w-full bg-white object-contain"
+          className="absolute inset-0 h-full w-full bg-[var(--canvas)] object-contain"
         />
         <div
           aria-hidden
@@ -90,13 +90,13 @@ export function VisualDiff({
             src={before}
             alt=""
             draggable={false}
-            className="absolute inset-0 h-full w-full bg-white object-contain"
+            className="absolute inset-0 h-full w-full bg-[var(--canvas)] object-contain"
           />
         </div>
 
         <div aria-hidden className="pointer-events-none absolute inset-y-0" style={{ left: `${clamped}%` }}>
-          <div className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-[var(--accent)]" />
-          <div className="absolute top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-sm font-bold text-[var(--text)] shadow-md">
+          <div className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-[var(--primary)]" />
+          <div className="absolute top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--hairline-strong)] bg-[var(--surface-2)] text-xs font-semibold text-[var(--fg)] shadow-md">
             &#8596;
           </div>
         </div>

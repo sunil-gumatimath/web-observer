@@ -117,7 +117,7 @@ export function ActivityCard({
 					) : null}
 				</div>
 				<div
-					className="flex items-center gap-1 rounded-lg border border-[var(--border)] p-1"
+					className="flex items-center gap-1 rounded-[6px] border border-[var(--hairline)] bg-[var(--canvas)] p-0.5"
 					role="group"
 					aria-label="Activity range"
 				>
@@ -130,9 +130,9 @@ export function ActivityCard({
 								setRange(r);
 								setLoading(true);
 							}}
-							className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+							className={`rounded-[4px] px-2 py-0.5 text-xs font-medium transition-colors ${
 								range === r
-									? "bg-[var(--accent)] text-white"
+									? "bg-[var(--surface-2)] text-[var(--fg)] border border-[var(--hairline-strong)]"
 									: "text-[var(--muted)] hover:text-[var(--fg)]"
 							}`}
 						>

@@ -46,7 +46,7 @@ function stateDot(state: StepState, index: number): ReactNode {
     return (
       <span
         aria-hidden
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/10 text-xs font-bold text-[var(--muted)] ring-1 ring-[var(--accent)]/25"
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-xs font-semibold text-[var(--primary-hover)] border border-[var(--primary)]/30"
       >
         {index + 1}
       </span>
@@ -55,7 +55,7 @@ function stateDot(state: StepState, index: number): ReactNode {
   return (
     <span
       aria-hidden
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--nav-active-bg)] text-xs font-semibold text-[var(--muted)] ring-1 ring-[var(--border)] dark:bg-white/5"
+      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-xs font-medium text-[var(--muted)] border border-[var(--hairline)]"
     >
       {index + 1}
     </span>

@@ -15,13 +15,13 @@ export default function NotFound() {
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/dashboard"
-            className="btn-cohere btn-cohere-primary"
+            className="btn-linear btn-linear-primary"
           >
             Go to dashboard
           </Link>
           <Link
             href="/"
-            className="btn-cohere btn-cohere-ghost"
+            className="btn-linear btn-linear-secondary"
           >
             Back home
           </Link>

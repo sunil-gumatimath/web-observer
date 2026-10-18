@@ -47,7 +47,7 @@ function HeaderLogo({ compact = false }: { compact?: boolean }) {
 			href="/dashboard"
 			className="flex items-center gap-2.5 tracking-tight text-[var(--fg)]"
 		>
-			<Logo compact={compact} iconSize={36} />
+			<Logo compact={compact} iconSize={32} />
 		</Link>
 	);
 }
@@ -56,12 +56,11 @@ function ClerkAuthControls() {
 	if (!config.clerkEnabled) {
 		// Dev mode: no Clerk session. The app authenticates via the backend
 		// X-Internal-Token; show a static dev indicator instead of auth buttons.
-		// suppressHydrationWarning: Retriever / other extensions inject rtrvr-ls attributes before hydrate
 		return (
 			<span
 				suppressHydrationWarning
 				title="Dev mode — internal token auth"
-				className="rounded-[8px] border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted)]"
+				className="rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 py-1 text-xs font-medium text-[var(--muted)]"
 			>
 				Dev
 			</span>
@@ -74,7 +73,7 @@ function ClerkUserControls() {
 	const { isSignedIn, isLoaded } = useAuth();
 	if (!isLoaded) {
 		return (
-			<span suppressHydrationWarning className="h-8 w-8 animate-pulse-soft rounded-full bg-slate-200 dark:bg-slate-800" />
+			<span suppressHydrationWarning className="h-7 w-7 animate-pulse-soft rounded-full bg-[var(--surface-2)]" />
 		);
 	}
 	if (!isSignedIn) {
@@ -82,13 +81,13 @@ function ClerkUserControls() {
 			<div className="flex items-center gap-2" suppressHydrationWarning>
 				<Link
 					href="/sign-in"
-					className="rounded-full px-3 py-1.5 text-sm text-[var(--fg)] transition hover:text-[var(--accent)] hover:opacity-80"
+					className="rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 py-1 text-xs font-medium text-[var(--fg)] transition hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)]"
 				>
 					Sign in
 				</Link>
 				<Link
 					href="/sign-up"
-					className="rounded-full bg-[var(--fg)] px-3 py-1.5 text-sm text-[var(--bg)] transition hover:bg-[var(--fg-2)] dark:bg-white dark:text-black dark:hover:bg-neutral-200"
+					className="rounded-[6px] bg-[var(--primary)] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[var(--primary-hover)]"
 				>
 					Sign up
 				</Link>
@@ -99,18 +98,15 @@ function ClerkUserControls() {
 		<UserButton
 			appearance={{
 				elements: {
-					avatarBox: "h-8 w-8 ring-2 ring-[var(--accent)]/30",
+					avatarBox: "h-7 w-7 ring-1 ring-[var(--hairline-strong)]",
 				},
 			}}
 		/>
 	);
 }
 
-/** webdog.ai-parity account switcher — switch between workspaces you belong to. */
+/** Workspace switcher — switch between workspaces you belong to. */
 function WorkspaceSwitcher() {
-	// In dev mode (no Clerk) there is no <ClerkProvider>, so calling useAuth()
-	// would throw "useAuth can only be used within the <ClerkProvider />".
-	// The switcher only makes sense with a session, so render nothing.
 	if (!config.clerkEnabled) return null;
 	return <ClerkWorkspaceSwitcher />;
 }
@@ -142,7 +138,7 @@ function ClerkWorkspaceSwitcher() {
 		<select
 			aria-label="Switch workspace"
 			value={current}
-			className="hidden max-w-[10rem] rounded-[8px] border border-[var(--border)] bg-[var(--field-bg)] px-2 py-1.5 text-xs text-[var(--fg)] sm:block"
+			className="hidden max-w-[10rem] rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2 py-1 text-xs text-[var(--fg)] sm:block"
 			onChange={(e) => {
 				const id = e.target.value;
 				setCurrent(id);
@@ -191,18 +187,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 		return () => window.removeEventListener("keydown", onKey);
 	}, [open]);
 
-	// suppressHydrationWarning: browser extensions (e.g. Retriever) inject attributes
-	// like `rtrvr-ls` into the DOM before React hydrates, which is not an app bug.
 	return (
 		<div className="min-h-screen bg-[var(--bg)] text-[var(--fg)]" suppressHydrationWarning>
 			<header
-				className="sticky top-0 z-40 border-b border-[var(--border-soft)] bg-[var(--bg)]"
+				className="sticky top-0 z-40 h-14 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-md"
 				suppressHydrationWarning
 			>
-				<div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3" suppressHydrationWarning>
-					<div className="flex items-center gap-3" suppressHydrationWarning>
+				<div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-4 px-4" suppressHydrationWarning>
+					<div className="flex items-center gap-4" suppressHydrationWarning>
 						<HeaderLogo />
-						<nav className="ml-2 hidden items-center gap-0.5 md:flex" suppressHydrationWarning>
+						<nav className="hidden items-center gap-1 md:flex" suppressHydrationWarning>
 							{nav.map((item) => {
 								const active = item.match(pathname);
 								return (
@@ -218,33 +212,33 @@ export function AppShell({ children }: { children: ReactNode }) {
 						</nav>
 					</div>
 
-				<div className="flex items-center gap-2 sm:gap-3" suppressHydrationWarning>
-					<button
-						type="button"
-						onClick={() => setPaletteOpen(true)}
-						className="hidden h-9 items-center gap-2 rounded-[8px] border border-[var(--border)] px-3 text-xs text-[var(--muted)] transition hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:inline-flex"
-						aria-label="Open command palette"
-					>
-						<span aria-hidden>⌕</span>
-						<span>Search…</span>
-						<kbd className="rounded border border-[var(--border)] px-1 py-0.5 text-[10px]">⌘K</kbd>
-					</button>
-					<button
-						type="button"
-						onClick={() => setPaletteOpen(true)}
-						className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-[var(--border)] text-[var(--muted)] transition hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:hidden"
-						aria-label="Open search"
-					>
-						<span aria-hidden className="text-base leading-none">⌕</span>
-					</button>
-					<WorkspaceSwitcher />
-					<ThemeToggle />
-						<div className="hidden items-center border-l border-[var(--border)] pl-3 sm:flex" suppressHydrationWarning>
+					<div className="flex items-center gap-2 sm:gap-2.5" suppressHydrationWarning>
+						<button
+							type="button"
+							onClick={() => setPaletteOpen(true)}
+							className="hidden h-8 items-center gap-2 rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 text-xs text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 sm:inline-flex"
+							aria-label="Open command palette"
+						>
+							<span aria-hidden>⌕</span>
+							<span>Search…</span>
+							<kbd className="rounded border border-[var(--hairline)] px-1 py-0.2 text-[10px]">⌘K</kbd>
+						</button>
+						<button
+							type="button"
+							onClick={() => setPaletteOpen(true)}
+							className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] sm:hidden"
+							aria-label="Open search"
+						>
+							<span aria-hidden className="text-sm leading-none">⌕</span>
+						</button>
+						<WorkspaceSwitcher />
+						<ThemeToggle />
+						<div className="hidden items-center border-l border-[var(--hairline)] pl-2.5 sm:flex" suppressHydrationWarning>
 							<ClerkAuthControls />
 						</div>
 						<button
 							type="button"
-							className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-[var(--border)] text-[var(--muted)] transition hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] md:hidden"
+							className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] transition hover:text-[var(--fg)] md:hidden"
 							onClick={() => setOpen((v) => !v)}
 							aria-label="Toggle menu"
 							aria-expanded={open}
@@ -252,7 +246,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 						>
 							{open ? (
 								<svg
-									className="h-5 w-5"
+									className="h-4 w-4"
 									fill="none"
 									viewBox="0 0 24 24"
 									stroke="currentColor"
@@ -266,7 +260,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 								</svg>
 							) : (
 								<svg
-									className="h-5 w-5"
+									className="h-4 w-4"
 									fill="none"
 									viewBox="0 0 24 24"
 									stroke="currentColor"
@@ -286,7 +280,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 				{open ? (
 					<div
 						id="mobile-nav"
-						className="border-t border-[var(--border)] px-4 py-3 md:hidden"
+						className="border-b border-[var(--border)] bg-[var(--bg)] px-4 py-3 md:hidden shadow-lg"
 						suppressHydrationWarning
 					>
 						<nav className="flex flex-col gap-1" suppressHydrationWarning>
@@ -298,7 +292,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 										href={item.href}
 										onClick={() => setOpen(false)}
 										className={cn(
-											"nav-link flex min-h-[40px] items-center px-3",
+											"nav-link flex min-h-[36px] items-center px-3",
 											active && "nav-link-active",
 										)}
 									>
@@ -314,14 +308,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 				) : null}
 			</header>
 
-		<main
-			key={pathname}
-			className="mx-auto max-w-6xl px-4 py-8 animate-fade-in-up"
-			suppressHydrationWarning
-		>
-			{children}
-		</main>
-		<CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-	</div>
+			<main
+				key={pathname}
+				className="mx-auto max-w-6xl px-4 py-8 animate-fade-in-up"
+				suppressHydrationWarning
+			>
+				{children}
+			</main>
+			<CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+		</div>
 	);
 }

@@ -33,7 +33,7 @@ export default function Error({
           </Button>
           <Link
             href="/dashboard"
-            className="btn-cohere btn-cohere-ghost"
+            className="btn-linear btn-linear-secondary"
           >
             Go to dashboard
           </Link>
