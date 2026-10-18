@@ -320,8 +320,15 @@ class ChangeEvent(Base):
     monitor_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False
     )
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("monitor_runs.id", ondelete="CASCADE"), nullable=False
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        # SET NULL (not CASCADE): the run purge in retention deletes runs
+        # older than 90 days, and the change event IS the inbox history —
+        # deleting the run must detach the event from its run, never delete
+        # it. The unique constraint uq_change_event_run allows multiple
+        # NULLs, and current events keep their run_id for traceability.
+        UUID(as_uuid=True),
+        ForeignKey("monitor_runs.id", ondelete="SET NULL"),
+        nullable=True,
     )
     previous_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("snapshots.id", ondelete="SET NULL"), nullable=True

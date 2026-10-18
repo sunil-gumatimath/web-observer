@@ -387,7 +387,8 @@ class ChangeEventOut(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     monitor_id: uuid.UUID
-    run_id: uuid.UUID
+    # Detached when the run is retired by retention (see migration 015).
+    run_id: uuid.UUID | None
     previous_snapshot_id: uuid.UUID | None
     new_snapshot_id: uuid.UUID
     previous_hash: str | None
