@@ -1,4 +1,11 @@
-"""Workspace usage counters and daily quota checks."""
+"""Workspace usage counters and daily quota checks.
+
+Counter rows are created with an upsert (``INSERT ... ON CONFLICT DO
+NOTHING``) so two workers racing on the first check of a day cannot blow up
+with a unique-constraint IntegrityError, and every increment is an atomic SQL
+``UPDATE x = x + n`` so concurrent transactions cannot lose increments via
+read-modify-write last-writer-wins.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +13,8 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy import update as sa_update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -21,49 +30,77 @@ def get_or_create_counter(
     db: Session, workspace_id: uuid.UUID, *, now: datetime | None = None
 ) -> UsageCounter:
     start = period_start_utc(now)
-    counter = db.scalar(
-        select(UsageCounter).where(
-            UsageCounter.workspace_id == workspace_id,
-            UsageCounter.period_start == start,
-        )
-    )
-    if counter is None:
-        counter = UsageCounter(
+    if db.get_bind().dialect.name == "postgresql":
+        # Upsert on the (workspace_id, period_start) unique constraint: two
+        # workers racing on the first check of a day cannot blow up with a
+        # unique-constraint IntegrityError mid-pipeline. DO NOTHING without an
+        # explicit conflict target covers any unique conflict on the row.
+        # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+        stmt = pg_insert(UsageCounter.__table__).values(
             workspace_id=workspace_id,
             period_start=start,
             checks_count=0,
             notifications_count=0,
             storage_bytes=0,
         )
-        db.add(counter)
-        db.flush()
+        db.execute(stmt.on_conflict_do_nothing())
+    else:
+        # Non-PostgreSQL dialects (e.g. SQLite unit tests): plain read-then-
+        # insert, which is safe under a single writer per process.
+        counter = db.scalar(
+            select(UsageCounter).where(
+                UsageCounter.workspace_id == workspace_id,
+                UsageCounter.period_start == start,
+            )
+        )
+        if counter is None:
+            counter = UsageCounter(workspace_id=workspace_id, period_start=start)
+            db.add(counter)
+            db.flush()
+        return counter
+    db.flush()
+    return db.scalar(
+        select(UsageCounter).where(
+            UsageCounter.workspace_id == workspace_id,
+            UsageCounter.period_start == start,
+        )
+    )
+
+
+def _increment(db: Session, counter: UsageCounter, column: str, n: int) -> UsageCounter:
+    # Atomic SQL increment: concurrent transactions can no longer lose
+    # updates the way the old read-modify-write (`counter.x += n`) did.
+    # pi-lens-ignore: python-sql-injection - fixed column name, params bound
+    db.execute(
+        sa_update(UsageCounter)
+        .where(UsageCounter.id == counter.id)
+        .values({column: getattr(UsageCounter, column) + n})
+    )
+    # Expire so the next read reloads the summed value from the DB.
+    db.expire(counter)
     return counter
 
 
 def increment_checks(db: Session, workspace_id: uuid.UUID, *, n: int = 1) -> UsageCounter:
     counter = get_or_create_counter(db, workspace_id)
-    counter.checks_count += n
-    return counter
+    return _increment(db, counter, "checks_count", n)
 
 
 def increment_notifications(db: Session, workspace_id: uuid.UUID, *, n: int = 1) -> UsageCounter:
     counter = get_or_create_counter(db, workspace_id)
-    counter.notifications_count += n
-    return counter
+    return _increment(db, counter, "notifications_count", n)
 
 
 def add_storage_bytes(db: Session, workspace_id: uuid.UUID, *, nbytes: int) -> UsageCounter:
     counter = get_or_create_counter(db, workspace_id)
-    counter.storage_bytes += max(0, nbytes)
-    return counter
+    return _increment(db, counter, "storage_bytes", max(0, nbytes))
 
 
 def increment_ai_tokens(db: Session, workspace_id: uuid.UUID, *, n: int = 1) -> UsageCounter:
     if n <= 0:
         return get_or_create_counter(db, workspace_id)
     counter = get_or_create_counter(db, workspace_id)
-    counter.ai_tokens += n
-    return counter
+    return _increment(db, counter, "ai_tokens", n)
 
 
 class QuotaExceeded(Exception):

@@ -98,7 +98,13 @@ def claim_due_monitors(limit: int) -> list[tuple[uuid.UUID, bool]]:
                 continue
 
             try:
-                assert_can_run_check(db, monitor.workspace_id)
+                # Savepoint: assert_can_run_check can INSERT a UsageCounter,
+                # and although the counter insert is now upsert-safe
+                # (ON CONFLICT DO NOTHING), any failure inside the
+                # lock-holding claim transaction must roll back only this
+                # monitor's work, not the whole batch.
+                with db.begin_nested():
+                    assert_can_run_check(db, monitor.workspace_id)
             except QuotaExceeded:
                 logger.warning(
                     "quota_exceeded workspace_id=%s monitor_id=%s", monitor.workspace_id, monitor.id
