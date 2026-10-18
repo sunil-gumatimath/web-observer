@@ -163,6 +163,16 @@ def get_settings() -> Settings:
             "value is not acceptable outside development. "
             "Set INTERNAL_API_TOKEN in the environment."
         )
+    # An empty/whitespace-only token is a full auth bypass: the auth dependency
+    # compares the (absent) header against the configured token with
+    # hmac.compare_digest, so "" == "" would authenticate every unauthenticated
+    # request as an internal owner. Reject it at startup, before any request.
+    if not settings.internal_api_token.strip():
+        raise RuntimeError(
+            "INTERNAL_API_TOKEN is empty. It grants owner-equivalent access to "
+            "every workspace, so an empty value disables authentication entirely. "
+            "Set it to a real secret."
+        )
     if settings.internal_api_token == "dev-internal-token":
         raise RuntimeError(
             "INTERNAL_API_TOKEN must be set to a non-default value outside development"

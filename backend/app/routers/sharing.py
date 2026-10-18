@@ -259,8 +259,15 @@ def create_invite(
     principal: Principal,
     workspace: AdminWs,
 ) -> WorkspaceInviteOut:
-    if body.role not in ("owner", "admin", "member", "viewer"):
-        raise HTTPException(status_code=400, detail="Invalid role")
+    # Owners are never grantable via an admin-minted invite: an admin could
+    # create an owner invite and redeem it themselves (self-promotion),
+    # bypassing the owner-only member-management endpoints. Role *transfers* to
+    # owner stay exclusive to `PATCH /members/{user_id}` (owner-only).
+    if body.role not in ("admin", "member", "viewer"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid role: invites may grant admin, member, or viewer",
+        )
     token, token_hash, prefix = new_token()
     row = WorkspaceInvite(
         workspace_id=workspace_id,
@@ -409,6 +416,11 @@ def redeem_invite(
     if row is None or (row.expires_at and row.expires_at < now):
         db.rollback()
         raise HTTPException(status_code=404, detail="Invite link not found")
+    if row.role == "owner":
+        # Defense-in-depth: legacy owner-role invites (pre-fix) are inert at
+        # redemption time even if one is still outstanding in the database.
+        db.rollback()
+        raise HTTPException(status_code=410, detail="Invite link is no longer valid")
 
     existing = db.scalar(
         select(WorkspaceMember).where(

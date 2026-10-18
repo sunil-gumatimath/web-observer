@@ -4,6 +4,7 @@ import hmac
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,7 +24,11 @@ router = APIRouter(prefix="/api/v1", tags=["internal"])
 
 
 def require_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
-    if not hmac.compare_digest(x_internal_token or "", settings.internal_api_token):
+    # Never authenticate against an empty configured token: that would make an
+    # absent header ("" == "") a valid credential.
+    if not settings.internal_api_token or not hmac.compare_digest(
+        x_internal_token or "", settings.internal_api_token
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal token"
         )
@@ -33,7 +38,7 @@ def require_internal_token(x_internal_token: str | None = Header(default=None)) 
     "/internal/seed", response_model=SeedResponse, dependencies=[Depends(require_internal_token)]
 )
 def seed_dev_workspace(
-    email: str = "dev@example.com",
+    email: EmailStr = "dev@example.com",  # type: ignore[assignment]
     workspace_name: str = "Dev Workspace",
     db: Session = Depends(get_db),
 ) -> SeedResponse:

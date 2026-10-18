@@ -31,16 +31,36 @@ def test_legacy_plaintext_fallback_read() -> None:
 
 def test_token_new_scheme_verify() -> None:
     token, token_hash, _prefix = new_token()
-    assert token_hash.startswith("v1$")
+    assert token_hash.startswith("v2$")
     assert hash_token(token) == token_hash
     assert token_hash in candidate_hashes(token)
     assert verify_token(token, token_hash)
 
 
+def test_token_legacy_v1_hmac_scheme_still_verifies() -> None:
+    """Pre-HKDF rows (v1$, SECRET_KEY HMAC) keep working via dual-verify."""
+    import hashlib as _hashlib
+    import hmac as _hmac
+
+    from app.config import get_settings
+
+    token = "share-legacy-token"
+    legacy = (
+        "v1$"
+        + _hmac.new(
+            get_settings().secret_key.encode("utf-8"),
+            token.encode("utf-8"),
+            _hashlib.sha256,
+        ).hexdigest()
+    )
+    assert legacy in candidate_hashes(token)
+    assert verify_token(token, legacy)
+
+
 def test_token_old_scheme_still_verifies() -> None:
     token, _new_hash, _prefix = new_token()
     legacy = legacy_hash_token(token)
-    assert not legacy.startswith("v1$")
+    assert not legacy.startswith(("v1$", "v2$"))
     assert legacy in candidate_hashes(token)
     assert verify_token(token, legacy)
 

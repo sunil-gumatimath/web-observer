@@ -280,8 +280,12 @@ def get_current_principal(
         request.state.auth_principal = principal
         return principal
 
-    # Dev / smoke internal token
-    if hmac.compare_digest(x_internal_token or "", settings.internal_api_token):
+    # Dev / smoke internal token. The configured token must be non-empty:
+    # comparing an absent header ("") against an empty configured token would
+    # authenticate every unauthenticated request (see get_settings guard).
+    if settings.internal_api_token and hmac.compare_digest(
+        x_internal_token or "", settings.internal_api_token
+    ):
         principal = AuthPrincipal(
             user=None, is_internal=True, email="internal@local", role_hint="owner"
         )
