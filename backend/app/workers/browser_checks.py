@@ -9,10 +9,11 @@ import dramatiq
 
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import ChangeEvent, Monitor, NotificationOutbox
+from app.models import ChangeEvent, Monitor, NotificationOutbox, Workspace
 from app.models.entities import OutboxStatus, RunStatus
 from app.services.browser_fetch import fetch_url_browser
 from app.services.domain_guard import _redis
+from app.services.failure_notify import record_run_outcome
 from app.workers.broker import redis_broker  # noqa: F401
 from app.workers.run_guard import execute_monitored_run
 
@@ -38,38 +39,70 @@ def run_browser_check(run_id: str) -> None:
             run_http_check.send(run_id)
             return True
 
-        # Daily browser-check quota per workspace — atomic incr with check.
+        # Daily browser-check quota per workspace, charged ONCE per run — not
+        # once per message execution. Dramatiq is at-least-once, so a plain
+        # INCR would burn quota for every retry of the same run; a per-run
+        # receipt key makes the reservation idempotent.
+        from app.services.plans import get_plan
+
+        workspace = db.get(Workspace, monitor.workspace_id)
+        if workspace is not None:
+            limit = get_plan(workspace).max_browser_checks_per_day
+        else:
+            limit = settings.max_browser_checks_per_day
         day = datetime.now(UTC).strftime("%Y%m%d")
         bkey = f"browser_quota:{monitor.workspace_id}:{day}"
+        rkey = f"browser_quota_run:{run.id}"
         r = _redis()
+        # KEYS[1] = quota counter, KEYS[2] = per-run reservation receipt,
+        # ARGV[1] = TTL seconds. Returns the quota counter after a *new*
+        # reservation, or 0 when this run already reserved a slot.
         lua = """
+        local already = redis.call('EXISTS', KEYS[2])
+        if already == 1 then return 0 end
+        redis.call('SET', KEYS[2], '1', 'EX', ARGV[1])
         local cur = redis.call('INCR', KEYS[1])
         if cur == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
         return cur
         """
         try:
-            cur = int(str(r.eval(lua, 1, bkey, "86400")))
+            cur = int(str(r.eval(lua, 2, bkey, rkey, "86400")))
         except Exception:
             # NOTE: keep boolean operators out of this handler — the
             # no-boolean-in-except lint scans the entire except subtree.
+            already = r.exists(rkey)
+            if already:
+                return False
             fallback = r.incr(bkey)
             cur = int(str(fallback)) if fallback else 1
             if cur == 1:
                 r.expire(bkey, 86_400)
-        if cur > settings.max_browser_checks_per_day:
-            # Rollback overshoot
+            r.set(rkey, "1", ex=86_400)
+        if cur and cur > limit:
+            # Rollback overshoot and release this run's receipt.
             try:
                 r.decr(bkey)
+                r.delete(rkey)
             except Exception as decr_exc:  # noqa: BLE001
                 logger.debug("browser_quota_rollback_failed error=%s", decr_exc)
             run.status = RunStatus.FAILED.value
-            run.error_code = "internal_error"
-            run.error_message = "Browser check daily quota exceeded"
+            run.error_code = "quota_exceeded"
+            run.error_message = (
+                f"Browser check daily quota exceeded (plan limit: {limit} browser checks/day)"
+            )
             run.finished_at = datetime.now(UTC)
+            outbox_ids = record_run_outcome(
+                db,
+                monitor=monitor,
+                succeeded=False,
+                error_code="quota_exceeded",
+                error_message=run.error_message,
+            )
             db.commit()
+            from app.workers.run_guard import enqueue_outbox
+
+            enqueue_outbox(outbox_ids)
             return True
-        # We already reserved quota; avoid double-increment in _fetch
-        run._quota_reserved = True  # type: ignore[attr-defined]
         return False
 
     def _fetch(monitor: Monitor, db):
@@ -89,7 +122,8 @@ def run_browser_check(run_id: str) -> None:
                 timeout_seconds=max(monitor.timeout_seconds, 45),
                 max_response_bytes=monitor.max_response_bytes,
             )
-        # Quota already reserved atomically in _pre_run_hook; just refresh expiry.
+        # Quota was reserved once for this run in _pre_run_hook (receipt key);
+        # just refresh expiry — advisory housekeeping only.
         try:
             day = datetime.now(UTC).strftime("%Y%m%d")
             bkey = f"browser_quota:{monitor.workspace_id}:{day}"

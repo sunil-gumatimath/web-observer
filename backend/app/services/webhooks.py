@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.models import WebhookDelivery, WebhookEndpoint
@@ -72,7 +73,17 @@ def _backoff_seconds(attempt: int) -> int:
 
 
 def reap_stuck_webhook_deliveries(db: Session, older_than_seconds: int = 600) -> int:
-    """Reset deliveries stuck in processing for longer than threshold."""
+    """Reset deliveries stuck in processing for longer than threshold.
+
+    The exception paths of :func:`deliver_webhook` always transition the row
+    back to PENDING (and raise to dramatiq, which schedules a retry), so a row
+    stuck in ``processing`` means its worker died hard mid-delivery — nothing
+    else exists to deliver it. Resetting it to ``pending`` alone left those
+    rows stranded forever (nothing polls that status); re-enqueueing makes
+    recovery real. Attempt-capped rows become terminal ``failed`` instead.
+
+    Returns the number of rows recovered (re-enqueued or marked failed).
+    """
     from datetime import timedelta
 
     cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
@@ -82,11 +93,25 @@ def reap_stuck_webhook_deliveries(db: Session, older_than_seconds: int = 600) ->
             WebhookDelivery.updated_at < cutoff,
         )
     ).all()
+    reenqueued: list[str] = []
     for d in stuck:
+        if d.attempts >= 5:
+            d.status = "failed"
+            if not d.last_error:
+                d.last_error = f"retries exhausted ({d.attempts} attempts)"
+            logger.warning(
+                "webhook_delivery_attempts_exhausted id=%s attempts=%d", d.id, d.attempts
+            )
+            continue
         d.status = "pending"
+        reenqueued.append(str(d.id))
     if stuck:
         db.commit()
-        logger.info("webhook_reaped_stuck count=%d", len(stuck))
+        from app.workers.webhooks import deliver_webhook_message
+
+        for delivery_id in reenqueued:
+            deliver_webhook_message.send(delivery_id)
+        logger.info("webhook_reaped_stuck count=%d reenqueued=%d", len(stuck), len(reenqueued))
     return len(stuck)
 
 
@@ -101,9 +126,27 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
         db.commit()
         return
 
-    delivery.attempts += 1
-    delivery.status = "processing"
+    # Claim the row atomically: only a PENDING delivery may transition to
+    # PROCESSING. Dramatiq is at-least-once and the reaper re-enqueues rows,
+    # so a redelivered message racing a live attempt sees rowcount 0 and
+    # exits instead of double-delivering.
+    claim = db.execute(
+        sa_update(WebhookDelivery)
+        .where(
+            WebhookDelivery.id == delivery.id,
+            WebhookDelivery.status == "pending",
+        )
+        .values(
+            status="processing",
+            attempts=WebhookDelivery.attempts + 1,
+        )
+    )
     db.commit()
+    # rowcount exists on CursorResult; the Result stub omits it.
+    if claim.rowcount != 1:  # type: ignore[attr-defined]
+        return
+    # Reload claimed fields (ORM copy is stale after the bulk UPDATE).
+    db.refresh(delivery)
 
     body_obj = {
         "id": str(delivery.id),

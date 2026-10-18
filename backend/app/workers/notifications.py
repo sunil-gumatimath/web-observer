@@ -8,6 +8,7 @@ from uuid import UUID
 
 import dramatiq
 import httpx
+from sqlalchemy import update as sa_update
 
 from app.config import get_settings
 from app.db import SessionLocal
@@ -20,6 +21,11 @@ from app.workers.broker import redis_broker  # noqa: F401
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Hard ceiling on outbox delivery attempts. Without a cap the reaper would
+# re-enqueue a permanently failing row (wrong email, revoked Slack webhook)
+# every ~10 minutes forever. Matches the webhook delivery budget.
+OUTBOX_MAX_ATTEMPTS = 8
+
 
 @dramatiq.actor(queue_name="notifications", max_retries=5, time_limit=60_000)
 def deliver_outbox_message(outbox_id: str) -> None:
@@ -27,20 +33,53 @@ def deliver_outbox_message(outbox_id: str) -> None:
         outbox = db.get(NotificationOutbox, UUID(outbox_id))
         if outbox is None:
             return
-        if outbox.status == OutboxStatus.SENT.value:
+        if outbox.status in (
+            OutboxStatus.SENT.value,
+            OutboxStatus.FAILED.value,
+        ):
+            return
+
+        # Claim the row atomically: only a PENDING row may transition to
+        # PROCESSING. Dramatiq is at-least-once, so a redelivered message
+        # racing a live attempt (or a reaper-enqueued duplicate) sees rowcount
+        # 0 and exits instead of double-delivering.
+        claim = db.execute(
+            sa_update(NotificationOutbox)
+            .where(
+                NotificationOutbox.id == outbox.id,
+                NotificationOutbox.status == OutboxStatus.PENDING.value,
+            )
+            .values(
+                status=OutboxStatus.PROCESSING.value,
+                attempts=NotificationOutbox.attempts + 1,
+            )
+        )
+        db.commit()
+        # rowcount exists on CursorResult; the Result stub omits it.
+        if claim.rowcount != 1:  # type: ignore[attr-defined]
+            return
+        # Reload the claimed fields (ORM copy is stale after the bulk UPDATE).
+        db.refresh(outbox)
+        if outbox.attempts > OUTBOX_MAX_ATTEMPTS:
+            outbox.status = OutboxStatus.FAILED.value
+            outbox.last_error = (
+                f"retries exhausted ({outbox.attempts} attempts); marking permanently failed"
+            )
+            db.commit()
+            logger.error(
+                "outbox_attempts_exhausted outbox_id=%s attempts=%d",
+                outbox_id,
+                outbox.attempts,
+            )
             return
 
         channel = db.get(NotificationChannel, outbox.channel_id)
         if channel is None or not channel.enabled:
+            # Claim already set PROCESSING and counted the attempt.
             outbox.status = OutboxStatus.FAILED.value
             outbox.last_error = "Channel missing or disabled"
-            outbox.attempts += 1
             db.commit()
             return
-
-        outbox.status = OutboxStatus.PROCESSING.value
-        outbox.attempts += 1
-        db.commit()
 
         payload = outbox.payload or {}
         channel_type = (payload.get("channel_type") or channel.type or "email").lower()
@@ -123,6 +162,20 @@ def deliver_outbox_message(outbox_id: str) -> None:
                 to_addr[:80],
             )
         except Exception as exc:  # noqa: BLE001
+            # Exhausted attempts (counted by the claim above plus dramatiq's
+            # own retries) become terminal: no more re-entering, the row parks
+            # in FAILED for visibility. Keep raising to dramatiq until the cap.
+            if outbox.attempts >= OUTBOX_MAX_ATTEMPTS:
+                outbox.status = OutboxStatus.FAILED.value
+                outbox.last_error = str(exc)[:2000]
+                outbox.updated_at = datetime.now(UTC)
+                db.commit()
+                logger.exception(
+                    "notification_failed_permanently outbox_id=%s attempts=%d",
+                    outbox_id,
+                    outbox.attempts,
+                )
+                return
             outbox.status = OutboxStatus.PENDING.value
             outbox.last_error = str(exc)[:2000]
             outbox.updated_at = datetime.now(UTC)
@@ -132,17 +185,22 @@ def deliver_outbox_message(outbox_id: str) -> None:
 
 
 def reap_stuck_outbox_messages(db, *, older_than_seconds: int = 600) -> int:
-    """Re-enqueue outbox rows stuck in PROCESSING/PENDING after a worker death.
+    """Recover outbox rows whose delivery died without a live retry scheduled.
 
-    ``deliver_outbox_message`` sets status to PROCESSING and commits before
-    delivering; if the worker dies mid-delivery the row is stuck in PROCESSING
-    forever (it never re-enters the queue, and the error path only runs on an
-    actual exception).  This reaper finds such rows — or PENDING rows that were
-    never picked up — older than ``older_than_seconds`` and flips them back to
-    PENDING so they are re-delivered.  ``updated_at`` is used when present,
-    otherwise ``created_at``.
+    ``deliver_outbox_message`` claims a row PENDING -> PROCESSING and commits
+    before delivering; if the worker process dies hard mid-delivery the row is
+    stuck in PROCESSING forever (the exception path always transitions to
+    PENDING and raises to dramatiq, so a stuck PROCESSING row means no retry
+    is in flight). This reaper re-enqueues such rows — plus PENDING rows that
+    were never picked up (attempt count 0: a lost Redis message after a
+    restart). PENDING rows with attempts > 0 already have a dramatiq retry
+    scheduled, so re-enqueueing them would race the scheduled retry and
+    duplicate sends; after the attempt budget is exhausted they become
+    terminal FAILED instead of looping forever.
 
-    Returns the number of rows re-enqueued.
+    ``updated_at`` is used when present, otherwise ``created_at``.
+
+    Returns the number of rows re-enqueued (terminal FAILED rows excluded).
     """
     from sqlalchemy import select
 
@@ -157,24 +215,49 @@ def reap_stuck_outbox_messages(db, *, older_than_seconds: int = 600) -> int:
     ).all()
 
     reaped = 0
+    enqueued: list[str] = []
     for outbox in stuck:
         stamp = outbox.updated_at or outbox.created_at or cutoff
         if stamp > cutoff:
             continue
-        outbox.status = OutboxStatus.PENDING.value
+        old_status = outbox.status
+        if outbox.attempts >= OUTBOX_MAX_ATTEMPTS:
+            # Budget exhausted: park permanently instead of looping forever.
+            outbox.status = OutboxStatus.FAILED.value
+            if not outbox.last_error:
+                outbox.last_error = f"retries exhausted ({outbox.attempts} attempts)"
+            db.flush()
+            logger.warning(
+                "outbox_attempts_exhausted_at_reap outbox_id=%s attempts=%d",
+                outbox.id,
+                outbox.attempts,
+            )
+            continue
+        # Re-enqueue only rows with nothing scheduled to deliver them:
+        # attempts == 0 for a PENDING row means the queue message was lost;
+        # a stuck PROCESSING row means its worker died mid-delivery.
+        if old_status == OutboxStatus.PENDING.value and outbox.attempts > 0:
+            continue
         outbox.updated_at = datetime.now(UTC)
         db.add(outbox)
         db.flush()
-        deliver_outbox_message.send(str(outbox.id))
+        enqueued.append(str(outbox.id))
         reaped += 1
         logger.warning(
-            "reaped_stuck_outbox outbox_id=%s old_status=%s",
+            "reaped_stuck_outbox outbox_id=%s old_status=%s attempts=%d",
             outbox.id,
-            outbox.status,
+            old_status,
+            outbox.attempts,
         )
 
     if reaped:
+        # Commit BEFORE enqueueing: the worker's PENDING -> PROCESSING claim
+        # must be able to see the durable row, otherwise a fast pick-up sees
+        # the stale pre-commit status, drops the message, and the row sits
+        # until the next reaper cycle.
         db.commit()
+        for outbox_id in enqueued:
+            deliver_outbox_message.send(outbox_id)
     return reaped
 
 

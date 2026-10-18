@@ -63,6 +63,24 @@ def fail_run(
     db.commit()
 
 
+def enqueue_outbox(outbox_ids) -> None:
+    """Best-effort dramatiq enqueue for outbox rows.
+
+    A Redis outage during enqueue must not re-raise out of the worker
+    (that would trigger dramatiq retries whose claim fails rowcount-0 and
+    ends in pointless retry cycles). Re-enqueued rows sit PENDING until the
+    periodic outbox reaper re-dispatches them.
+    """
+    for oid in outbox_ids:
+        try:
+            deliver_outbox_message.send(str(oid))
+        except Exception:  # noqa: BLE001 - delivery reaper recovers later
+            logger.warning(
+                "outbox_enqueue_failed outbox_id=%s (row stays pending; reaper will retry)",
+                oid,
+            )
+
+
 def execute_monitored_run(
     run_id: str,
     fetch_fn: FetchFn,
@@ -100,6 +118,18 @@ def execute_monitored_run(
             run.error_message = "Monitor missing"
             run.finished_at = datetime.now(UTC)
             db.commit()
+            return
+
+        # Fencing gate: a pre-run hook may bounce a run to another queue by
+        # flipping its status, so it must only ever run while the run hasn't
+        # started. Without this gate, a redelivered message arriving after
+        # the bounce-target worker already finished the run could flip a
+        # terminal SUCCEEDED/FAILED run back to QUEUED and re-execute the
+        # whole pipeline (duplicate snapshot, change event, notifications
+        # and usage increments). The conditional claim below is the actual
+        # fence for execution; this gate is the fence for hooks.
+        if run.status not in (RunStatus.SCHEDULED.value, RunStatus.QUEUED.value):
+            logger.info("run_not_started_allowed run_id=%s status=%s", run_id, run.status)
             return
 
         # --- optional pre-run hook (misrouted-job check, quota, etc.) ---
@@ -159,8 +189,7 @@ def execute_monitored_run(
                 db.commit()
 
             outbox_ids = list(pipeline.outbox_ids or []) + [str(x) for x in outbox_extra]
-            for oid in outbox_ids:
-                deliver_outbox_message.send(str(oid))
+            enqueue_outbox(outbox_ids)
 
             if pipeline.is_baseline:
                 logger.info("baseline_set monitor_id=%s run_id=%s", monitor.id, run.id)
@@ -201,8 +230,7 @@ def execute_monitored_run(
                 error_message=str(exc),
             )
             db.commit()
-            for oid in outbox_extra:
-                deliver_outbox_message.send(str(oid))
+            enqueue_outbox(outbox_extra)
         except Exception as exc:  # noqa: BLE001
             logger.exception("%s_failed run_id=%s", worker_label, run_id)
             if domain:
@@ -216,8 +244,7 @@ def execute_monitored_run(
                 error_message=str(exc)[:2000],
             )
             db.commit()
-            for oid in outbox_extra:
-                deliver_outbox_message.send(str(oid))
+            enqueue_outbox(outbox_extra)
         finally:
             # Only release a slot we actually acquired.  If assert_domain_allowed
             # or acquire_domain_slot raised (e.g. DomainBlocked), slot_acquired

@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import html
 import logging
+import threading
 from typing import Any
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Serializes the global ``resend.api_key`` swap+send so BYOK sends can never
+# leak one workspace's key to (or overwrite) another's in-flight send.
+_RESEND_LOCK = threading.Lock()
 
 
 def send_email(
@@ -49,22 +54,31 @@ def send_email(
 
     import resend
 
-    resend.api_key = effective_key
+    # The SDK's Emails.send reads the module-global ``resend.api_key``. BYOK
+    # sends run concurrently with server-key sends in worker threads/processes;
+    # serialize key swap + send under a lock (and restore the previous value)
+    # so a BYOK thread can never see (or overwrite with) the server key.
+    with _RESEND_LOCK:
+        previous = getattr(resend, "api_key", None)
+        try:
+            resend.api_key = effective_key
 
-    if html_body is None:
-        # Simple HTML wrapper from plain text
-        escaped = html.escape(text).replace("\n", "<br>\n")
-        html_body = f"<div style='font-family:sans-serif;font-size:14px'>{escaped}</div>"
+            if html_body is None:
+                # Simple HTML wrapper from plain text
+                escaped = html.escape(text).replace("\n", "<br>\n")
+                html_body = f"<div style='font-family:sans-serif;font-size:14px'>{escaped}</div>"
 
-    params: dict[str, Any] = {
-        "from": from_addr,
-        "to": to_list,
-        "subject": subject,
-        "html": html_body,
-        "text": text,
-    }
+            params: dict[str, Any] = {
+                "from": from_addr,
+                "to": to_list,
+                "subject": subject,
+                "html": html_body,
+                "text": text,
+            }
 
-    result = resend.Emails.send(params)
+            result = resend.Emails.send(params)
+        finally:
+            resend.api_key = previous
     # SDK may return dict or object with id
     if isinstance(result, dict):
         return str(result.get("id") or "resend")
