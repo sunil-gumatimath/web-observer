@@ -7,27 +7,34 @@ import type { WorkspaceSettings } from "@/lib/types";
 
 // Live Kilo Gateway catalog filtered to $0 input/output models
 // (`isFree: true` at https://api.kilo.ai/api/gateway/models, checked 2026-10-19).
-// Ordered best-first for diff summarisation: routers, then general-purpose
-// models that return text inside ~200 output tokens, then reasoning-heavy
-// models that can spend the whole budget on reasoning, then niche models.
+//
+// Order is a Jev (jev-1.13.0) ranking pass over the free set for this app's job
+// (short factual diff summaries within ~200-300 output tokens), best first.
+// Trailing numbers are Jev's 0-4 fitness score; the top band is solid, the
+// middle band is low-confidence and shifted on a second pass, so don't read
+// close gaps in it as meaningful. This ordering is presentational only — the
+// server default (llm_model) is unchanged.
 const FREE_MODELS: Array<{ value: string; label: string }> = [
-  { value: "kilo-auto/free", label: "Auto Free — Kilo · Recommended router · 256K ctx" },
-  { value: "openrouter/free", label: "Free Models Router — OpenRouter · Vision · 200K ctx" },
-  { value: "reflection/beam-free", label: "Beam 1.0 (free) — Reflection · 1M ctx" },
-  { value: "stealth/glyph-cluster", label: "Glyph Cluster (free) — Stealth · 256K ctx" },
-  { value: "poolside/laguna-s-2.1:free", label: "Laguna S 2.1 (free) — Poolside · Coding · 262K ctx" },
-  { value: "cohere/north-mini-code:free", label: "North Mini Code (free) — Cohere · Coding · 256K ctx" },
-  { value: "dots-studio/dots-3-note-preview:free", label: "Dots3-Note Preview (free) — Dots Studio · Vision · 512K ctx" },
-  { value: "nvidia/nemotron-3.5-super-vl:free", label: "Nemotron 3.5 Super VL (free) — NVIDIA · Vision · Video · 1M ctx" },
-  { value: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra (free) — NVIDIA · 550B · 1M ctx" },
-  { value: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super (free) — NVIDIA · 120B · 262K ctx" },
-  { value: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", label: "Nemotron 3 Nano Omni (free) — NVIDIA · Multimodal · 256K ctx" },
-  { value: "nvidia/nemotron-3.5-lightning:free", label: "Nemotron 3.5 Lightning (free) — NVIDIA · Reasoning · 1M ctx" },
-  { value: "poolside/laguna-xs-2.1:free", label: "Laguna XS 2.1 (free) — Poolside · Coding · 262K ctx" },
-  { value: "thinkingmachines/inkling-small:free", label: "Inkling Small (free) — Thinking Machines · Multimodal · 1M ctx" },
-  { value: "xingchen-agi/xing4.0-29b-a4b:free", label: "Xing4.0 29B A4B (free) — XingChen · Reasoning · 262K ctx" },
-  { value: "liquid/lfm-2.5-2.6b:free", label: "LFM2.5-2.6B (free) — Liquid AI · Lightweight · 65K ctx" },
-  { value: "nvidia/nemotron-3.5-content-safety:free", label: "Nemotron 3.5 Content Safety (free) — NVIDIA · Moderation · 128K ctx" },
+  // Best fits — Jev 2.7-3.0, each returned a correct sentence in a live probe.
+  { value: "reflection/beam-free", label: "Beam 1.0 (free) — Reflection · 1M ctx" }, // 2.95
+  { value: "poolside/laguna-s-2.1:free", label: "Laguna S 2.1 (free) — Poolside · Coding · 262K ctx" }, // 2.90
+  { value: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra (free) — NVIDIA · 550B · 1M ctx" }, // 2.82
+  { value: "stealth/glyph-cluster", label: "Glyph Cluster (free) — Stealth · 256K ctx" }, // 2.72
+  // Workable — Jev 2.2-2.5; several of these scored lower on a second pass.
+  { value: "cohere/north-mini-code:free", label: "North Mini Code (free) — Cohere · Coding · 256K ctx" }, // 2.54
+  { value: "kilo-auto/free", label: "Auto Free — Kilo · Server default router · 256K ctx" }, // 2.47
+  { value: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", label: "Nemotron 3 Nano Omni (free) — NVIDIA · Multimodal · 256K ctx" }, // 2.45
+  { value: "nvidia/nemotron-3.5-super-vl:free", label: "Nemotron 3.5 Super VL (free) — NVIDIA · Vision · Video · 1M ctx" }, // 2.38
+  { value: "dots-studio/dots-3-note-preview:free", label: "Dots3-Note Preview (free) — Dots Studio · Vision · 512K ctx" }, // 2.20
+  // Poor or failing — Jev 0.0-1.0; kept selectable, but prefer options above.
+  { value: "poolside/laguna-xs-2.1:free", label: "Laguna XS 2.1 (free) — Poolside · Coding · 262K ctx" }, // 0.96
+  { value: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super (free) — NVIDIA · 120B · 262K ctx" }, // 0.94
+  { value: "thinkingmachines/inkling-small:free", label: "Inkling Small (free) — Thinking Machines · Multimodal · 1M ctx" }, // 0.94
+  { value: "openrouter/free", label: "Free Models Router — OpenRouter · Vision · 200K ctx" }, // 0.74
+  { value: "xingchen-agi/xing4.0-29b-a4b:free", label: "Xing4.0 29B A4B (free) — XingChen · Reasoning · 262K ctx" }, // 0.41
+  { value: "nvidia/nemotron-3.5-lightning:free", label: "Nemotron 3.5 Lightning (free) — NVIDIA · Reasoning · 1M ctx" }, // 0.00 — empty output at app token cap
+  { value: "liquid/lfm-2.5-2.6b:free", label: "LFM2.5-2.6B (free) — Liquid AI · Lightweight · 65K ctx" }, // 0.00 — empty output at app token cap
+  { value: "nvidia/nemotron-3.5-content-safety:free", label: "Nemotron 3.5 Content Safety (free) — NVIDIA · Moderation · 128K ctx" }, // 0.00 — moderation model, not a summariser
 ];
 
 const LLM_BASE_PRESETS = ["https://api.kilo.ai/api/gateway", "https://api.openai.com/v1"] as const;
