@@ -194,9 +194,9 @@ Write-Host "=== Stack Status (waiting for services) ===" -ForegroundColor Green
 # Honeywell-ish budgets: Neon cold start + DNS blips make first connect slow;
 # the API health check earlier failed as a false negative at 3 s.
 [void](Wait-ForUrl -Url "http://127.0.0.1:8002/health" -Label "API Health" -TimeoutSeconds 30 `
-    -AliveCheck @{ Name = "uvicorn"; Cmd = "app\.main:app"; ErrLog = "api_err.log" })
+    -AliveCheck @{ Name = "uvicorn|python"; Cmd = "app\.main:app"; ErrLog = "api_err.log" })
 [void](Wait-ForUrl -Url "http://127.0.0.1:8002/ready" -Label "DB Ready (Neon)" -TimeoutSeconds 60 `
-    -AliveCheck @{ Name = "uvicorn"; Cmd = "app\.main:app"; ErrLog = "api_err.log" })
+    -AliveCheck @{ Name = "uvicorn|python"; Cmd = "app\.main:app"; ErrLog = "api_err.log" })
 [void](Wait-Frontend -TimeoutSeconds 45)
 
 Write-Host ""
