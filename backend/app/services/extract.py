@@ -62,10 +62,36 @@ def extract_text(
     return apply_ignore_regexes(text, ignore_regexes or [])
 
 
+# Runtime defense-in-depth for stored regexes (schemas already validate new
+# input, but rows created before that cap may hold more/longer patterns):
+# oversized workload is skipped rather than stalling a shared check worker.
+_MAX_IGNORE_REGEX_PATTERNS = 20
+_MAX_IGNORE_REGEX_PATTERN_LEN = 256
+_MAX_IGNORE_REGEX_TEXT_CHARS = 1_000_000
+
+
 def apply_ignore_regexes(text: str, patterns: list[str]) -> str:
+    if len(patterns) > _MAX_IGNORE_REGEX_PATTERNS:
+        raise ExtractionError(
+            "normalization_failed",
+            f"Too many ignore regexes (max {_MAX_IGNORE_REGEX_PATTERNS})",
+        )
+    if len(text) > _MAX_IGNORE_REGEX_TEXT_CHARS:
+        # A pathological pattern over a multi-megabyte body can pin a worker
+        # CPU core for minutes. Above the cap the regex pass is skipped
+        # (deterministically), trading noise-filtering for bounded latency.
+        logger.warning(
+            "ignore_regexes_skipped len=%d cap=%d", len(text), _MAX_IGNORE_REGEX_TEXT_CHARS
+        )
+        return normalize_text(text)
     for pattern in patterns:
         if not pattern:
             continue
+        if len(pattern) > _MAX_IGNORE_REGEX_PATTERN_LEN:
+            raise ExtractionError(
+                "normalization_failed",
+                f"Ignore regex longer than {_MAX_IGNORE_REGEX_PATTERN_LEN} characters",
+            )
         try:
             # pi-lens-ignore: python-unsafe-regex - validated, auth-scoped
             rx = re.compile(pattern, flags=re.MULTILINE)

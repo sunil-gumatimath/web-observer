@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 
@@ -31,6 +32,75 @@ def normalize_tags(v: list[str] | None) -> list[str] | None:
         if t and t not in seen:
             seen.append(t)
     return seen[:10] or None
+
+
+# ---- User-supplied caps (DoS boundaries) ------------------------------------
+# These are enforced at the schema layer so rejected payloads never reach the
+# pipeline; matching runtime guards exist in conditional.py / extract.py.
+_MAX_IGNORE_REGEX_PATTERNS = 20
+_MAX_REGEX_PATTERN_LEN = 256
+_MAX_IGNORE_SELECTORS = 20
+_MAX_SELECTOR_LEN = 300
+_REGEX_ALERT_KEYS = ("regex_must_match", "regex_must_not_match")
+
+
+def _validate_regex_patterns(patterns: list[str] | None) -> list[str] | None:
+    """Validate user-supplied regex patterns: count, length, and compilability."""
+    if patterns is None:
+        return None
+    if len(patterns) > _MAX_IGNORE_REGEX_PATTERNS:
+        raise ValueError(f"at most {_MAX_IGNORE_REGEX_PATTERNS} regex patterns allowed")
+    cleaned: list[str] = []
+    for raw in patterns:
+        pat = str(raw or "")
+        if not pat:
+            continue
+        if len(pat) > _MAX_REGEX_PATTERN_LEN:
+            raise ValueError(f"regex pattern longer than {_MAX_REGEX_PATTERN_LEN} characters")
+        try:
+            re.compile(pat)
+        except re.error as exc:
+            raise ValueError(f"invalid regex {pat!r}: {exc}") from exc
+        cleaned.append(pat)
+    return cleaned or None
+
+
+def _validate_selector_list(selectors: list[str] | None) -> list[str] | None:
+    if selectors is None:
+        return None
+    if len(selectors) > _MAX_IGNORE_SELECTORS:
+        raise ValueError(f"at most {_MAX_IGNORE_SELECTORS} selectors allowed")
+    cleaned: list[str] = []
+    for raw in selectors:
+        sel = str(raw or "").strip()
+        if not sel:
+            continue
+        if len(sel) > _MAX_SELECTOR_LEN:
+            raise ValueError(f"selector longer than {_MAX_SELECTOR_LEN} characters")
+        cleaned.append(sel)
+    return cleaned or None
+
+
+def _validate_alert_config(cfg: dict | None) -> dict | None:
+    """Validate the regex alert rules inside an alert_config dict."""
+    if cfg is None:
+        return None
+    if not isinstance(cfg, dict):
+        raise ValueError("alert_config must be an object")
+    for key in _REGEX_ALERT_KEYS:
+        if key in cfg:
+            pat = cfg[key]
+            if not isinstance(pat, str) or not pat.strip():
+                raise ValueError(f"alert_config.{key} must be a non-empty regex string")
+            if len(pat) > _MAX_REGEX_PATTERN_LEN:
+                raise ValueError(
+                    f"alert_config.{key} longer than {_MAX_REGEX_PATTERN_LEN} characters"
+                )
+            try:
+                re.compile(pat)
+            except re.error as exc:
+                raise ValueError(f"alert_config.{key} is not a valid regex: {exc}") from exc
+    return cfg
 
 
 class WorkspaceCreate(BaseModel):
@@ -118,6 +188,21 @@ class MonitorCreate(BaseModel):
     # If true, enqueue an initial check in the same request (avoids a second
     # round-trip from the frontend). The worker still re-validates the URL.
     run_now: bool = False
+
+    @field_validator("ignore_regexes")
+    @classmethod
+    def _check_ignore_regexes(cls, v: list[str] | None) -> list[str] | None:
+        return _validate_regex_patterns(v)
+
+    @field_validator("ignore_selectors")
+    @classmethod
+    def _check_ignore_selectors(cls, v: list[str] | None) -> list[str] | None:
+        return _validate_selector_list(v)
+
+    @field_validator("alert_config")
+    @classmethod
+    def _check_alert_config(cls, v: dict | None) -> dict | None:
+        return _validate_alert_config(v)
 
     @field_validator("mode")
     @classmethod
@@ -235,6 +320,21 @@ class MonitorUpdate(BaseModel):
     screenshots_enabled: bool | None = None
     alert_config: dict | None = None
     tags: list[str] | None = Field(default=None, max_length=10)
+
+    @field_validator("ignore_regexes")
+    @classmethod
+    def _check_ignore_regexes(cls, v: list[str] | None) -> list[str] | None:
+        return _validate_regex_patterns(v)
+
+    @field_validator("ignore_selectors")
+    @classmethod
+    def _check_ignore_selectors(cls, v: list[str] | None) -> list[str] | None:
+        return _validate_selector_list(v)
+
+    @field_validator("alert_config")
+    @classmethod
+    def _check_alert_config(cls, v: dict | None) -> dict | None:
+        return _validate_alert_config(v)
 
     @field_validator("mode")
     @classmethod

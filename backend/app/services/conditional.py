@@ -7,6 +7,28 @@ from typing import Any
 
 from app.services.structured import diff_lists, items_from_normalized
 
+# User-supplied regexes run inside check workers against fetched page text.
+# Two mitigations keep a pathological pattern from stalling a shared worker:
+# the pattern itself is validated/capped at the schema layer, and the text it
+# is applied to is hard-capped here. An oversized/invalid pattern yields None;
+# callers decide the fail direction per rule (must_match suppresses with a
+# reason; must_not_match lets the alert through) — the config author sees the
+# "does not match" reason in the change row either way.
+_MAX_PATTERN_LEN = 256
+_MAX_REGEX_TEXT_CHARS = 200_000
+
+
+def _bounded_search(pattern: str, text: str) -> bool | None:
+    """re.search with caps; None when the pattern is invalid or oversized."""
+    if len(pattern) > _MAX_PATTERN_LEN:
+        return None
+    try:
+        # pi-lens-ignore: python-unsafe-regex - length-capped, auth-scoped
+        rx = re.compile(pattern, re.IGNORECASE)
+    except re.error:
+        return None
+    return rx.search(text[:_MAX_REGEX_TEXT_CHARS]) is not None
+
 
 def _parse_price_value(text: str) -> float | None:
     """Extract numeric value from normalized price like 'USD 19.99'."""
@@ -148,19 +170,13 @@ def should_alert(
 
     # Regex filters
     if "regex_must_match" in cfg:
-        pat = str(cfg["regex_must_match"])
-        try:
-            if not re.search(pat, new_text, re.IGNORECASE):
-                return False, f"new content does not match {pat}"
-        except re.error:
-            pass
+        result = _bounded_search(str(cfg["regex_must_match"]), new_text)
+        if result is False or result is None:
+            return False, f"new content does not match {cfg['regex_must_match']}"
     if "regex_must_not_match" in cfg:
-        pat = str(cfg["regex_must_not_match"])
-        try:
-            if re.search(pat, new_text, re.IGNORECASE):
-                return False, f"new content matches excluded {pat}"
-        except re.error:
-            pass
+        result = _bounded_search(str(cfg["regex_must_not_match"]), new_text)
+        if result:
+            return False, f"new content matches excluded {cfg['regex_must_not_match']}"
 
     return True, None
 
