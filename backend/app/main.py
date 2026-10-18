@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -49,6 +50,12 @@ app.add_exception_handler(
     # ExceptionHandler protocol; runtime dispatch is exact-match.
     rate_limit_exceeded_handler,  # type: ignore[arg-type]
 )
+# SlowAPIMiddleware is what enforces limiter.default_limits on every route.
+# Without it, only routes carrying an explicit @limiter.limit decorator are
+# throttled and the declared default (60/minute) never applies — leaving
+# expensive endpoints (SSE streams, exports, imports, redeem) un-throttled.
+# Decorated routes keep their explicit (stricter) limits.
+app.add_middleware(SlowAPIMiddleware)
 
 
 def _cors_origins() -> list[str]:

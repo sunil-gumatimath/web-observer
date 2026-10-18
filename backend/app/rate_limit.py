@@ -62,15 +62,35 @@ def _key_func(request: Request) -> str:
 # Default: 60 requests/minute per authenticated principal (or per IP when
 # unauthenticated) for decorated endpoints that rely on defaults.
 # Individual endpoints can override with @limiter.limit("10/minute").
+#
+# Fail-open integration: when the Redis storage is unreachable, slowapi's
+# auto-check middleware funnels storage exceptions (e.g. ConnectionError)
+# into the rate-limit error handler, which would turn EVERY request into a
+# 500 — including /health. Guard against that by falling back to in-memory
+# counters (per-process, still rate-limited, auto-recovers when Redis
+# returns) and swallowing any residual limiter errors as final safety net.
 limiter = Limiter(
     key_func=_key_func,
     default_limits=["60/minute"],
     storage_uri=_storage_uri(),
+    in_memory_fallback_enabled=True,
+    swallow_errors=True,
 )
 
 
-def rate_limit_exceeded_handler(_request: Request, exc: RateLimitExceeded) -> Response:
-    """Return a JSON 429 response when rate limit is hit."""
+def rate_limit_exceeded_handler(_request: Request, exc: Exception) -> Response:
+    """Return a JSON 429 response when rate limit is hit.
+
+    slowapi funnels ANY exception raised during the limiting check here; a
+    non-``RateLimitExceeded`` exception means the limiter itself failed
+    (e.g. backend outage), so fail open with a 500-shaped error instead of
+    crashing the handler (``AttributeError: no attribute 'detail'``).
+    """
+    if not isinstance(exc, RateLimitExceeded):
+        logger.error(
+            "rate_limit_internal_error ip=%s exc=%r", get_remote_address(_request), exc
+        )
+        return JSONResponse(status_code=500, content={"detail": "Rate limit error"})
     logger.warning("rate_limit_exceeded ip=%s detail=%s", get_remote_address(_request), str(exc))
     return JSONResponse(
         status_code=429,
