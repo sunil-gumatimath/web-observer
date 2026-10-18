@@ -83,20 +83,43 @@ $PythonExe = Join-Path $FoundVenv "Scripts\python.exe"
 $UvicornExe = Join-Path $FoundVenv "Scripts\uvicorn.exe"
 $DramatiqExe = Join-Path $FoundVenv "Scripts\dramatiq.exe"
 
+function Start-PersistentProcess {
+    param(
+        [string]$FilePath,
+        [string]$ArgumentList,
+        [string]$WorkingDirectory,
+        [string]$StdOutPath,
+        [string]$StdErrPath
+    )
+    $cmd = "cmd.exe /c `"`"$FilePath`" $ArgumentList 1>`"$StdOutPath`" 2>`"$StdErrPath`"`""
+    try {
+        $proc = [wmiclass]"Win32_Process"
+        $startup = [wmiclass]"Win32_ProcessStartup"
+        $startupConfig = $startup.CreateInstance()
+        $startupConfig.ShowWindow = 0 # 0 = SW_HIDE (silent background window)
+        $res = $proc.Create($cmd, $WorkingDirectory, $startupConfig)
+        if ($res.ReturnValue -ne 0) {
+            Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WorkingDirectory $WorkingDirectory -RedirectStandardOutput $StdOutPath -RedirectStandardError $StdErrPath -WindowStyle Hidden
+        }
+    } catch {
+        Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WorkingDirectory $WorkingDirectory -RedirectStandardOutput $StdOutPath -RedirectStandardError $StdErrPath -WindowStyle Hidden
+    }
+}
+
 Write-Host "Starting API on http://127.0.0.1:8002..." -ForegroundColor Cyan
-Start-Process -FilePath $UvicornExe -ArgumentList "app.main:app --host 127.0.0.1 --port 8002" -WorkingDirectory $BackendDir -RedirectStandardOutput (Join-Path $LogDir "api.log") -RedirectStandardError (Join-Path $LogDir "api_err.log") -WindowStyle Hidden
+Start-PersistentProcess -FilePath $UvicornExe -ArgumentList "app.main:app --host 127.0.0.1 --port 8002" -WorkingDirectory $BackendDir -StdOutPath (Join-Path $LogDir "api.log") -StdErrPath (Join-Path $LogDir "api_err.log")
 
 Write-Host "Starting HTTP + Notifications Dramatiq Worker..." -ForegroundColor Cyan
-Start-Process -FilePath $DramatiqExe -ArgumentList "app.workers --queues http_checks notifications --processes 1 --threads 2" -WorkingDirectory $BackendDir -RedirectStandardOutput (Join-Path $LogDir "worker-http.log") -RedirectStandardError (Join-Path $LogDir "worker-http_err.log") -WindowStyle Hidden
+Start-PersistentProcess -FilePath $DramatiqExe -ArgumentList "app.workers --queues http_checks notifications --processes 1 --threads 2" -WorkingDirectory $BackendDir -StdOutPath (Join-Path $LogDir "worker-http.log") -StdErrPath (Join-Path $LogDir "worker-http_err.log")
 
 Write-Host "Starting Browser Dramatiq Worker..." -ForegroundColor Cyan
-Start-Process -FilePath $DramatiqExe -ArgumentList "app.workers --queues browser_checks --processes 1 --threads 1" -WorkingDirectory $BackendDir -RedirectStandardOutput (Join-Path $LogDir "worker-browser.log") -RedirectStandardError (Join-Path $LogDir "worker-browser_err.log") -WindowStyle Hidden
+Start-PersistentProcess -FilePath $DramatiqExe -ArgumentList "app.workers --queues browser_checks --processes 1 --threads 1" -WorkingDirectory $BackendDir -StdOutPath (Join-Path $LogDir "worker-browser.log") -StdErrPath (Join-Path $LogDir "worker-browser_err.log")
 
 Write-Host "Starting Scheduler..." -ForegroundColor Cyan
-Start-Process -FilePath $PythonExe -ArgumentList "-m app.scheduler" -WorkingDirectory $BackendDir -RedirectStandardOutput (Join-Path $LogDir "scheduler.log") -RedirectStandardError (Join-Path $LogDir "scheduler_err.log") -WindowStyle Hidden
+Start-PersistentProcess -FilePath $PythonExe -ArgumentList "-m app.scheduler" -WorkingDirectory $BackendDir -StdOutPath (Join-Path $LogDir "scheduler.log") -StdErrPath (Join-Path $LogDir "scheduler_err.log")
 
 Write-Host "Starting Frontend on http://localhost:3000 with Bun..." -ForegroundColor Cyan
-Start-Process -FilePath "bun" -ArgumentList "run dev --port 3000" -WorkingDirectory $FrontendDir -RedirectStandardOutput (Join-Path $LogDir "frontend.log") -RedirectStandardError (Join-Path $LogDir "frontend_err.log") -WindowStyle Hidden
+Start-PersistentProcess -FilePath "bun" -ArgumentList "run dev --port 3000" -WorkingDirectory $FrontendDir -StdOutPath (Join-Path $LogDir "frontend.log") -StdErrPath (Join-Path $LogDir "frontend_err.log")
 
 # ---- Helpers ----------------------------------------------------------------
 function Test-ProcessAlive {
