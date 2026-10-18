@@ -41,8 +41,10 @@ Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 
 
 class BulkImportBody(BaseModel):
-    items: list[dict[str, Any]] = Field(default_factory=list)
-    csv_text: str | None = None
+    # Bounded so a single request cannot monopolize the worker pool or the
+    # DB with thousands of monitor creations per import.
+    items: list[dict[str, Any]] = Field(default_factory=list, max_length=2_000)
+    csv_text: str | None = Field(default=None, max_length=3_000_000)
 
 
 class ApiKeyCreate(BaseModel):
@@ -65,7 +67,9 @@ class ApiKeyCreated(ApiKeyOut):
 
 
 class WebhookCreate(BaseModel):
-    url: str
+    # https URLs pass SSRF validation downstream; cap length so header/log
+    # injection via absurdly long values stays impossible end to end.
+    url: str = Field(min_length=1, max_length=2_048)
 
 
 class WebhookOut(BaseModel):
@@ -174,12 +178,24 @@ def bulk_import_monitors(
 def export_monitors(
     workspace_id: UUID,
     db: Db,
+    principal: Principal,
     workspace: Workspace = Depends(require_workspace_member),
     format: str = Query(default="json"),
 ) -> Response:
     monitors = db.scalars(
         select(Monitor).where(Monitor.workspace_id == workspace_id).order_by(Monitor.created_at)
     ).all()
+    # Data export is an accountability-relevant read: record who exported.
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitors.exported",
+        resource_type="workspace",
+        resource_id=str(workspace_id),
+        meta={"format": format, "count": len(monitors)},
+    )
+    db.commit()
     if format == "csv":
         buf = io.StringIO()
         w = csv.writer(buf)
@@ -231,6 +247,7 @@ def export_monitors(
 def export_changes(
     workspace_id: UUID,
     db: Db,
+    principal: Principal,
     workspace: Workspace = Depends(require_workspace_member),
     limit: int = Query(default=500, ge=1, le=5000),
 ) -> list[dict]:
@@ -240,6 +257,16 @@ def export_changes(
         .order_by(ChangeEvent.created_at.desc())
         .limit(limit)
     ).all()
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="changes.exported",
+        resource_type="workspace",
+        resource_id=str(workspace_id),
+        meta={"limit": limit, "count": len(events)},
+    )
+    db.commit()
     return [
         {
             "id": str(e.id),

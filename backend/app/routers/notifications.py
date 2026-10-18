@@ -25,6 +25,7 @@ from app.schemas import (
     NotificationChannelUpdate,
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
+from app.services.audit import write_audit
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
 Db = Annotated[Session, Depends(get_db)]
@@ -77,6 +78,7 @@ def create_notification_channel(
     workspace_id: UUID,
     body: NotificationChannelCreate,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> NotificationChannel:
     _validate_channel_address(body.type, str(body.address))
@@ -100,6 +102,14 @@ def create_notification_channel(
         enabled=body.enabled,
     )
     db.add(channel)
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="notification_channel.created",
+        resource_type="notification_channel",
+        meta={"type": body.type},
+    )
     db.commit()
     db.refresh(channel)
     return channel
@@ -114,6 +124,7 @@ def update_notification_channel(
     channel_id: UUID,
     body: NotificationChannelUpdate,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> NotificationChannel:
     channel = db.scalar(
@@ -132,6 +143,15 @@ def update_notification_channel(
         channel.address = str(data["address"])
     if "enabled" in data and data["enabled"] is not None:
         channel.enabled = data["enabled"]
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="notification_channel.updated",
+        resource_type="notification_channel",
+        resource_id=str(channel_id),
+        meta={"type": channel_type, "fields": sorted(data.keys())},
+    )
     db.commit()
     db.refresh(channel)
     return channel
@@ -145,6 +165,7 @@ def delete_notification_channel(
     workspace_id: UUID,
     channel_id: UUID,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> None:
     channel = db.scalar(
@@ -155,6 +176,15 @@ def delete_notification_channel(
     )
     if channel is None:
         raise HTTPException(status_code=404, detail="Notification channel not found")
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="notification_channel.deleted",
+        resource_type="notification_channel",
+        resource_id=str(channel_id),
+        meta={"type": (channel.type or "email").lower()},
+    )
     db.delete(channel)
     db.commit()
 

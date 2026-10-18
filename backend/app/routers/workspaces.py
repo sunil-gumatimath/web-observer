@@ -24,6 +24,7 @@ from app.schemas import (
     WorkspaceOut,
     WorkspaceUpdate,
 )
+from app.services.audit import write_audit
 from app.services.crypto import encrypt_secret
 
 Principal = Annotated[AuthPrincipal, Depends(get_current_principal)]
@@ -91,6 +92,7 @@ def update_workspace(
     workspace_id: UUID,
     body: WorkspaceUpdate,
     db: Db,
+    principal: Principal,
     workspace: Workspace = Depends(require_role("admin")),
 ) -> Workspace:
     allowed = {
@@ -152,8 +154,21 @@ def update_workspace(
                 setattr(workspace, key, None)
                 continue
         setattr(workspace, key, value)
+    changed = sorted(data.keys())
     db.commit()
     db.refresh(workspace)
+    # Audit after commit so the log row commits with the change. Never log the
+    # secret values themselves — only which settings changed.
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="workspace.updated",
+        resource_type="workspace",
+        resource_id=str(workspace_id),
+        meta={"fields": changed},
+    )
+    db.commit()
     return workspace
 
 

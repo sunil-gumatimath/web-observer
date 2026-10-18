@@ -53,6 +53,7 @@ from app.schemas import (
     normalize_tags,
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
+from app.services.audit import write_audit
 from app.services.branding import fetch_brand_info, store_brand_assets
 from app.services.bulk_import import import_monitors
 from app.services.diffing import unified_diff
@@ -486,13 +487,23 @@ class SitemapDiscoverIn(BaseModel):
 
 class SitemapCreateIn(BaseModel):
     url: str
-    urls: list[str] = Field(min_length=1)
+    # Bounded: each URL becomes a monitor row, so one request cannot create an
+    # unbounded batch (individual monitors still count against plan quotas).
+    urls: list[str] = Field(min_length=1, max_length=2_000)
     mode: str = "page_content"
     css_selector: str | None = None
     schedule_interval_minutes: int = Field(default=60, ge=1)
     js_required: bool = False
     ignore_selectors: list[str] | None = None
     ignore_regexes: list[str] | None = None
+
+    @field_validator("urls")
+    @classmethod
+    def _cap_url_length(cls, v: list[str]) -> list[str]:
+        for u in v:
+            if len(u) > 2048:
+                raise ValueError("individual URLs are capped at 2048 characters")
+        return v
 
 
 @router.post("/workspaces/{workspace_id}/monitors/discover-sitemap")
@@ -679,6 +690,7 @@ def update_monitor(
     monitor_id: UUID,
     body: MonitorUpdate,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
@@ -769,6 +781,19 @@ def update_monitor(
 
     db.commit()
     db.refresh(monitor)
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitor.updated",
+        resource_type="monitor",
+        resource_id=str(monitor_id),
+        meta={
+            "fields": sorted(data.keys()),
+            "config_version": monitor.config_version,
+        },
+    )
+    db.commit()
     return monitor
 
 
@@ -780,6 +805,7 @@ def delete_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> None:
     """Delete a monitor and dependent rows.
@@ -789,6 +815,7 @@ def delete_monitor(
     """
     monitor = _get_monitor(db, workspace_id, monitor_id)
     mid = monitor.id
+    monitor_name = monitor.name
 
     # Object storage cleanup first (best-effort)
     snapshots = db.scalars(
@@ -818,6 +845,15 @@ def delete_monitor(
         # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
         db.execute(bulk_stmt, execution_options=sync_off)
     db.expunge_all()
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitor.deleted",
+        resource_type="monitor",
+        resource_id=str(monitor_id),
+        meta={"name": monitor_name},
+    )
     db.commit()
 
 
@@ -1550,7 +1586,7 @@ def mark_change_noise(
     change_id: UUID,
     body: NoiseFeedbackIn,
     db: Db,
-    _workspace: AnyWs,
+    _workspace: MemberWs,
 ) -> ChangeEvent:
     change = db.scalar(
         select(ChangeEvent).where(
