@@ -131,8 +131,8 @@ def extract_html_list(
         try:
             for n in tree.css(sel):
                 n.decompose()
-        except Exception:
-            continue
+        except Exception as exc:  # noqa: BLE001
+            raise ExtractionError("extraction_failed", f"Invalid ignore selector: {sel}") from exc
     nodes = tree.css(css_selector)
     if not nodes:
         raise ExtractionError(

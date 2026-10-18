@@ -53,18 +53,17 @@ def parse_github_repo(input_url: str) -> tuple[str, str, str | None]:
             branch = tree_match.group(1).strip()
         return owner, repo, branch
 
-    # Try shorthand owner/repo
-    # Remove scheme if accidentally present
-    if "://" in s:
-        # Fallback: try urlparse
-        try:
-            parsed = urlparse(s if "://" in s else f"https://{s}")
-            path = parsed.path.strip("/")
-            parts = path.split("/")
-            if len(parts) >= 2:
-                return parts[0], parts[1].split("/")[0], None
-        except Exception:
-            pass
+    # Fallback: extract leading path segments from any URL (github.com URLs
+    # not caught by the regex above, gitea instances, etc.) or from the
+    # shorthand "owner/repo" form.
+    try:
+        parsed = urlparse(s if "://" in s else f"https://{s}")
+        path = parsed.path.strip("/")
+        parts = [p for p in path.split("/") if p]
+        if len(parts) >= 2:
+            return parts[0], parts[1].split("/")[0], None
+    except Exception:
+        pass
     m2 = _SHORT_RE.match(s.strip().strip("/"))
     if m2:
         return m2.group("owner"), m2.group("repo"), None

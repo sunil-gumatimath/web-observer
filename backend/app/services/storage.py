@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from functools import lru_cache
 from pathlib import Path
@@ -93,7 +94,19 @@ def put_bytes(
         if path is None:
             raise StorageError("invalid_key", f"Unsafe storage key: {key}")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        # Write via temp-file + os.replace: readers (routers streaming raw
+        # snapshots back) never see a partially-written file, and two workers
+        # can never interleave writes for the same key.
+        tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            tmp.write_bytes(data)
+            os.replace(tmp, path)
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except OSError:  # pragma: no cover - best-effort cleanup
+                    logger.debug("storage_tmp_cleanup_failed path=%s", tmp)
         return key
 
     from botocore.exceptions import BotoCoreError, ClientError
