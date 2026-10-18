@@ -82,7 +82,8 @@ class Settings(BaseSettings):
     # Comma-separated server-level fallback models tried in order after the
     # primary. Empty string disables failover (primary only).
     llm_fallback_models: str = (
-        "openrouter/free,stepfun/step-3.7-flash:free,nex-agi/nex-n2.5-pro:free"
+        "openrouter/free,reflection/beam-free,stealth/glyph-cluster,"
+        "nvidia/nemotron-3.5-super-vl:free"
     )
     ai_max_diff_chars: int = 6000
     ai_max_output_tokens: int = 200

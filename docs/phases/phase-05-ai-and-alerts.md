@@ -28,7 +28,7 @@ AI_SUMMARIES_ENABLED=true
 LLM_API_KEY=           # empty => heuristic only
 LLM_API_BASE=https://api.kilo.ai/api/gateway
 LLM_MODEL=kilo-auto/free
-LLM_FALLBACK_MODELS=openrouter/free,stepfun/step-3.7-flash:free,nex-agi/nex-n2.5-pro:free
+LLM_FALLBACK_MODELS=openrouter/free,reflection/beam-free,stealth/glyph-cluster,nvidia/nemotron-3.5-super-vl:free
 AI_MAX_DIFF_CHARS=6000
 AI_MAX_OUTPUT_TOKENS=200
 AI_ASYNC_ENRICHMENT=false   # true => heuristic row now, LLM upgrade in ai_enrich worker

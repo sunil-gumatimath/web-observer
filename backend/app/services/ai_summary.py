@@ -745,8 +745,9 @@ def _parse_llm_content(
 
 _DEFAULT_FALLBACK_MODELS = (
     "openrouter/free",
-    "stepfun/step-3.7-flash:free",
-    "nex-agi/nex-n2.5-pro:free",
+    "reflection/beam-free",
+    "stealth/glyph-cluster",
+    "nvidia/nemotron-3.5-super-vl:free",
 )
 
 
