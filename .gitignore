@@ -47,6 +47,7 @@ logs/
 # Local-only planning docs
 monitor-the-web-final-roadmap.md
 web-observer-final-roadmap.md
+DESIGN.md
 
 # Local Redis persistence
 dump.rdb
