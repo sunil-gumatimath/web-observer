@@ -231,7 +231,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Outbound webhooks | Signed (`X-MTW-Signature`) deliveries on change events + delivery log with exponential backoff |
 | API keys | `mtw_...` bearer tokens for programmatic access |
 | Bulk workflows | CSV / JSON import + export of monitors and changes, plus sitemap URL discovery and batch creation |
-| Workspace run logs | Check-history surface for the whole workspace: `GET /api/v1/workspaces/{id}/runs` filters by outcome (`all`/`success`/`failed`/`changed`), monitor and date range (`backend/app/services/run_logs.py` powers both list and export so filters always match) |
+| Workspace run logs | The **Logs** page lists every check run across the workspace with outcome (`all`/`success`/`failed`/`changed`), monitor and date filters (`GET /api/v1/workspaces/{id}/runs`; `backend/app/services/run_logs.py` powers both list and export so filters always match), refreshed on a 15s cadence |
 | Check-history export | `GET /api/v1/workspaces/{id}/export/runs?format=csv\|json` honours the same filters as the logs list (20k-run cap), writes an `runs.exported` audit entry |
 | Live monitor detail | SSE stream per monitor (`GET /api/v1/workspaces/{id}/monitors/{id}/stream`): 1-hour lifetime with 15s heartbeats, Redis ORM-wakeup hints (`backend/app/services/live_events.py`) make worker/scheduler/reaper transitions instant and degrade to a 1.5s poll tick without Redis; the frontend adds reconnect backoff and stall detection + a `use-auto-refresh` hook fallback |
 | Bulk pause / resume | Dashboard **Pause all** / **Resume all** (`POST /monitors/pause-all`, `POST /monitors/resume-all`) with confirm dialog and optimistic UI; resume re-schedules `next_run_at` promptly |
@@ -258,7 +258,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Visual comparison | Before/after drag slider on changes with screenshots (needs 2 signal changes) |
 | Fetch resilience | SSRF-pinned fetcher tries **every** validated IP in turn (`_pinned_get`), so one dead CDN PoP can't fail a check; only connect-level errors trigger failover. README monitors hit the GitHub API first (1 request, resolves the default branch) with capped raw fallbacks. LLM summaries fail over across `LLM_FALLBACK_MODELS` |
 
-The web UI (Next.js) exposes: **Dashboard** (with Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
+The web UI (Next.js) exposes: **Dashboard** (with Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Logs** (workspace-wide run history with outcome/monitor/date filters + CSV export), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
 
 ## Tests & Linting
 
