@@ -17,6 +17,8 @@ flowchart TB
     subgraph APIProc["API process (uvicorn)"]
         API["FastAPI app.main:app\n/health /ready /api/v1/*"]
         AUTH["auth.py\nClerk JWT + mtw_ API keys + X-Internal-Token"]
+        RUNS["routers/monitors.py\nGET /workspaces/{id}/runs (Logs) + CSV/JSON\nexport via services/run_logs.py"]
+        LIVE["SSE stream\nGET /monitors/{id}/stream\n1h lifetime, 15s heartbeats,\n1.5s poll-tick fallback"]
     end
     subgraph SchedProc["Scheduler process"]
         SCHED["app.scheduler\nclaim_due_monitors + lease + reap"]
@@ -41,13 +43,15 @@ flowchart TB
     end
 
     NEO[("Neon Postgres")]
-    REDIS[("Redis\nDramatiq broker")]
+    REDIS[("Redis\nDramatiq broker · rate limits ·\nSSE wakeup pub/sub (best-effort hints)")]
     OBJ[("Object storage\nlocal disk or S3 snapshots")]
 
     UI -->|"HTTPS + Bearer/JWT"| API
+    UI -->|"opens SSE /monitors/{id}/stream\n+ receives run-status events"| LIVE
     API --> AUTH
     AUTH --> CLERK
     API --> NEO
+    API --> RUNS
     SCHED --> NEO
     SCHED -->|"enqueue_check"| REDIS
     API -->|"manual run / import"| REDIS
@@ -57,6 +61,8 @@ flowchart TB
     REDIS -->|"notifications"| WEBHW
     REDIS -->|"http_checks"| AIEW
     REDIS -->|"http_checks"| BRANDW
+    HTTPW -.->|"run-status writes publish\nafter_flush wakeup hints"| REDIS
+    LIVE -->|"re-reads authoritative\nrun state every tick"| NEO
     HTTPW -->|"fetch_url"| TARGET
     BROWW -->|"fetch_url_browser / screenshot"| TARGET
     HTTPW --> NEO
@@ -83,9 +89,10 @@ flowchart LR
         db["db.py\nengine/Session"]
         cfg["config.py"]
         sch["schemas.py\nPydantic IO"]
-        rt["routers/\nmonitors, workspaces,\nnotifications, enterprise, internal"]
-        svc["services/\nfetcher, pipeline, diffing,\nextract, ai_summary, webhooks,\nemail, storage, usage, plans,\ndigest, ssrf helpers..."]
+        rt["routers/\nmonitors (SSE stream + runs), workspaces,\nnotifications, enterprise (exports), internal"]
+        svc["services/\nfetcher, pipeline, diffing,\nextract, ai_summary, webhooks,\nemail, storage, usage, plans,\ndigest, run_logs, live_events,\nssrf helpers..."]
         wk["workers/\nbroker, checks, browser_checks,\nnotifications, webhooks,\nrun_guard, enqueue"]
+        mdl["models/\nORM entities — __init__ installs\ninstall_orm_hooks(): every process\npublishing status writes →\nRedis wakeup hints"]
         sec["security/ssrf.py"]
         sched["scheduler.py"]
         jobs["digest_job.py\nretention_job.py"]
@@ -97,6 +104,9 @@ flowchart LR
     wk --> db
     svc --> sec
     svc --> db
+    svc --> mdl
+    wk --> mdl
+    sched --> mdl
     sched --> wk
     sched --> db
     jobs --> svc
@@ -270,6 +280,8 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
+    participant U as Monitor detail (UI)
+    participant SSE as API SSE stream
     participant S as Scheduler
     participant DB as Postgres
     participant R as Redis
@@ -281,6 +293,9 @@ sequenceDiagram
     participant N as Notification Worker
     participant WH as Webhook Worker
     participant EXT as Resend/Slack/Targets
+
+    U->>SSE: open GET /workspaces/{ws}/monitors/{id}/stream
+    note over SSE: 1h lifetime · 15s heartbeat · Redis hints wake it early,<br/>else it re-reads DB on a 1.5s poll tick
 
     S->>DB: claim_due_monitors (SELECT .. FOR UPDATE SKIP LOCKED)
     DB-->>S: due monitors (lease 60s, next_run bumped)
@@ -320,7 +335,12 @@ sequenceDiagram
             end
         end
     end
+    note over W,P: terminal status staged only on committed paths —<br/>the pre-commit reaper fence probes it via a fresh session<br/>so a run's own staged state is never seen as external news
     W->>DB: RunStatus = succeeded/failed + run_guard outcome
+    DB-->>R: after_flush publishes wakeup hint (live_events.py, best-effort)
+    R-->>SSE: subscriber wakes ahead of the poll tick
+    SSE->>DB: re-read run + change state (authoritative)
+    SSE-->>U: push run-status / detail refresh
     W->>G: release_domain_slot
 ```
 
@@ -417,7 +437,9 @@ flowchart TB
 * **Rate limiting** (`app/rate_limit.py`): default 60/min per verified principal (or IP), enforced on every route by `SlowAPIMiddleware` (decorated endpoints keep stricter limits). Counters are shared via Redis; when Redis is unreachable the limiter **fails open** to per-process in-memory counters with automatic recovery (`in_memory_fallback_enabled`), so a Redis outage cannot turn unrelated requests into 500s.
 * **Delivery reliability (review follow-ups)**: outbox and webhook sends claim rows atomically (`PENDING→PROCESSING`) with an attempts cap and a reaper that re-enqueues abandoned rows; usage counters use Postgres `ON CONFLICT` upserts + atomic increments; the browser-check daily quota is plan-aware with a once-per-run reservation; the stuck-run reaper uses a fenced conditional `UPDATE...WHERE status`, and `run_guard` refuses to run hooks/claims for runs not in `scheduled`/`queued` — preventing double-sends after retries.
 * **SSRF guard** (`security/ssrf.py`): blocks private/loopback/link-local/metadata IPs and credentialed URLs before any fetch; redirects are re-validated in the fetcher. The pinned fetcher (`services/fetcher.py:_pinned_get`) tries every validated IP in turn, so one dead CDN PoP can't fail a check — only connect-level errors trigger failover. `readme` monitors hit the GitHub API first (default-branch aware), then capped raw probes.
-* **Newer endpoints not in the diagrams above**: `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`.
+* **Newer endpoints not in the diagrams above**: `GET .../runs` (workspace run logs, shared filters via `services/run_logs.py`), `GET .../export/runs` (CSV/JSON, 20k-run cap, audited), `GET .../monitors/{id}/stream` (SSE live run status), `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`.
+* **Live status streaming** (`services/live_events.py`): an ORM `after_flush` hook installed in `models/__init__.py` publishes best-effort Redis hints on every `MonitorRun.status` write site (pipeline, workers, scheduler, reaper) — one hook instead of ~15 instrumented call sites. The SSE endpoint always re-reads authoritative state from Postgres before emitting, so a lost or spurious hint changes latency only, never correctness. Without Redis the publisher circuit-breaks and the stream falls back to a 1.5s poll tick.
+* **Run-status staging** (`services/pipeline.py`): the terminal `SUCCEEDED` status is staged only on paths that commit immediately, so the pre-commit reaper fence never reads a run's own staged value as external news (a reaper bug once rolled back genuine changes on the *changed* path); the fence probe goes through a fresh session.
 * **Quotas/plans** (`services/usage.py`, `services/plans.py`): daily check/notification/storage counters per workspace, gated by plan.
 * **Crypto purpose separation** (`services/crypto.py`): Fernet keys, share-link/invite tokens, and API-key hashes are each derived from `SECRET_KEY` via HKDF with distinct purpose labels; `v2` formats keep verifying legacy `v1`/plaintext schemes for backward compatibility (no data migration required).
 * **ReDoS/size caps**: `must_match`/`must_not_match` regexes and CSS selectors are validated and capped at the schema layer (pattern count, length) and enforced again at runtime in `extract.py`/`conditional.py` (`_bounded_search`); oversized/invalid `must_match` patterns suppress with a reason (fail-closed).
