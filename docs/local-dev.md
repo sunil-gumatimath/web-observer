@@ -165,6 +165,9 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 | Capability | Endpoint / notes |
 | ------------ | ------------------ |
 | Change activity | `GET /api/v1/workspaces/{id}/changes/activity?days=14&include_noise=false` — per-day counts + per-category breakdown for the dashboard card (`days` 1–90, noise excluded by default, 20k-row cap, null category → `uncategorized`) |
+| Run logs | `GET /api/v1/workspaces/{id}/runs` — workspace-wide check history with outcome (`all`/`success`/`failed`/`changed`), monitor and date filters; `backend/app/services/run_logs.py` is the shared filter source of truth |
+| Runs export | `GET /api/v1/workspaces/{id}/export/runs?format=csv|json` — CSV/JSON export honouring the same filters as the logs list (20k-run cap, `runs.exported` audit entry) |
+| Monitor SSE stream | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/stream` — run-status/change events; 1-hour lifetime, 15s heartbeat, Redis ORM-wakeup hints from `app/services/live_events.py` (candidates: pipeline, workers, scheduler, reaper). Without Redis the publisher circuit-breaks and the stream falls back to a 1.5s poll tick |
 | Bulk pause / resume | `POST /api/v1/workspaces/{id}/monitors/pause-all`, `.../resume-all` (resume re-schedules `next_run_at`) |
 | Selector preview | `POST /api/v1/workspaces/{id}/monitors/selector-preview` — sanitized HTML for the point-and-click picker |
 | Brand info | `POST /api/v1/workspaces/{id}/monitors/brand-info` — logo/title/description auto-fill |

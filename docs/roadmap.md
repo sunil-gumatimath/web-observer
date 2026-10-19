@@ -201,11 +201,19 @@ Status: Proposed only — see ADR 007; threat model still prohibits until accept
 
 ### 5.4 Real-Time Streaming via Server-Sent Events (SSE)
 
+* **Status: partially shipped.** The stream endpoint
+  (`GET /api/v1/workspaces/{ws}/monitors/{id}/stream`) is live and drives the
+  monitor detail page. Worker/scheduler/reaper status transitions publish
+  instantly via Redis-backed ORM `after_flush` wakeup hints
+  (`backend/app/services/live_events.py`, best-effort — the stream always
+  re-reads authoritative state from Postgres and degrades to a 1.5s poll tick
+  without Redis). Sessions live up to 1 hour with 15s heartbeats instead of the
+  hard 3-minute cap the stream once had; the frontend adds reconnect backoff
+  and stall detection.
 * **Problem:** Long-running checks historically had the frontend poll for status; newer surfaces (e.g. the dashboard activity card) fetch on interaction (range change) rather than polling.
-* **Proposed Solution:**
-  * Add a FastAPI SSE endpoint: `GET /api/v1/workspaces/{ws}/monitors/{id}/stream`.
-  * Streams real-time pipeline events (`QUEUED` → `CONNECTING` → `RENDERED` → `DIFF_CALCULATED` → `ALERT_DISPATCHED`).
-  * Live-updates the Alerts Inbox and Dashboard without polling.
+* **Remaining scope:**
+  * Live-update the Alerts Inbox and Dashboard activities from the same stream.
+  * Stream the richer pipeline milestones (`QUEUED` → `CONNECTING` → `RENDERED` → `DIFF_CALCULATED` → `ALERT_DISPATCHED`).
 
 ---
 
