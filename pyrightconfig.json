@@ -2,7 +2,7 @@
   "venvPath": "backend",
   "venv": ".venv",
   "extraPaths": ["backend"],
-  "pythonVersion": "3.11",
+  "pythonVersion": "3.12",
   "typeCheckingMode": "basic",
   "reportMissingImports": "error",
   "reportMissingTypeStubs": "none"

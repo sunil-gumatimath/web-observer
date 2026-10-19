@@ -7,9 +7,10 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select, true
+from sqlalchemy import func, select, true
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, aliased
@@ -44,10 +45,12 @@ from app.schemas import (
     ManualRunOut,
     MonitorCreate,
     MonitorOut,
+    MonitorRunDetailOut,
     MonitorRunOut,
     MonitorUpdate,
     NoiseFeedbackIn,
     ReadStateIn,
+    RunLogPage,
     SnapshotAccessOut,
     ValueHistoryOut,
     normalize_tags,
@@ -57,6 +60,11 @@ from app.services.audit import write_audit
 from app.services.branding import fetch_brand_info, store_brand_assets
 from app.services.bulk_import import import_monitors
 from app.services.diffing import unified_diff
+from app.services.run_logs import (
+    build_run_log_filters,
+    change_ids_for_runs,
+    run_log_out,
+)
 from app.services.selector_preview import PreviewError, fetch_selector_preview
 from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_url
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
@@ -89,6 +97,15 @@ router = APIRouter(prefix="/api/v1", tags=["monitors"])
 
 logger = logging.getLogger(__name__)
 
+# --- SSE tuning -------------------------------------------------------------
+# Redis pub/sub delivers wakeups as workers commit; this tick is only the
+# safety net, so it doubles as the worst-case latency when Redis is down.
+SSE_POLL_TICK_SECONDS = 1.5
+SSE_HEARTBEAT_SECONDS = 15.0
+# Long-lived but not immortal. The client reconnects on `done`; the cap bounds
+# how long a half-open connection can hold a slot.
+SSE_MAX_LIFETIME_SECONDS = 3600.0
+
 
 class AskChangeIn(BaseModel):
     prompt: str = Field(min_length=1, max_length=2000)
@@ -119,44 +136,87 @@ def _get_monitor(db: Session, workspace_id: UUID, monitor_id: UUID) -> Monitor:
 
 @router.get("/workspaces/{workspace_id}/monitors/{monitor_id}/events")
 def monitor_events(
+    request: Request,
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
     _workspace: AnyWs,
 ):
-    """SSE stream for monitor run status and change events (polling-backed)."""
+    """SSE stream of run-status and change events for one monitor.
+
+    Two defects here are why the UI used to need a manual reload:
+
+    * The stream was a pure 1.5s DB poll capped at 120 iterations (~3 min) with
+      no push path, so it went silent mid-run. Wakeups now come from Redis
+      pub/sub, published by the ORM flush listener in
+      :mod:`app.services.live_events` -- so a worker's commit reaches the
+      browser immediately instead of on the next poll tick. The DB tick remains
+      as a safety net and as the worst-case latency when Redis is down.
+    * Run events were keyed on ``status`` alone, so a *new* run sharing the
+      previous run's status (``queued`` -> ``queued``) emitted nothing. Now
+      keyed on ``(run_id, status)``.
+
+    Authoritative state is still read from Postgres before every emit; the
+    pub/sub message is only a wakeup hint, so a dropped message costs latency,
+    never correctness.
+    """
     import asyncio
     import json
+    import time as _time
 
-    from fastapi.responses import StreamingResponse
+    from app.services.live_events import MonitorEventWaiter
 
     _get_monitor(db, workspace_id, monitor_id)
 
     async def gen():
         from app.db import SessionLocal
 
-        last_run_status: str | None = None
+        waiter = MonitorEventWaiter(monitor_id)
+        last_run_key: tuple[str, str] | None = None
         last_change_id: str | None = None
-        # Send initial hello
+        started = _time.monotonic()
+        last_beat = started
+        disconnected = False
+
         yield 'event: connected\ndata: {"ok": true}\n\n'
-        for _ in range(120):  # ~3 min max (1.5s * 120)
-            await asyncio.sleep(1.5)
-            try:
-                with SessionLocal() as s:
-                    run = s.scalar(
-                        select(MonitorRun)
-                        .where(MonitorRun.monitor_id == monitor_id)
-                        .order_by(MonitorRun.created_at.desc())
-                        .limit(1)
-                    )
-                    change = s.scalar(
-                        select(ChangeEvent)
-                        .where(ChangeEvent.monitor_id == monitor_id)
-                        .order_by(ChangeEvent.created_at.desc())
-                        .limit(1)
-                    )
-                    if run and run.status != last_run_status:
-                        last_run_status = run.status
+        try:
+            while _time.monotonic() - started < SSE_MAX_LIFETIME_SECONDS:
+                if await request.is_disconnected():
+                    disconnected = True
+                    break
+
+                await waiter.wait(SSE_POLL_TICK_SECONDS)
+
+                now = _time.monotonic()
+                if now - last_beat >= SSE_HEARTBEAT_SECONDS:
+                    last_beat = now
+                    # Named heartbeat (not a bare comment frame) so the client
+                    # can distinguish "idle but alive" from a half-open or
+                    # proxy-buffered connection and resume polling.
+                    yield "event: ping\ndata: {}\n\n"
+
+                try:
+                    with SessionLocal() as s:
+                        run = s.scalar(
+                            select(MonitorRun)
+                            .where(MonitorRun.monitor_id == monitor_id)
+                            .order_by(MonitorRun.created_at.desc())
+                            .limit(1)
+                        )
+                        change = s.scalar(
+                            select(ChangeEvent)
+                            .where(ChangeEvent.monitor_id == monitor_id)
+                            .order_by(ChangeEvent.created_at.desc())
+                            .limit(1)
+                        )
+                except Exception:  # noqa: BLE001 - transient DB blip; retry next tick
+                    logger.warning("SSE: state read failed, retrying", exc_info=True)
+                    continue
+
+                if run is not None:
+                    key = (str(run.id), run.status)
+                    if key != last_run_key:
+                        last_run_key = key
                         payload = json.dumps(
                             {
                                 "type": "run",
@@ -168,41 +228,39 @@ def monitor_events(
                             }
                         )
                         yield f"event: run\ndata: {payload}\n\n"
-                        if run.status in ("succeeded", "failed"):
-                            # also check change after success
-                            pass
-                    if change and str(change.id) != last_change_id:
-                        last_change_id = str(change.id)
-                        payload = json.dumps(
-                            {
-                                "type": "change",
-                                "change_id": str(change.id),
-                                "summary": change.diff_summary,
-                                "ai_summary": change.ai_summary,
-                                "category": change.change_category,
-                                "is_noise": bool(change.is_noise),
-                            }
-                        )
-                        yield f"event: change\ndata: {payload}\n\n"
-                    if (
-                        run
-                        and run.status in ("succeeded", "failed", "cancelled")
-                        and run.finished_at
-                    ):
-                        # finish streaming after terminal state observed twice
-                        pass
-            except asyncio.CancelledError:
-                break
-            except Exception:
+
+                if change is not None and str(change.id) != last_change_id:
+                    last_change_id = str(change.id)
+                    payload = json.dumps(
+                        {
+                            "type": "change",
+                            "change_id": str(change.id),
+                            "summary": change.diff_summary,
+                            "ai_summary": change.ai_summary,
+                            "category": change.change_category,
+                            "is_noise": bool(change.is_noise),
+                        }
+                    )
+                    yield f"event: change\ndata: {payload}\n\n"
+
+            if not disconnected:
+                # Lifetime cap reached: tell the client to reconnect rather
+                # than leaving it waiting on a stream that will never emit.
+                yield "event: done\ndata: {}\n\n"
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - report, then let the client reconnect
+            logger.exception("SSE: stream error for monitor %s", monitor_id)
+            if not disconnected:
                 yield 'event: error\ndata: {"error": "stream error"}\n\n'
-                break
-        yield "event: done\ndata: {}\n\n"
+        finally:
+            await waiter.aclose()
 
     return StreamingResponse(
         gen(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
@@ -216,8 +274,6 @@ def monitor_badge(
     db: Db,
 ):
     """Public SVG badge for monitor status (no auth, cached)."""
-    from fastapi.responses import Response
-
     monitor = db.scalar(select(Monitor).where(Monitor.id == monitor_id))
     if monitor is None or monitor.workspace_id != workspace_id:
         svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="20"><rect width="120" height="20" fill="#555"/><text x="60" y="14" fill="#fff" text-anchor="middle" font-size="11">not found</text></svg>'
@@ -1121,20 +1177,76 @@ def list_runs(
 
 @router.get(
     "/workspaces/{workspace_id}/runs/{run_id}",
-    response_model=MonitorRunOut,
+    response_model=MonitorRunDetailOut,
 )
 def get_run(
     workspace_id: UUID,
     run_id: UUID,
     db: Db,
     _workspace: AnyWs,
-) -> MonitorRun:
+) -> MonitorRunDetailOut:
     run = db.scalar(
         select(MonitorRun).where(MonitorRun.id == run_id, MonitorRun.workspace_id == workspace_id)
     )
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return run
+    monitor = db.get(Monitor, run.monitor_id)
+    change_id = db.scalar(
+        select(ChangeEvent.id).where(
+            ChangeEvent.run_id == run.id, ChangeEvent.workspace_id == workspace_id
+        )
+    )
+    return run_log_out(run, monitor, change_id=change_id, changed=change_id is not None)
+
+
+@router.get("/workspaces/{workspace_id}/runs", response_model=RunLogPage)
+def list_run_logs(
+    workspace_id: UUID,
+    db: Db,
+    _workspace: AnyWs,
+    monitor_id: UUID | None = Query(default=None),
+    outcome: str = Query(default="all"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> RunLogPage:
+    """Workspace-wide check history across all monitors, newest first.
+
+    `outcome` filters success / failed / changed (produced a change event);
+    `date_from` / `date_to` are inclusive YYYY-MM-DD days (UTC).
+    """
+    try:
+        conds = build_run_log_filters(
+            workspace_id,
+            monitor_id=monitor_id,
+            outcome=outcome,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    total = db.scalar(select(func.count()).select_from(MonitorRun).where(*conds)) or 0
+    rows = db.execute(
+        select(MonitorRun, Monitor)
+        .join(Monitor, Monitor.id == MonitorRun.monitor_id)
+        .where(*conds)
+        .order_by(MonitorRun.created_at.desc(), MonitorRun.id.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    change_map = change_ids_for_runs(db, workspace_id, [run.id for run, _monitor in rows])
+    items = [
+        run_log_out(
+            run,
+            monitor,
+            change_id=change_map.get(run.id),
+            changed=run.id in change_map,
+        )
+        for run, monitor in rows
+    ]
+    return RunLogPage(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get(
@@ -1541,8 +1653,6 @@ def alerts_summary(
     db: Db,
     _workspace: AnyWs,
 ) -> AlertsSummary:
-    from sqlalchemy import func
-
     total = (
         db.scalar(
             select(func.count())
@@ -1636,8 +1746,6 @@ def mark_all_alerts_read(
     db: Db,
     _workspace: AnyWs,
 ) -> AlertsSummary:
-    from sqlalchemy import update as sa_update
-
     mark_read = (
         sa_update(ChangeEvent)
         .where(

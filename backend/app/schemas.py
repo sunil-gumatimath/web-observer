@@ -483,6 +483,29 @@ class MonitorRunOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MonitorRunLogOut(MonitorRunOut):
+    """Run with monitor context for the workspace-wide Logs view."""
+
+    monitor_name: str
+    monitor_url: str
+    # Set when the run produced a change event (links to the diff view).
+    change_id: uuid.UUID | None = None
+    changed: bool = False
+
+
+class MonitorRunDetailOut(MonitorRunLogOut):
+    """Single-run payload for the log drill-down page."""
+
+
+class RunLogPage(BaseModel):
+    """Paginated run-log list (newest first)."""
+
+    items: list[MonitorRunLogOut]
+    total: int
+    limit: int
+    offset: int
+
+
 class ChangeEventOut(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import uuid
 from datetime import datetime
 from typing import Annotated, Any
@@ -33,6 +34,7 @@ from app.services.api_keys import create_api_key, revoke_api_key
 from app.services.audit import write_audit
 from app.services.bulk_import import import_monitors, parse_csv
 from app.services.plans import PLANS, get_plan, plans_public
+from app.services.run_logs import change_ids_for_runs, fetch_run_log_rows
 from app.services.webhooks import new_webhook_secret
 
 router = APIRouter(prefix="/api/v1", tags=["enterprise"])
@@ -279,6 +281,105 @@ def export_changes(
         }
         for e in events
     ]
+
+
+# Cap the in-memory export: a very busy workspace can have hundreds of
+# thousands of runs; exporting them all would balloon the response.
+MAX_RUNS_EXPORT = 20_000
+
+
+@router.get("/workspaces/{workspace_id}/export/runs")
+def export_runs(
+    workspace_id: UUID,
+    db: Db,
+    principal: Principal,
+    workspace: Workspace = Depends(require_workspace_member),
+    format: str = Query(default="csv"),
+    monitor_id: UUID | None = Query(default=None),
+    outcome: str = Query(default="all"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+) -> Response:
+    """Check-history export (CSV/JSON) honouring the same filters as the Logs tab."""
+    try:
+        rows = fetch_run_log_rows(
+            db,
+            workspace_id,
+            limit=MAX_RUNS_EXPORT,
+            monitor_id=monitor_id,
+            outcome=outcome,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="runs.exported",
+        resource_type="workspace",
+        resource_id=str(workspace_id),
+        meta={"format": format, "count": len(rows), "outcome": outcome},
+    )
+    db.commit()
+
+    def _iso(dt: datetime | None) -> str:
+        return dt.isoformat() if dt is not None else ""
+
+    def _row_dict(run, monitor, change_id) -> dict:
+        return {
+            "run_id": str(run.id),
+            "monitor_name": monitor.name if monitor is not None else "",
+            "monitor_url": monitor.url if monitor is not None else "",
+            "status": run.status,
+            "http_status": run.http_status,
+            "latency_ms": run.latency_ms,
+            "changed": bool(change_id),
+            "change_id": str(change_id) if change_id else "",
+            "error_code": run.error_code,
+            "error_message": run.error_message,
+            "scheduled_at": _iso(run.scheduled_at),
+            "started_at": _iso(run.started_at),
+            "finished_at": _iso(run.finished_at),
+            "created_at": _iso(run.created_at),
+        }
+
+    change_map = change_ids_for_runs(db, workspace_id, [run.id for run, _m in rows])
+
+    if format == "csv":
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(
+            [
+                "run_id",
+                "monitor_name",
+                "monitor_url",
+                "status",
+                "http_status",
+                "latency_ms",
+                "changed",
+                "change_id",
+                "error_code",
+                "error_message",
+                "scheduled_at",
+                "started_at",
+                "finished_at",
+                "created_at",
+            ]
+        )
+        for run, monitor in rows:
+            d = _row_dict(run, monitor, change_map.get(run.id))
+            w.writerow(["" if v is None else v for v in d.values()])
+        return Response(content=buf.getvalue(), media_type="text/csv")
+
+    return Response(
+        content=json.dumps(
+            [_row_dict(run, monitor, change_map.get(run.id)) for run, monitor in rows]
+        ),
+        media_type="application/json",
+    )
 
 
 @router.get("/workspaces/{workspace_id}/api-keys", response_model=list[ApiKeyOut])

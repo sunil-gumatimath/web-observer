@@ -415,14 +415,21 @@ def _detect_change(
     run.latency_ms = result.latency_ms
     run.content_hash = digest
     run.snapshot_id = snapshot.id
-    run.status = RunStatus.SUCCEEDED.value
-    run.finished_at = datetime.now(UTC)
-    run.error_code = None
-    run.error_message = None
 
+    # Terminal status is also staged here — but ONLY on the paths that commit
+    # below.  Staging it unconditionally (as this code once did) poisons the
+    # *changed* path: the staged SUCCEEDED flushes inside apply_fetch_result
+    # and its pre-commit reaper fence re-reads this run's own staged value,
+    # concluding the run was "superseded" and rolling back the change.
+    # Sickness symptom: run_fenced ... status=succeeded seconds after the run
+    # started, followed by the reaper marking it "stuck in running".
     if prev is None or prev.content_hash is None:
         from app.services.adaptive import note_check_outcome
 
+        run.status = RunStatus.SUCCEEDED.value
+        run.finished_at = datetime.now(UTC)
+        run.error_code = None
+        run.error_message = None
         note_check_outcome(monitor, changed=False, succeeded=True)
         db.commit()
         return PipelineResult(status=run.status, content_hash=digest, is_baseline=True)
@@ -468,6 +475,10 @@ def _detect_change(
     if prev.content_hash == digest:
         from app.services.adaptive import note_check_outcome
 
+        run.status = RunStatus.SUCCEEDED.value
+        run.finished_at = datetime.now(UTC)
+        run.error_code = None
+        run.error_message = None
         note_check_outcome(monitor, changed=False, succeeded=True)
         db.commit()
         return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
@@ -484,6 +495,10 @@ def _detect_change(
         if "Visual similar" in v_summary:
             from app.services.adaptive import note_check_outcome
 
+            run.status = RunStatus.SUCCEEDED.value
+            run.finished_at = datetime.now(UTC)
+            run.error_code = None
+            run.error_message = None
             note_check_outcome(monitor, changed=False, succeeded=True)
             db.commit()
             return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
@@ -879,8 +894,15 @@ def _live_run_status(db: Session, run: MonitorRun) -> str | None:
     The reaper may mark a run FAILED while its worker is still fetching;
     without this fence the worker would commit SUCCEEDED over it afterwards
     ("resurrecting" a dead run) and double-count outcomes.
+
+    The read deliberately goes through a *fresh* session: this transaction's
+    own flushed-but-uncommitted writes are invisible to other sessions, and
+    the fence must never treat this run's staged status as external news.
     """
-    return db.scalar(select(MonitorRun.status).where(MonitorRun.id == run.id))
+    from app.db import SessionLocal
+
+    with SessionLocal() as probe:
+        return probe.scalar(select(MonitorRun.status).where(MonitorRun.id == run.id))
 
 
 def _enqueue_alert_screenshot(change_id: object, monitor_id: object) -> None:
@@ -949,6 +971,12 @@ def apply_fetch_result(
     if enrichment is not None and getattr(enrichment, "provider", None) == "heuristic_pending":
         change_id = change.id
         diff_text = ctx.diff_text
+        # Terminal status is staged here, immediately before the commit, so
+        # the pre-commit fence below can never see this run's own state.
+        run.status = RunStatus.SUCCEEDED.value
+        run.finished_at = datetime.now(UTC)
+        run.error_code = None
+        run.error_message = None
         db.commit()
         if monitor.screenshots_enabled:
             _enqueue_alert_screenshot(change_id, monitor.id)
@@ -983,6 +1011,11 @@ def apply_fetch_result(
             error_code="run_reaped",
             error_message="Run was reaped or superseded before results could commit.",
         )
+    # Fence passed: this is the one true terminal commit for the run.
+    run.status = RunStatus.SUCCEEDED.value
+    run.finished_at = datetime.now(UTC)
+    run.error_code = None
+    run.error_message = None
     db.commit()
 
     if monitor.screenshots_enabled:

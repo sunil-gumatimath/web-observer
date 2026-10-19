@@ -22,9 +22,12 @@ ignore = ["B008", "E501"]
 [tool.pyright]
 # Type-check against the project virtualenv so typed/compiled deps like
 # selectolax resolve; keep `app.*` importable with backend/ as the root.
+# NOTE: `.venv` must be a *Windows* venv on this machine. A venv created from
+# WSL (POSIX `bin/` layout) leaves pyright unable to resolve any third-party
+# import, which surfaces as repo-wide "could not be resolved" false positives.
 venvPath = "."
 venv = ".venv"
 extraPaths = ["."]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 typeCheckingMode = "basic"
 reportMissingTypeStubs = "none"

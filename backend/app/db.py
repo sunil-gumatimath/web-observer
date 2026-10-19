@@ -18,13 +18,14 @@ def _connect_args(database_url: str) -> dict:
       support named prepared statements); without it transactions fail with
       "prepared statement does not exist" under load.
     * sslmode=require for non-local hosts — psycopg defaults to "prefer",
-      which silently downgrades TLS after a MITM strips it; remote databases
-      (Neon, RDS) must not be connectable in cleartext. Local URLs keep the
-      default so dev Docker databases without TLS keep working.
+    * which silently downgrades TLS after a MITM strips it; remote databases
+    * (Neon, RDS) must not be connectable in cleartext. Local URLs keep the
+    * default so local development databases without TLS keep working.
     """
     args: dict = {"connect_timeout": 10, "prepare_threshold": 0}
     lowered = (database_url or "").lower()
-    local_hosts = ("localhost", "127.0.0.1", "::1", "@db:", "@postgres:", "is_local")
+    local_hosts = ("localhost", "127.0.0.1", "::1", "is_local")
+
     if "sslmode=" not in lowered and not any(h in lowered for h in local_hosts):
         args["sslmode"] = "require"
     return args

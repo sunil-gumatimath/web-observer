@@ -1,7 +1,6 @@
 """Pipeline integration tests (require PostgreSQL).
 
-Run with Docker Postgres:
-  docker compose up -d postgres
+Run with a local Postgres:
   $env:TEST_DATABASE_URL="postgresql+psycopg://monitor:monitor@localhost:5432/web_observer"
   pytest backend/tests/test_pipeline_integration.py -q
 """

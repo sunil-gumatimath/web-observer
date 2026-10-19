@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     snapshot_retention_days: int = 30
     run_retention_days: int = 90
 
-    # Storage: "local" (default, no MinIO/Docker) | "s3" | "auto"
+    # Storage: "local" (default, no MinIO) | "s3" | "auto"
     storage_backend: str = "local"
     local_storage_path: str = "./data/snapshots"
     s3_endpoint_url: str | None = None
