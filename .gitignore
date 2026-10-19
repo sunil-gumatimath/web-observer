@@ -39,7 +39,6 @@ backend/data/
 *.log
 logs-*.err
 logs/
-.docker-data/
 
 # Alembic
 # keep versions; ignore local ad-hoc

@@ -9,12 +9,9 @@ You need:
 1. **Python 3.11+** (3.12 fine)
 2. **Node.js 20+**
 3. **PostgreSQL** — **Neon** cloud URL or local install
-4. **Redis** — Docker is the easiest (also: local install / WSL / Memurai)
+4. **Redis** — local install / WSL / Memurai
 
 Snapshots go to `./data/snapshots`.
-
-> **Fast path:** skip the venv and Node install entirely and run the whole stack in
-> containers — see [Docker Compose (Option A)](#8-docker-compose-option-a--one-command-whole-stack).
 
 ---
 
@@ -55,9 +52,7 @@ DATABASE_URL=postgresql+psycopg://monitor:monitor@localhost:5432/web_observer
 
 ### Redis
 
-- **Docker (recommended):** `docker run -d --name mtw-redis -p 127.0.0.1:6379:6379 redis:7-alpine — stable port binding with no OS-level quirks
-- WSL2 / Memurai / Scoop Redis — works, but Windows→WSL2 localhost forwarding can flap; `wsl --shutdown` + `wsl` restores it if ports start getting refused
-- Default: `redis://localhost:6379/0`
+- Redis — local install / WSL2 / Memurai / Scoop; default `redis://localhost:6379/0`
 
 ---
 
@@ -208,37 +203,6 @@ STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storag
 
 ---
 
-## 8. Docker Compose (Option A — one command, whole stack)
-
-Skip the venv and Node installs: the entire stack runs from the repo root with
-`docker compose` (`backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml`):
-
-```powershell
-docker compose up -d --build   # first build takes several minutes (Chromium in the backend image)
-docker compose ps              # status
-docker compose logs -f api     # tail a service
-docker compose down            # stop — snapshots stay in ./data/snapshots
-```
-
-| Container | Runs |
-| ------------ | ----------------------------------------------------------------- |
-| `redis` | `redis:7-alpine` with healthcheck |
-| `api` | `uvicorn app.main:app` on :8002 |
-| `worker-http` | `dramatiq app.workers` (http_checks + notifications) |
-| `worker-browser` | `dramatiq app.workers --queues browser_checks` (Chromium pre-installed in the image) |
-| `scheduler` | `python -m app.scheduler` |
-| `frontend` | Next.js **production build** on :3000 |
-
-Notes:
-
-- Postgres stays external (Neon): `DATABASE_URL` comes from `backend/.env`.
-- Services use Redis at `redis://redis:6379/0` inside the compose network; `localhost:6379` still works from Windows.
-- Snapshots persist on the host via the `./data/snapshots` bind mount.
-- `frontend/.env.local` is copied into the build so `NEXT_PUBLIC_*` values bake into the client bundle. The frontend Dockerfile installs from `bun.lock` — after changing `frontend/package.json`, run `bun install` locally and commit the refreshed lock.
-- Containers don't run migrations on boot. With `APP_ENV=production`, run `docker compose run --rm api alembic upgrade head`.
-
----
-
 ## Troubleshooting
 
 | Issue | Fix |
@@ -247,7 +211,7 @@ Notes:
 | Stuck **Loading…** | Sign in with Clerk; hard-refresh; ensure API up |
 | Hydration `rtrvr-ls` warning | Browser extension (Retriever); suppress or disable on localhost |
 | Can't connect to DB | Neon awake? `sslmode=require`? `postgresql+psycopg://`? |
-| Dramatiq / Redis errors | Start Redis; `REDIS_URL=redis://localhost:6379/0`; Windows→WSL forwarding flaps — `wsl --shutdown` then `wsl`, or run Redis in Docker (`docker run -d -p 127.0.0.1:6379:6379 redis:7-alpine`) |
+| Dramatiq / Redis errors | Start Redis; `REDIS_URL=redis://localhost:6379/0`; Windows→WSL forwarding flaps — `wsl --shutdown` then `wsl` |
 | Limiter logs "storage unreachable - falling back" | Redis was down mid-traffic; rate limiting degraded to per-process in-memory (requests keep working, auto-recovers when Redis returns) — restart Redis |
 | `429` responses | API rate limits are enforced (default 60/min per verified principal or IP, stricter on decorated endpoints); check `Retry-After` |
 | Visual: Bad file descriptor | Browser worker `--threads 1`; restart workers; Playwright install chromium |
