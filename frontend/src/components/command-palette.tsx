@@ -17,6 +17,7 @@ const ROUTES = [
   { href: "/dashboard", label: "Go to Dashboard", hint: "overview" },
   { href: "/monitors", label: "Go to Monitors", hint: "list" },
   { href: "/monitors/new", label: "New monitor", hint: "create" },
+  { href: "/logs", label: "Go to Logs", hint: "check history" },
   { href: "/changes", label: "Go to Changes", hint: "diffs" },
   { href: "/alerts", label: "Go to Alerts inbox", hint: "inbox" },
   { href: "/import", label: "Go to Import", hint: "bulk csv" },

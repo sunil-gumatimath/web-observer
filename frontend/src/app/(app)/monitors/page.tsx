@@ -23,6 +23,7 @@ import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 import { config } from "@/lib/config";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 
 type StatusFilter = "all" | "active" | "paused";
 type SortKey = "name" | "schedule";
@@ -106,10 +107,10 @@ export default function MonitorsPage() {
 		};
 	}, [refreshTick]);
 
-	useEffect(() => {
-		const t = setInterval(() => setRefreshTick((n) => n + 1), 60000);
-		return () => clearInterval(t);
-	}, []);
+	// 15s cadence plus an immediate refresh when the tab regains visibility or
+	// focus. The old flat 60s timer meant a completed check could sit invisible
+	// for up to a minute, which reads to the user as "needs a reload".
+	useAutoRefresh(() => setRefreshTick((n) => n + 1));
 
 	const filtered = useMemo(() => {
 		const q = query.trim().toLowerCase();
@@ -351,7 +352,7 @@ export default function MonitorsPage() {
 															type="button"
 															onClick={() => toggleSort("name")}
 															aria-label={`Sort by name (${sortKey === "name" && sortDir === "asc" ? "descending" : "ascending"})`}
-															className="uppercase tracking-[0.12em] hover:text-[var(--text)]"
+															className="uppercase tracking-[0.12em] hover:text-[var(--ink)]"
 														>
 															Name
 															<span aria-hidden="true">
@@ -370,7 +371,7 @@ export default function MonitorsPage() {
 															type="button"
 															onClick={() => toggleSort("schedule")}
 															aria-label={`Sort by schedule (${sortKey === "schedule" && sortDir === "asc" ? "descending" : "ascending"})`}
-															className="uppercase tracking-[0.12em] hover:text-[var(--text)]"
+															className="uppercase tracking-[0.12em] hover:text-[var(--ink)]"
 														>
 															Schedule
 															<span aria-hidden="true">

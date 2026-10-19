@@ -26,6 +26,7 @@ import type { AlertInboxItem, AlertsSummary, ChangeEventDetail } from "@/lib/typ
 import { usePageTitle } from "@/lib/use-page-title";
 import { ensureWorkspace } from "@/lib/workspace";
 import { config } from "@/lib/config";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 
 type Filter = "all" | "unread" | "noise";
 type ImpactFilter = "all" | "high" | "medium" | "low";
@@ -112,10 +113,9 @@ export default function AlertsPage() {
 		};
 	}, [filter, limit, load, refreshTick]);
 
-	useEffect(() => {
-		const t = setInterval(() => setRefreshTick((n) => n + 1), 60000);
-		return () => clearInterval(t);
-	}, []);
+	// 15s cadence plus an immediate refresh on tab focus/visibility; the old
+	// flat 60s timer left new alerts invisible for up to a minute.
+	useAutoRefresh(() => setRefreshTick((n) => n + 1));
 
 	// Distinct monitors present in the inbox, for the monitor filter dropdown.
 	const monitorOptions = useMemo(() => {

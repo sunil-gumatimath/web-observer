@@ -89,9 +89,9 @@ export function ThemeToggle({ className }: { className?: string }) {
         setTheme(current === "light" ? "dark" : current === "dark" ? "system" : "light")
       }
       className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-[6px] border transition",
-        "border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] hover:text-[var(--fg)] hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40",
+        "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border transition",
+        "border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] hover:text-[var(--fg)] hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-focus)]/50",
         className,
       )}
     >

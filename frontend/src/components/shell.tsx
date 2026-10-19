@@ -24,6 +24,11 @@ const nav = [
 		match: (p: string) => p.startsWith("/monitors"),
 	},
 	{
+		href: "/logs",
+		label: "Logs",
+		match: (p: string) => p.startsWith("/logs"),
+	},
+	{
 		href: "/alerts",
 		label: "Alerts",
 		match: (p: string) => p.startsWith("/alerts"),
@@ -60,7 +65,7 @@ function ClerkAuthControls() {
 			<span
 				suppressHydrationWarning
 				title="Dev mode — internal token auth"
-				className="rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 py-1 text-xs font-medium text-[var(--muted)]"
+				className="rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 py-1 text-xs font-medium text-[var(--muted)]"
 			>
 				Dev
 			</span>
@@ -81,13 +86,13 @@ function ClerkUserControls() {
 			<div className="flex items-center gap-2" suppressHydrationWarning>
 				<Link
 					href="/sign-in"
-					className="rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 py-1 text-xs font-medium text-[var(--fg)] transition hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)]"
+					className="rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 py-1 text-xs font-medium text-[var(--fg)] transition hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)]"
 				>
 					Sign in
 				</Link>
 				<Link
 					href="/sign-up"
-					className="rounded-[6px] bg-[var(--primary)] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[var(--primary-hover)]"
+					className="rounded-[8px] bg-[var(--primary)] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[var(--primary-hover)] active:bg-[var(--primary-focus)]"
 				>
 					Sign up
 				</Link>
@@ -138,7 +143,7 @@ function ClerkWorkspaceSwitcher() {
 		<select
 			aria-label="Switch workspace"
 			value={current}
-			className="hidden max-w-[10rem] rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2 py-1 text-xs text-[var(--fg)] sm:block"
+			className="hidden max-w-[10rem] rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2 py-1 text-xs text-[var(--fg)] sm:block"
 			onChange={(e) => {
 				const id = e.target.value;
 				setCurrent(id);
@@ -216,7 +221,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 						<button
 							type="button"
 							onClick={() => setPaletteOpen(true)}
-							className="hidden h-8 items-center gap-2 rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 text-xs text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 sm:inline-flex"
+							className="hidden h-8 items-center gap-2 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 text-xs text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-focus)]/50 sm:inline-flex"
 							aria-label="Open command palette"
 						>
 							<span aria-hidden>⌕</span>
@@ -226,7 +231,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 						<button
 							type="button"
 							onClick={() => setPaletteOpen(true)}
-							className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] sm:hidden"
+							className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] sm:hidden"
 							aria-label="Open search"
 						>
 							<span aria-hidden className="text-sm leading-none">⌕</span>
@@ -238,7 +243,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 						</div>
 						<button
 							type="button"
-							className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] transition hover:text-[var(--fg)] md:hidden"
+							className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] transition hover:text-[var(--fg)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] md:hidden"
 							onClick={() => setOpen((v) => !v)}
 							aria-label="Toggle menu"
 							aria-expanded={open}

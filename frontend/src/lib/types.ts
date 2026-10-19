@@ -89,6 +89,31 @@ export type MonitorRun = {
   created_at: string;
 };
 
+/** Run log row with monitor context (workspace-wide Logs tab). */
+export type MonitorRunLog = MonitorRun & {
+  monitor_name: string;
+  monitor_url: string;
+  /** Set when the run produced a change event; links to the diff view. */
+  change_id?: string | null;
+  changed?: boolean;
+};
+
+export type RunLogPage = {
+  items: MonitorRunLog[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type RunLogFilters = {
+  monitorId?: string;
+  outcome?: "all" | "success" | "failed" | "changed";
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+};
+
 export type ChangeEvent = {
   id: string;
   workspace_id: string;

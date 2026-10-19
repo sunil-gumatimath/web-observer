@@ -20,32 +20,36 @@ export function Button({
 	size = "md",
 	...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
-	variant?: "primary" | "secondary" | "danger" | "ghost";
+	variant?: "primary" | "secondary" | "tertiary" | "inverse" | "danger" | "ghost";
 	size?: "sm" | "md" | "lg";
 	ref?: React.Ref<HTMLButtonElement>;
 }) {
 	const styles = {
 		primary:
-			"bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] active:bg-[var(--primary-focus)] border border-transparent shadow-xs",
+			"bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] active:bg-[var(--primary-focus)] border border-transparent shadow-xs",
 		secondary:
-			"bg-[var(--surface-1)] text-[var(--fg)] border border-[var(--hairline)] hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)]",
+			"bg-[var(--surface-1)] text-[var(--ink)] border border-[var(--hairline)] hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)]",
+		tertiary:
+			"bg-[var(--canvas)] text-[var(--ink)] border border-transparent hover:bg-[var(--surface-1)] active:bg-[var(--surface-2)]",
+		inverse:
+			"bg-[var(--inverse-canvas)] text-[var(--inverse-ink)] border border-transparent hover:bg-[var(--inverse-surface-1)] active:bg-[var(--inverse-surface-2)] shadow-xs",
 		danger:
-			"bg-[var(--danger)] text-white hover:opacity-90 border border-transparent shadow-xs",
+			"bg-[var(--danger)] text-white hover:opacity-90 active:opacity-100 border border-transparent shadow-xs",
 		ghost:
-			"bg-transparent text-[var(--fg)] hover:bg-[var(--surface-2)] border border-transparent",
+			"bg-transparent text-[var(--ink)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] border border-transparent",
 	}[variant];
 
 	const sizes = {
-		sm: "px-2.5 py-1 text-xs rounded-[6px]",
-		md: "px-3.5 py-1.5 text-sm rounded-[8px]",
-		lg: "px-4 py-2 text-sm rounded-[8px]",
+		sm: "px-2.5 py-1 text-xs leading-[1.20] rounded-[6px]",
+		md: "px-3.5 py-2 text-sm leading-[1.20] rounded-[8px]",
+		lg: "px-4 py-2.5 text-sm leading-[1.20] rounded-[8px] min-h-[40px]",
 	}[size];
 
 	return (
 		<button
 			className={cn(
 				"inline-flex items-center justify-center gap-1.5 font-medium transition",
-				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/45 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--canvas)]",
+				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-focus)]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--canvas)]",
 				"disabled:pointer-events-none disabled:opacity-40",
 				styles,
 				sizes,
@@ -152,7 +156,7 @@ export function Badge({
 		neutral:
 			"bg-[var(--surface-2)] text-[var(--ink-muted)] border border-[var(--hairline)]",
 		success:
-			"bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+			"bg-[var(--semantic-success)]/10 text-[var(--semantic-success)] border border-[var(--semantic-success)]/25",
 		danger:
 			"bg-rose-500/10 text-rose-400 border border-rose-500/20",
 		warn: "bg-amber-500/10 text-amber-300 border border-amber-500/20",

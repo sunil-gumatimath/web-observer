@@ -46,11 +46,16 @@
   --primary-hover: #828fff;
   --primary-focus: #5e69d1;
   --brand-secure: #7a7fad;
+  --inverse-canvas: #ffffff;
+  --inverse-surface-1: #f5f6f6;
+  --inverse-surface-2: #f6f7f7;
+  --inverse-ink: #000000;
 
   --ink: #f7f8f8;
   --ink-muted: #d0d6e0;
   --ink-subtle: #8a8f98;
   --ink-tertiary: #62666d;
+  --text: var(--ink);
 
   --semantic-success: #27a644;
   --warn: #eab308;
@@ -188,6 +193,11 @@ html.light,
   --nav-active-ring: var(--hairline-strong);
   --diff-bg: var(--surface-1);
   --diff-text: var(--ink-muted);
+  --text: var(--ink);
+  --inverse-canvas: #010102;
+  --inverse-surface-1: #0f1011;
+  --inverse-surface-2: #141516;
+  --inverse-ink: #f7f8f8;
 }
 
 /* Explicit .dark class preserves dark core tokens */
@@ -209,11 +219,16 @@ html.light,
   --primary-hover: #828fff;
   --primary-focus: #5e69d1;
   --brand-secure: #7a7fad;
+  --inverse-canvas: #ffffff;
+  --inverse-surface-1: #f5f6f6;
+  --inverse-surface-2: #f6f7f7;
+  --inverse-ink: #000000;
 
   --ink: #f7f8f8;
   --ink-muted: #d0d6e0;
   --ink-subtle: #8a8f98;
   --ink-tertiary: #62666d;
+  --text: var(--ink);
 
   --semantic-success: #27a644;
   --warn: #eab308;
@@ -365,11 +380,13 @@ a:hover {
 
   /* Linear typography helpers */
   .eyebrow {
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.30;
     color: var(--muted);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.4px;
   }
 
   .lead {
@@ -411,6 +428,10 @@ a:hover {
     background: var(--primary-hover);
   }
 
+  .btn-linear-primary:active {
+    background: var(--primary-focus);
+  }
+
   .btn-linear-secondary {
     background: var(--surface-1);
     color: var(--fg);
@@ -422,6 +443,39 @@ a:hover {
     border-color: var(--hairline-strong);
   }
 
+  .btn-linear-secondary:active {
+    background: var(--surface-3);
+  }
+
+  .btn-linear-tertiary {
+    background: var(--canvas);
+    color: var(--ink);
+    border: 1px solid transparent;
+  }
+
+  .btn-linear-tertiary:hover {
+    background: var(--surface-1);
+    color: var(--ink);
+  }
+
+  .btn-linear-tertiary:active {
+    background: var(--surface-2);
+  }
+
+  .btn-linear-inverse {
+    background: var(--inverse-canvas);
+    color: var(--inverse-ink);
+    border: 1px solid transparent;
+  }
+
+  .btn-linear-inverse:hover {
+    background: var(--inverse-surface-1);
+  }
+
+  .btn-linear-inverse:active {
+    background: var(--inverse-surface-2);
+  }
+
   .btn-linear-ghost {
     background: transparent;
     color: var(--fg);
@@ -431,6 +485,10 @@ a:hover {
   .btn-linear-ghost:hover {
     background: var(--surface-2);
     color: var(--fg);
+  }
+
+  .btn-linear-ghost:active {
+    background: var(--surface-3);
   }
 
   /* Back-compat aliases */

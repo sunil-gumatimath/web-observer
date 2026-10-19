@@ -33,6 +33,7 @@ import {
 } from "@/components/ui";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 
 const CHANGE_COLORS: Record<string, string> = {
   pricing: "bg-emerald-500",
@@ -92,10 +93,9 @@ export default function DashboardPage() {
     };
   }, [refreshTick]);
 
-  useEffect(() => {
-    const t = setInterval(() => setRefreshTick((n) => n + 1), 60000);
-    return () => clearInterval(t);
-  }, []);
+  // 15s cadence plus an immediate refresh on tab focus/visibility; the old flat
+  // 60s timer left a completed check invisible for up to a minute.
+  useAutoRefresh(() => setRefreshTick((n) => n + 1));
 
   async function handlePauseAll() {
     if (!workspaceId || bulkBusy) return;

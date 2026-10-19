@@ -123,7 +123,7 @@ export function OnboardingChecklist({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="section-label">Getting started</p>
-          <p className="mt-1 text-sm font-medium text-[var(--text)]">
+          <p className="mt-1 text-sm font-medium text-[var(--ink)]">
             {doneCount === steps.length
               ? "You're all set up"
               : `${doneCount} of ${steps.length} complete`}
@@ -173,7 +173,7 @@ export function OnboardingChecklist({
                       className={
                         state === "done"
                           ? "text-sm font-medium text-[var(--muted)] line-through decoration-[var(--border)]"
-                          : "text-sm font-medium text-[var(--text)]"
+                          : "text-sm font-medium text-[var(--ink)]"
                       }
                     >
                       {step.title}

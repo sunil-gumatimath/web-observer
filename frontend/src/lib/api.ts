@@ -18,9 +18,12 @@ import type {
   Monitor,
   MonitorCreateInput,
   MonitorRun,
+  MonitorRunLog,
   MonitorUpdateInput,
   NotificationChannel,
   PublicShare,
+  RunLogFilters,
+  RunLogPage,
   ShareLinkCreated,
   ShareLinkRow,
   SitemapDiscovery,
@@ -300,6 +303,35 @@ export const api = {
 
   getRun: (workspaceId: string, runId: string) =>
     request<MonitorRun>(`/api/v1/workspaces/${workspaceId}/runs/${runId}`),
+
+  getRunDetail: (workspaceId: string, runId: string) =>
+    request<MonitorRunLog>(`/api/v1/workspaces/${workspaceId}/runs/${runId}`),
+
+  listRunLogs: (workspaceId: string, opts?: RunLogFilters) => {
+    const q = new URLSearchParams();
+    if (opts?.monitorId) q.set("monitor_id", opts.monitorId);
+    if (opts?.outcome && opts.outcome !== "all") q.set("outcome", opts.outcome);
+    if (opts?.from) q.set("date_from", opts.from);
+    if (opts?.to) q.set("date_to", opts.to);
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    if (opts?.offset) q.set("offset", String(opts.offset));
+    const qs = q.toString();
+    return request<RunLogPage>(
+      `/api/v1/workspaces/${workspaceId}/runs${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  /** Direct URL for the run-log CSV export (opened in a new tab). */
+  exportRunLogsUrl: (workspaceId: string, opts?: RunLogFilters) => {
+    const q = new URLSearchParams();
+    q.set("format", "csv");
+    if (opts?.monitorId) q.set("monitor_id", opts.monitorId);
+    if (opts?.outcome && opts.outcome !== "all") q.set("outcome", opts.outcome);
+    if (opts?.from) q.set("date_from", opts.from);
+    if (opts?.to) q.set("date_to", opts.to);
+    const qs = q.toString();
+    return `${config.apiBaseUrl}/api/v1/workspaces/${workspaceId}/export/runs${qs ? `?${qs}` : ""}`;
+  },
 
   listRuns: (workspaceId: string, monitorId: string) =>
     request<MonitorRun[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/runs`),
@@ -626,7 +658,13 @@ export const api = {
   badgeUrl: (workspaceId: string, monitorId: string) =>
     `${config.apiBaseUrl}/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/badge.svg`,
 
-  // SSE via fetch streaming (EventSource can't send Authorization header)
+  // SSE via fetch streaming (EventSource can't send an Authorization header).
+  //
+  // Parsing follows the SSE wire format instead of assuming `\n\n` framing with
+  // a single-line data field: CRLF/CR line endings, comment frames and
+  // multi-line data are all handled. The server emits `: beat` heartbeats to
+  // stop proxies reaping an idle stream; those must be dropped rather than
+  // dispatched as a bogus "message" event.
   streamMonitorEvents: async (
     workspaceId: string,
     monitorId: string,
@@ -639,28 +677,47 @@ export const api = {
       { headers: { ...headers, Accept: "text/event-stream" }, signal, cache: "no-store" },
     );
     if (!res.ok || !res.body) throw new ApiError(res.status, "SSE failed", null);
+
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+
+    const dispatch = (frame: string) => {
+      let event = "message";
+      const dataLines: string[] = [];
+      for (const line of frame.split("\n")) {
+        if (line === "" || line.startsWith(":")) continue; // blank or comment
+        const colon = line.indexOf(":");
+        const field = colon === -1 ? line : line.slice(0, colon);
+        let value = colon === -1 ? "" : line.slice(colon + 1);
+        if (value.startsWith(" ")) value = value.slice(1); // strip one leading space
+        if (field === "event") event = value || "message";
+        else if (field === "data") dataLines.push(value);
+      }
+      if (dataLines.length === 0) return; // heartbeat-only frame
+      const raw = dataLines.join("\n");
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = raw;
+      }
+      // Dispatch outside the parse try/catch: otherwise an exception thrown by
+      // the callback would be swallowed and the event re-delivered as a string.
+      onEvent(event, parsed);
+    };
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      // Drop CR outright: it is only ever a line terminator here (JSON escapes
+      // it as \\r), and removing it avoids a false frame boundary when a CRLF
+      // pair is split across two chunks.
+      buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
       const parts = buffer.split("\n\n");
-      buffer = parts.pop() || "";
+      buffer = parts.pop() ?? "";
       for (const part of parts) {
-        const lines = part.split("\n");
-        let event = "message";
-        let data = "";
-        for (const line of lines) {
-          if (line.startsWith("event:")) event = line.slice(6).trim();
-          else if (line.startsWith("data:")) data = line.slice(5).trim();
-        }
-        try {
-          onEvent(event, data ? JSON.parse(data) : null);
-        } catch {
-          onEvent(event, data);
-        }
+        if (part.trim() !== "") dispatch(part);
       }
     }
   },

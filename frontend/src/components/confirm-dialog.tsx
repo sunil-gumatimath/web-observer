@@ -32,7 +32,7 @@ export function ConfirmButton({
 	body?: ReactNode;
 	confirmLabel?: string;
 	cancelLabel?: string;
-	variant?: "primary" | "secondary" | "danger" | "ghost";
+	variant?: "primary" | "secondary" | "tertiary" | "inverse" | "danger" | "ghost";
 	size?: "sm" | "md" | "lg";
 	busy?: boolean;
 	disabled?: boolean;
