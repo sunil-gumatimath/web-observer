@@ -7,8 +7,8 @@ project overview and quickstart.
 
 | Doc | Topic |
 | ----- | ------- |
-| [local-dev.md](./local-dev.md) | Run the stack locally (native processes or Docker Compose) |
-| [operations/local-setup-and-ops.md](./operations/local-setup-and-ops.md) | Process topology, secrets, retention, Docker ops |
+| [local-dev.md](./local-dev.md) | Run the stack locally (native processes) |
+| [operations/local-setup-and-ops.md](./operations/local-setup-and-ops.md) | Process topology, secrets, retention |
 
 ## Guides
 
