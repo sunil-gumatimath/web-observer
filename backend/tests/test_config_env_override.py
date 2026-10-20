@@ -13,9 +13,7 @@ import logging
 from app.config import _warn_env_overrides
 
 
-def test_differing_env_value_is_reported_and_fingerprinted(
-    tmp_path, monkeypatch, caplog
-) -> None:
+def test_differing_env_value_is_reported_and_fingerprinted(tmp_path, monkeypatch, caplog) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
         "GEMINI_API_KEY=file-key-1111\nGEMINI_MODEL=gemini-3.5-flash-lite\n",

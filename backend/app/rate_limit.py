@@ -87,9 +87,7 @@ def rate_limit_exceeded_handler(_request: Request, exc: Exception) -> Response:
     crashing the handler (``AttributeError: no attribute 'detail'``).
     """
     if not isinstance(exc, RateLimitExceeded):
-        logger.error(
-            "rate_limit_internal_error ip=%s exc=%r", get_remote_address(_request), exc
-        )
+        logger.error("rate_limit_internal_error ip=%s exc=%r", get_remote_address(_request), exc)
         return JSONResponse(status_code=500, content={"detail": "Rate limit error"})
     logger.warning("rate_limit_exceeded ip=%s detail=%s", get_remote_address(_request), str(exc))
     return JSONResponse(

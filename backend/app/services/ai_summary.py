@@ -800,7 +800,9 @@ def _candidate_models(primary: str | None, api_base: str | None) -> list[str]:
     # 404s. When the base is unknown there is no provider-specific default, so
     # keep the historical ``llm_model`` behaviour.
     provider_default = (
-        settings.gemini_model if provider is not None and provider.id == "gemini" else settings.llm_model
+        settings.gemini_model
+        if provider is not None and provider.id == "gemini"
+        else settings.llm_model
     )
     primary_model = (primary or "").strip() or provider_default
     candidates = [primary_model]

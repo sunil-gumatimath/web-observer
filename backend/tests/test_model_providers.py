@@ -138,9 +138,7 @@ def test_verified_candidates_exclude_models_that_cannot_finish_the_job() -> None
 
 def test_verified_only_is_off_by_default_so_explicit_lists_keep_full_scope() -> None:
     """A deliberate user choice must not be silently narrowed by the catalog."""
-    assert candidates_for_base(GEMINI_BASE) == candidates_for_base(
-        GEMINI_BASE, verified_only=False
-    )
+    assert candidates_for_base(GEMINI_BASE) == candidates_for_base(GEMINI_BASE, verified_only=False)
 
 
 def test_catalog_exposes_at_least_one_model_verified_at_the_output_cap() -> None:

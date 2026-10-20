@@ -73,7 +73,6 @@ def _warn_env_overrides(env_file: Path | None = None) -> list[str]:
     return overridden
 
 
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
