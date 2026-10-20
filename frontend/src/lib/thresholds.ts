@@ -130,7 +130,3 @@ export function applyPatternDraft(
 	return { ...(current ?? {}), [key]: raw };
 }
 
-/** True when no threshold is set — alert on any change. */
-export function isEmptyConfig(config: ThresholdConfig | null): boolean {
-	return !config || Object.keys(config).length === 0;
-}

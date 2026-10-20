@@ -618,39 +618,3 @@ kbd {
   }
 }
 
-/* DataTable mobile scrolling */
-.datatable-scroll {
-  -webkit-overflow-scrolling: touch;
-}
-
-.datatable-edge {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 1.5rem;
-  pointer-events: none;
-  background: linear-gradient(to right, transparent, rgba(1, 1, 2, 0.5));
-}
-
-@media (max-width: 767px) {
-  .datatable-scroll table {
-    min-width: 40rem;
-  }
-
-  .datatable-scroll thead th:first-child,
-  .datatable-scroll tbody td:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-  }
-
-  .datatable-scroll thead th:first-child {
-    background: var(--bg-elevated);
-  }
-
-  .datatable-scroll tbody td:first-child {
-    background: var(--bg-elevated);
-    box-shadow: 1px 0 0 var(--border);
-  }
-}

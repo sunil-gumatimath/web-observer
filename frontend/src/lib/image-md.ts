@@ -6,8 +6,6 @@
  * so captured images render visually instead of as raw markdown soup.
  */
 
-export type MdImage = { alt: string; src: string };
-
 export type LineSegment =
   | { type: "text"; value: string }
   | { type: "image"; alt: string; src: string };
@@ -87,22 +85,3 @@ export function splitLineSegments(line: string): LineSegment[] {
   return segs;
 }
 
-/**
- * Pull every markdown image out of a single line. Returns the images plus the
- * remaining text (with empty `[](...)` wrappers tidied away).
- */
-export function extractImages(line: string): { imgs: MdImage[]; rest: string } {
-  const segs = splitLineSegments(line);
-  const imgs: MdImage[] = [];
-  const textParts: string[] = [];
-  for (const s of segs) {
-    if (s.type === "image") imgs.push({ alt: s.alt, src: s.src });
-    else textParts.push(s.value);
-  }
-  const rest = textParts
-    .join(" ")
-    .replace(/\[\s*\]\([^)]*\)/g, " ") // empty wrappers left from group removal
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
-  return { imgs, rest };
-}

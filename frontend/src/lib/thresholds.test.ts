@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
 	applyNumericDraft,
 	applyPatternDraft,
-	isEmptyConfig,
 	isValidRegex,
 	keysForMode,
 	parseNumericDraft,
@@ -129,17 +128,11 @@ describe("applyPatternDraft", () => {
 	});
 });
 
-describe("toDrafts / isEmptyConfig", () => {
+describe("toDrafts", () => {
 	it("round-trips configs to editable strings", () => {
 		expect(toDrafts(null).price_below).toBe("");
 		expect(
 			toDrafts({ price_below: 49.99, regex_must_match: "sale" }).price_below,
 		).toBe("49.99");
-	});
-
-	it("detects empty configs", () => {
-		expect(isEmptyConfig(null)).toBe(true);
-		expect(isEmptyConfig({})).toBe(true);
-		expect(isEmptyConfig({ price_below: 10 })).toBe(false);
 	});
 });

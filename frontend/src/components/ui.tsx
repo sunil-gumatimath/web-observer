@@ -420,42 +420,6 @@ export function SegmentedControl<T extends string>({
 	);
 }
 
-export function DataTable({
-	headers,
-	children,
-	empty,
-}: {
-	headers: string[];
-	children: ReactNode;
-	empty?: ReactNode;
-}) {
-	return (
-		<div className="surface overflow-hidden border border-[var(--hairline)]">
-			<div className="relative">
-				<div className="datatable-scroll overflow-x-auto">
-					<table className="w-full text-left text-sm">
-						<thead>
-							<tr className="border-b border-[var(--hairline)] bg-[var(--surface-1)]">
-								{headers.map((h) => (
-									<th
-										key={h}
-										className="whitespace-nowrap px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--ink-subtle)]"
-									>
-										{h}
-									</th>
-								))}
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-[var(--hairline)]">{children}</tbody>
-					</table>
-				</div>
-				<div aria-hidden className="datatable-edge md:hidden" />
-			</div>
-			{empty}
-		</div>
-	);
-}
-
 export function ModeBadge({ mode }: { mode: string }) {
 	const labels: Record<string, string> = {
 		page_content: "Page content",

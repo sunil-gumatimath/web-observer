@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isActiveRun, isTerminalRun, runsSignature } from "./monitor-runs";
+import { isActiveRun, runsSignature } from "./monitor-runs";
 import type { MonitorRun } from "./types";
 
 function run(id: string, status: string): MonitorRun {
@@ -30,21 +30,12 @@ describe("monitor run status model", () => {
     // active nor terminal can never settle the first-check wait.
     for (const status of ["scheduled", "queued", "running"]) {
       expect(isActiveRun(run("r1", status))).toBe(true);
-      expect(isTerminalRun(run("r1", status))).toBe(false);
     }
   });
 
-  it("treats every backend terminal state as terminal", () => {
+  it("treats every backend terminal state as inactive", () => {
     for (const status of ["succeeded", "failed", "cancelled"]) {
-      expect(isTerminalRun(run("r1", status))).toBe(true);
       expect(isActiveRun(run("r1", status))).toBe(false);
-    }
-  });
-
-  it("partitions all known statuses (no neither-nor state)", () => {
-    for (const status of ["scheduled", "queued", "running", "succeeded", "failed", "cancelled"]) {
-      const r = run("r1", status);
-      expect(isActiveRun(r) || isTerminalRun(r)).toBe(true);
     }
   });
 });
