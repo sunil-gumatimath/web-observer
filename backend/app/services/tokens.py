@@ -83,8 +83,3 @@ def verify_token(token: str, stored_hash: str) -> bool:
     if stored_hash.startswith(_LEGACY_SCHEME_PREFIX):
         return hmac.compare_digest(legacy_hmac_hash_token(token), stored_hash)
     return hmac.compare_digest(legacy_hash_token(token), stored_hash)
-
-
-def build_url(*, base: str, kind: str, token: str) -> str:
-    base = (base or "").rstrip("/")
-    return f"{base}/{kind}/{token}"

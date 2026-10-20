@@ -222,21 +222,3 @@ def fetch_readme_text(
     if last_exc:
         msg += f" (last error: {last_exc})"
     raise ExtractionError("readme_not_found", msg)
-
-
-def readme_monitor_text(
-    repo_input: str,
-    *,
-    timeout_seconds: int | None = None,
-    max_response_bytes: int | None = None,
-) -> str:
-    """Convenience: return README markdown text or raise ExtractionError."""
-    from app.config import get_settings
-
-    settings = get_settings()
-    text, _ = fetch_readme_text(
-        repo_input,
-        timeout_seconds=timeout_seconds or settings.default_timeout_seconds,
-        max_response_bytes=max_response_bytes or settings.default_max_response_bytes,
-    )
-    return text

@@ -344,11 +344,6 @@ def output_cap_for(base: str | None, model: str | None, default: int) -> int:
     return default
 
 
-def all_models() -> list[ModelEntry]:
-    """Every model across every provider, provider order preserved."""
-    return [m for p in PROVIDERS for m in p.models]
-
-
 def provider_for_base(base: str | None) -> Provider | None:
     """The provider that serves ``base``, or None for an unknown base."""
     provider_id = PROVIDER_BY_BASE.get((base or "").strip().rstrip("/"))

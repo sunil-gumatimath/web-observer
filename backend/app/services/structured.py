@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from app.services.extract import ExtractionError, content_hash, normalize_text
+from app.services.extract import ExtractionError, normalize_text
 
 
 def parse_json_body(text: str) -> Any:
@@ -100,20 +100,6 @@ class ListDiff:
         for before, after in self.modified:
             lines.append(f"~ {before} → {after}")
         return "\n".join(lines) if lines else "(no list changes)"
-
-
-def extract_json_list(text: str, path: str) -> list[str]:
-    data = parse_json_body(text)
-    value = resolve_json_path(data, path)
-    if not isinstance(value, list):
-        raise ExtractionError("extraction_failed", f"JSON path {path} did not resolve to a list")
-    items: list[str] = []
-    for el in value:
-        if isinstance(el, (dict, list)):
-            items.append(stable_json_dumps(el))
-        else:
-            items.append(normalize_text(str(el)))
-    return items
 
 
 def extract_html_list(
@@ -233,7 +219,3 @@ def diff_lists(before: list[str], after: list[str]) -> ListDiff:
         summary=summary,
         normalized=list_to_normalized(after),
     )
-
-
-def content_hash_list(items: list[str]) -> str:
-    return content_hash(list_to_normalized(items))

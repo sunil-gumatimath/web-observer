@@ -6,7 +6,6 @@ from app.services.extract import ExtractionError
 from app.services.structured import (
     diff_lists,
     extract_json_field,
-    extract_json_list,
     resolve_json_path,
 )
 
@@ -23,10 +22,7 @@ def test_extract_json_field() -> None:
     assert "Widget" in extract_json_field(body, "$.product")
 
 
-def test_extract_json_list_and_diff() -> None:
-    body = json.dumps({"tags": ["a", "b", "c"]})
-    items = extract_json_list(body, "$.tags")
-    assert items == ["a", "b", "c"]
+def test_diff_lists() -> None:
     d = diff_lists(["a", "b"], ["b", "c", "d"])
     assert "c" in d.added or "d" in d.added
     assert "a" in d.removed

@@ -1,6 +1,6 @@
 import io
 
-from app.services.visual import average_hash, hamming_distance_hex, hashes_similar
+from app.services.visual import average_hash, hamming_distance_hex
 
 
 def _gradient_png(horizontal: bool = True) -> bytes:
@@ -23,7 +23,6 @@ def test_same_image_same_hash() -> None:
     a = average_hash(png)
     b = average_hash(png)
     assert a == b
-    assert hashes_similar(a, b, max_distance=0)
 
 
 def test_different_patterns_distant() -> None:

@@ -48,10 +48,6 @@ def hamming_distance_hex(a: str, b: str) -> int:
     return (ai ^ bi).bit_count()
 
 
-def hashes_similar(a: str, b: str, *, max_distance: int = 5) -> bool:
-    return hamming_distance_hex(a, b) <= max_distance
-
-
 @dataclass
 class VisualCapture:
     png_bytes: bytes
