@@ -19,6 +19,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonTable } from "@/components/skeleton";
 import { api } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { MONITOR_MODE_OPTIONS } from "@/lib/modes";
 import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -31,14 +32,7 @@ type SortDir = "asc" | "desc";
 
 const MODE_OPTIONS: Array<{ value: MonitorMode | "all"; label: string }> = [
 	{ value: "all", label: "All modes" },
-	{ value: "page_content", label: "Page content" },
-	{ value: "site_links", label: "Site links" },
-	{ value: "product_price", label: "Product price" },
-	{ value: "list_items", label: "List items" },
-	{ value: "json_field", label: "JSON field" },
-	{ value: "rss_feed", label: "RSS feed" },
-	{ value: "readme", label: "GitHub README" },
-	{ value: "visual", label: "Visual diff" },
+	...MONITOR_MODE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
 ];
 
 /** Last-check time: latest_change.created_at when present, else next_run_at. */

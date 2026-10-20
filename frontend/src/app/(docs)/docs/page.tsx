@@ -351,7 +351,7 @@ export default function DocsPage() {
                 <strong className="text-[var(--fg)]">Visual diffs</strong> — GitHub-style added/removed line views (split + unified) for every content change via <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">GithubDiff</code> + <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">unified_diff</code>.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Opt-in screenshots</strong> — when <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots_enabled</code> is on, every check captures a fresh Playwright screenshot (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots/{"{monitor_id}/{run_id}.png"}</code>) with aHash history — off by default to avoid forcing Playwright on text monitors.
+                <strong className="text-[var(--fg)]">Opt-in screenshots</strong> — when <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots_enabled</code> is on, every check captures a fresh Playwright screenshot (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots/{"{monitor_id}/{change.run_id}.png"}</code>) with aHash history — off by default to avoid forcing Playwright on text monitors.
               </li>
               <li>
                 <strong className="text-[var(--fg)]">AI change summaries & impact</strong> — plain-language titles, summaries, impact rating (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">critical</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">high</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">medium</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">low</code>), and model confidence scores stored per change.
@@ -467,11 +467,19 @@ Links,https://example.com/blog,list_items,60`}
               ,{" "}
               <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_items</code>{" "}
               (requires <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">css_selector</code>
-              ), and{" "}
+              ),{" "}
               <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">json_field</code>{" "}
               (requires a JSON path in{" "}
               <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">css_selector</code>, e.g.{" "}
-              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">$.data.price</code>).
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">$.data.price</code>
+              ),{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">rss_feed</code>
+              ,{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">readme</code>{" "}
+              (a GitHub repository, e.g.{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">owner/repo</code>
+              ), and{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">visual</code>.
             </p>
           </DocSection>
 

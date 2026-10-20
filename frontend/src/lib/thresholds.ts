@@ -5,6 +5,8 @@ export type ThresholdConfig = Record<string, unknown>;
 export type ThresholdKey =
 	| "price_below"
 	| "price_above"
+	| "value_below"
+	| "value_above"
 	| "percent_change"
 	| "list_min_added"
 	| "list_min_removed"
@@ -18,6 +20,8 @@ export type ThresholdKey =
 export const ALL_THRESHOLD_KEYS: ThresholdKey[] = [
 	"price_below",
 	"price_above",
+	"value_below",
+	"value_above",
 	"percent_change",
 	"list_min_added",
 	"list_min_removed",
@@ -34,7 +38,9 @@ export function keysForMode(mode: MonitorMode): ThresholdKey[] {
 	const keys: ThresholdKey[] = [];
 	if (mode === "product_price") {
 		keys.push("price_below", "price_above", "percent_change");
-	} else if (mode === "json_field" || mode === "page_content") {
+	} else if (mode === "json_field") {
+		keys.push("value_below", "value_above", "percent_change");
+	} else if (mode === "page_content") {
 		keys.push("percent_change");
 	} else if (
 		mode === "list_items" ||
@@ -52,6 +58,13 @@ export function keysForMode(mode: MonitorMode): ThresholdKey[] {
 		"flap_window_minutes",
 		"flap_max_alerts",
 	);
+	// Visual snapshots are hash strings, not page text — a content regex can
+	// never match them, so it is not offered for this mode.
+	if (mode === "visual") {
+		return keys.filter(
+			(k) => k !== "regex_must_match" && k !== "regex_must_not_match",
+		);
+	}
 	return keys;
 }
 

@@ -42,7 +42,7 @@ describe("keysForMode", () => {
 	});
 
 	it("always includes the common fields", () => {
-		for (const mode of ["readme", "visual"] as const) {
+		for (const mode of ["readme"] as const) {
 			expect(keysForMode(mode)).toEqual([
 				"min_diff_chars",
 				"regex_must_match",
@@ -52,6 +52,12 @@ describe("keysForMode", () => {
 				"flap_max_alerts",
 			]);
 		}
+		expect(keysForMode("visual")).toEqual([
+			"min_diff_chars",
+			"cooldown_minutes",
+			"flap_window_minutes",
+			"flap_max_alerts",
+		]);
 	});
 });
 

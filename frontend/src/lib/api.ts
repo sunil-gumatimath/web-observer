@@ -167,6 +167,9 @@ export function brandAssetUrl(path: string | null | undefined): string | null {
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
+  if (path.startsWith("/")) {
+    return `${config.apiBaseUrl}${path}`;
+  }
   // The object key is a path with slashes; encoding each segment (not the whole
   // string) preserves them so the /api/v1/public/assets/{object_key:path} route
   // resolves correctly.

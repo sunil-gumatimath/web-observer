@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Badge, Card, SectionTitle } from "@/components/ui";
+import { Badge, Card, ModeBadge, SectionTitle } from "@/components/ui";
 import { api, brandAssetUrl } from "@/lib/api";
 import type { PublicShare } from "@/lib/types";
 
@@ -74,7 +74,7 @@ export default function PublicSharePage() {
             </p>
           ) : null}
         </div>
-        <Badge tone="neutral">{data.monitor.mode}</Badge>
+        <ModeBadge mode={data.monitor.mode} />
       </div>
 
       {hero ? (
@@ -85,12 +85,14 @@ export default function PublicSharePage() {
           via the public asset endpoint only with a known object key
           (screenshots/{monitor_id}/{run_id}.png), which the public share
           payload does not include. Keep this page auth-free: summaries only. */}
-      <div className="mt-8">
-        <SectionTitle>Visual comparison</SectionTitle>
-        <Card className="text-sm text-[var(--ink-subtle)]">
-          Screenshot comparisons are available in the app. This public link shares change summaries only.
-        </Card>
-      </div>
+      {data.monitor.mode === "visual" ? (
+        <div className="mt-8">
+          <SectionTitle>Visual comparison</SectionTitle>
+          <Card className="text-sm text-[var(--ink-subtle)]">
+            Screenshot comparisons are available in the app. This public link shares change summaries only.
+          </Card>
+        </div>
+      ) : null}
 
       <div className="mt-8">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--ink-subtle)]">

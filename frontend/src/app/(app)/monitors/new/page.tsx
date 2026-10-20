@@ -22,6 +22,18 @@ import type {
 	SitemapDiscovery as SitemapDiscoveryResult,
 	SitemapImportResult,
 } from "@/lib/types";
+import {
+	isReadmeMode,
+	MONITOR_MODE_OPTIONS,
+	needsJs,
+	requiresSelector,
+	SITEMAP_IMPORT_MODES,
+	selectorHelp,
+	selectorLabel,
+	selectorPlaceholder,
+	showsIgnore,
+	showsSelector,
+} from "@/lib/modes";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
@@ -55,15 +67,14 @@ const STARTER_TEMPLATES: Array<{
 	name: string;
 	mode: MonitorMode;
 	interval: number;
-	urlHint: string;
 }> = [
-	{ label: "Pricing page", name: "Pricing", mode: "page_content", interval: 60, urlHint: "…/pricing" },
-	{ label: "Product price", name: "Product price", mode: "product_price", interval: 1440, urlHint: "…/product" },
-	{ label: "Changelog", name: "Changelog", mode: "page_content", interval: 1440, urlHint: "…/changelog" },
-	{ label: "Job listings", name: "Jobs", mode: "page_content", interval: 60, urlHint: "…/careers" },
-	{ label: "Docs page", name: "Docs", mode: "page_content", interval: 1440, urlHint: "…/docs" },
-	{ label: "Site links", name: "Site links", mode: "site_links", interval: 1440, urlHint: "domain.com" },
-	{ label: "README", name: "README", mode: "readme", interval: 1440, urlHint: "owner/repo" },
+	{ label: "Pricing page", name: "Pricing", mode: "page_content", interval: 60 },
+	{ label: "Product price", name: "Product price", mode: "product_price", interval: 1440 },
+	{ label: "Changelog", name: "Changelog", mode: "page_content", interval: 1440 },
+	{ label: "Job listings", name: "Jobs", mode: "page_content", interval: 60 },
+	{ label: "Docs page", name: "Docs", mode: "page_content", interval: 1440 },
+	{ label: "Site links", name: "Site links", mode: "site_links", interval: 1440 },
+	{ label: "README", name: "README", mode: "readme", interval: 1440 },
 ];
 
 const MIN_INTERVAL_MIN = 15;
@@ -83,19 +94,6 @@ function intervalError(minutes: number | null): string | null {
 	if (minutes > MAX_INTERVAL_MIN)
 		return `Maximum interval is ${MAX_INTERVAL_MIN} minutes (24h).`;
 	return null;
-}
-
-function needsJs(mode: MonitorMode): boolean {
-	// site_links/readme/rss_field watch over plain HTTP; the others may need a browser.
-	return mode !== "site_links" && mode !== "readme" && mode !== "rss_feed";
-}
-
-function showsIgnore(mode: MonitorMode): boolean {
-	return mode === "page_content";
-}
-
-function isReadmeMode(mode: MonitorMode): boolean {
-	return mode === "readme";
 }
 
 export default function NewMonitorPage() {
@@ -168,7 +166,7 @@ export default function NewMonitorPage() {
 			setError("A valid URL is required.");
 			return;
 		}
-		const needsPath = mode === "list_items" || mode === "json_field";
+		const needsPath = requiresSelector(mode);
 		if (needsPath && !cssSelector?.trim()) {
 			setError(
 				mode === "list_items"
@@ -196,7 +194,7 @@ export default function NewMonitorPage() {
 				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
 				notification_email: email || undefined,
-				js_required: needsJs(mode) ? jsRequired : false,
+				js_required: mode === "visual" ? true : needsJs(mode) ? jsRequired : false,
 				watch_note: watchNote.trim() || null,
 				semantic_trigger: semanticTrigger.trim() || null,
 				ignore_selectors: ignore.length ? ignore : null,
@@ -347,7 +345,7 @@ export default function NewMonitorPage() {
 											if (!name.trim()) setName(t.name);
 											setMode(t.mode);
 											setIntervalRaw(String(t.interval));
-											setJsRequired(t.mode !== "site_links");
+											setJsRequired(needsJs(t.mode));
 										}}
 									>
 										{t.label}
@@ -384,6 +382,9 @@ export default function NewMonitorPage() {
 								<option value="json_field">
 									JSON field (API / JSON responses)
 								</option>
+								<option value="rss_feed">
+									RSS feed (added or removed entries)
+								</option>
 								<option value="readme">
 									GitHub README (repo documentation)
 								</option>
@@ -404,6 +405,21 @@ export default function NewMonitorPage() {
 								{mode === "readme" ? (
 								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 								README: monitors <code>README.md</code> on the repo&apos;s default branch (main/master). Use <code>vercel/next.js</code> or the full GitHub URL.
+								</p>
+								) : null}
+								{mode === "rss_feed" ? (
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
+								RSS feed: watches an RSS/Atom feed and reports added or removed entries, matched on GUID/link. The feed is fetched over plain HTTP.
+								</p>
+								) : null}
+								{mode === "visual" ? (
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
+								Visual diff: renders the page in a real browser and compares screenshots perceptively. Set an optional CSS selector below to compare only part of the page.
+								</p>
+								) : null}
+								{mode === "product_price" ? (
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
+								Product price: watches the price on a product page. Set an optional CSS selector below to narrow the price search.
 								</p>
 								) : null}
 						</div>
@@ -441,11 +457,17 @@ export default function NewMonitorPage() {
 							<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--ink)] transition hover:border-[var(--hairline-strong)]">
 								<input
 									type="checkbox"
-									checked={jsRequired}
+									checked={mode === "visual" ? true : jsRequired}
+									disabled={mode === "visual"}
 									onChange={(e) => setJsRequired(e.target.checked)}
 									className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
 								/>
 								JavaScript rendering required (Playwright)
+								{mode === "visual" ? (
+									<span className="text-xs text-[var(--ink-subtle)]">
+										— always on for visual diff
+									</span>
+								) : null}
 							</label>
 						) : mode === "readme" ? (
 							<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
@@ -486,21 +508,15 @@ export default function NewMonitorPage() {
 							</p>
 						</div>
 						<ThresholdEditor mode={mode} value={alertConfig} onChange={setAlertConfig} />
-{mode === "list_items" || mode === "json_field" ? (
+{showsSelector(mode) ? (
 					<div>
-						<Label htmlFor="listSelector">
-							{mode === "json_field"
-								? "JSON path (required for JSON field)"
-								: "List CSS selector (required for List items)"}
-						</Label>
+						<Label htmlFor="listSelector">{selectorLabel(mode)}</Label>
 						<Input
 							id="listSelector"
-							required
+							required={requiresSelector(mode)}
 							value={cssSelector ?? ""}
 							onChange={(e) => setCssSelector(e.target.value || null)}
-							placeholder={
-								mode === "json_field" ? "$.data.price" : "article h2 a, .post-title a"
-							}
+							placeholder={selectorPlaceholder(mode)}
 						/>
 						{mode === "list_items" ? (
 							<button
@@ -512,16 +528,7 @@ export default function NewMonitorPage() {
 							</button>
 						) : null}
 						<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
-							{mode === "json_field" ? (
-								<>
-									Path to the value to watch, e.g. <code>$.data.price</code> or{" "}
-									<code>$.results[0].status</code>.
-								</>
-							) : (
-								<>
-									Select the links to track, e.g. <code>.post-list li a</code>.
-								</>
-							)}
+							{selectorHelp(mode)}
 						</p>
 					</div>
 				) : null}
@@ -686,7 +693,7 @@ function SitemapDiscovery({
 			setError(intervalProblem);
 			return;
 		}
-		const needsPath = mode === "list_items" || mode === "json_field";
+		const needsPath = requiresSelector(mode);
 		if (needsPath && !cssSelector?.trim()) {
 			setError(
 				mode === "list_items"
@@ -714,7 +721,7 @@ function SitemapDiscovery({
 				mode,
 				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
-				js_required: needsJs(mode) ? jsRequired : false,
+				js_required: mode === "visual" ? true : needsJs(mode) ? jsRequired : false,
 				ignore_selectors: ignore.length ? ignore : null,
 				ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
 			});
@@ -832,21 +839,13 @@ function SitemapDiscovery({
 										value={mode}
 										onChange={(e) => setMode(e.target.value as MonitorMode)}
 									>
-										<option value="page_content">
-											Page content (whole page text)
-										</option>
-										<option value="site_links">
-											Site links (sitemap URL changes)
-										</option>
-										<option value="product_price">
-											Product price (price / currency)
-										</option>
-										<option value="list_items">
-											List items (e.g. blog/changelog entries)
-										</option>
-										<option value="json_field">
-											JSON field (API / JSON responses)
-										</option>
+										{MONITOR_MODE_OPTIONS.filter((o) =>
+											SITEMAP_IMPORT_MODES.includes(o.value),
+										).map((o) => (
+											<option key={o.value} value={o.value}>
+												{o.optionLabel}
+											</option>
+										))}
 									</Select>
 								</div>
 								<div>
@@ -871,34 +870,18 @@ function SitemapDiscovery({
 									) : null}
 								</div>
 							</div>
-							{mode === "list_items" || mode === "json_field" ? (
+							{showsSelector(mode) ? (
 								<div>
-									<Label htmlFor="sm-listSelector">
-										{mode === "json_field"
-											? "JSON path (required for JSON field)"
-											: "List CSS selector (required for List items)"}
-									</Label>
+									<Label htmlFor="sm-listSelector">{selectorLabel(mode)}</Label>
 									<Input
 										id="sm-listSelector"
-										required
+										required={requiresSelector(mode)}
 										value={cssSelector ?? ""}
 										onChange={(e) => setCssSelector(e.target.value || null)}
-										placeholder={
-											mode === "json_field" ? "$.data.price" : "article h2 a, .post-title a"
-										}
+										placeholder={selectorPlaceholder(mode)}
 									/>
 									<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
-										{mode === "json_field" ? (
-											<>
-												Path to the value to watch on each page, e.g.{" "}
-												<code>$.data.price</code>.
-											</>
-										) : (
-											<>
-												Select the links to track on each page, e.g.{" "}
-												<code>.post-list li a</code>.
-											</>
-										)}
+										{selectorHelp(mode)}
 									</p>
 								</div>
 							) : null}

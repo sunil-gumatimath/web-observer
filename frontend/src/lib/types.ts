@@ -247,6 +247,7 @@ export type SnapshotAccess = {
   content_type: string | null;
   byte_size: number | null;
   normalized_text: string;
+  raw_download_url?: string | null;
   created_at: string;
 };
 
@@ -383,9 +384,6 @@ export type PublicShareAlert = {
   change_category: string | null;
   ai_summary: string | null;
   diff_summary: string | null;
-  diff: string | null;
-  new_hash: string;
-  previous_hash: string | null;
   created_at: string;
 };
 

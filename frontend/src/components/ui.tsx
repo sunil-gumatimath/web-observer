@@ -10,6 +10,8 @@ import {
 	useState,
 } from "react";
 
+import { modeLabel } from "@/lib/modes";
+
 export function cn(...parts: Array<string | false | null | undefined>) {
 	return parts.filter(Boolean).join(" ");
 }
@@ -421,17 +423,7 @@ export function SegmentedControl<T extends string>({
 }
 
 export function ModeBadge({ mode }: { mode: string }) {
-	const labels: Record<string, string> = {
-		page_content: "Page content",
-		site_links: "Site links",
-		product_price: "Product price",
-		list_items: "List items",
-		json_field: "JSON field",
-		rss_feed: "RSS feed",
-		readme: "GitHub README",
-		visual: "Visual diff",
-	};
-	return <Badge tone="info">{labels[mode] ?? mode}</Badge>;
+	return <Badge tone="info">{modeLabel(mode)}</Badge>;
 }
 
 export function CategoryBadge({ category }: { category: string | null | undefined }) {

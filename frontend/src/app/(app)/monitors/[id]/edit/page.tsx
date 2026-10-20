@@ -15,21 +15,21 @@ import {
 } from "@/components/ui";
 import { ThresholdEditor } from "@/components/threshold-editor";
 import { api, brandAssetUrl } from "@/lib/api";
+import {
+	isReadmeMode,
+	MONITOR_MODE_OPTIONS,
+	needsJs,
+	requiresSelector,
+	selectorHelp,
+	selectorLabel,
+	selectorPlaceholder,
+	showsIgnore,
+	showsSelector,
+} from "@/lib/modes";
 import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
-function needsJs(mode: MonitorMode): boolean {
-	return mode !== "site_links" && mode !== "readme" && mode !== "rss_feed";
-}
-
-function showsIgnore(mode: MonitorMode): boolean {
-	return mode === "page_content";
-}
-
-function isReadmeMode(mode: MonitorMode): boolean {
-	return mode === "readme";
-}
 function normalizeUrl(input: string, mode?: MonitorMode): string {
 	const trimmed = input.trim();
 	if (!trimmed) return "";
@@ -167,7 +167,7 @@ export default function EditMonitorPage() {
 			setError("A valid URL is required.");
 			return;
 		}
-		const needsPath = mode === "list_items" || mode === "json_field";
+		const needsPath = requiresSelector(mode);
 		if (needsPath && !cssSelector?.trim()) {
 			setError(
 				mode === "list_items"
@@ -194,7 +194,7 @@ export default function EditMonitorPage() {
 				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
 				timezone,
-				js_required: needsJs(mode) ? jsRequired : false,
+				js_required: mode === "visual" ? true : needsJs(mode) ? jsRequired : false,
 				watch_note: watchNote.trim() || null,
 				semantic_trigger: semanticTrigger.trim() || null,
 				ignore_selectors: ignore,
@@ -290,30 +290,21 @@ export default function EditMonitorPage() {
 						<Select
 							id="mode"
 							value={mode}
-							onChange={(e) => setMode(e.target.value as MonitorMode)}
+							onChange={(e) => {
+								const m = e.target.value as MonitorMode;
+								setMode(m);
+								if (!needsJs(m)) setJsRequired(false);
+							}}
 						>
-							<option value="page_content">
-								Page content (whole page text)
-							</option>
-							<option value="site_links">
-								Site links (sitemap URL changes)
-							</option>
-							<option value="product_price">
-								Product price (price / currency)
-							</option>
-							<option value="list_items">
-								List items (e.g. blog/changelog entries)
-							</option>
-							<option value="json_field">
-								JSON field (API / JSON responses)
-							</option>
-							<option value="readme">
-								GitHub README (repo documentation)
-							</option>
-							<option value="visual">
-								Visual diff (screenshot comparison)
-							</option>
+							{MONITOR_MODE_OPTIONS.map((o) => (
+								<option key={o.value} value={o.value}>
+									{o.optionLabel}
+								</option>
+							))}
 						</Select>
+						<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
+							{MONITOR_MODE_OPTIONS.find((o) => o.value === mode)?.hint}
+						</p>
 					</div>
 					<div>
 						<Label htmlFor="interval">
@@ -347,11 +338,17 @@ export default function EditMonitorPage() {
 						<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--ink)] transition hover:border-[var(--hairline-strong)]">
 							<input
 								type="checkbox"
-								checked={jsRequired}
+								checked={mode === "visual" ? true : jsRequired}
+								disabled={mode === "visual"}
 								onChange={(e) => setJsRequired(e.target.checked)}
 								className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
 							/>
 							JavaScript rendering required
+							{mode === "visual" ? (
+								<span className="text-xs text-[var(--ink-subtle)]">
+									— always on for visual diff
+								</span>
+							) : null}
 						</label>
 					) : mode === "readme" ? (
 						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
@@ -392,33 +389,18 @@ export default function EditMonitorPage() {
 						</p>
 					</div>
 					<ThresholdEditor mode={mode} value={alertConfig} onChange={setAlertConfig} />
-{mode === "list_items" || mode === "json_field" ? (
+{showsSelector(mode) ? (
 					<div>
-						<Label htmlFor="listSelector">
-							{mode === "json_field"
-								? "JSON path (required for JSON field)"
-								: "List CSS selector (required for List items)"}
-						</Label>
+						<Label htmlFor="listSelector">{selectorLabel(mode)}</Label>
 						<Input
 							id="listSelector"
-							required
+							required={requiresSelector(mode)}
 							value={cssSelector ?? ""}
 							onChange={(e) => setCssSelector(e.target.value || null)}
-							placeholder={
-								mode === "json_field" ? "$.data.price" : "article h2 a, .post-title a"
-							}
+							placeholder={selectorPlaceholder(mode)}
 						/>
 						<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
-							{mode === "json_field" ? (
-								<>
-									Path to the value to watch, e.g. <code>$.data.price</code> or{" "}
-									<code>$.results[0].status</code>.
-								</>
-							) : (
-								<>
-									Select the links to track, e.g. <code>.post-list li a</code>.
-								</>
-							)}
+							{selectorHelp(mode)}
 						</p>
 					</div>
 				) : null}

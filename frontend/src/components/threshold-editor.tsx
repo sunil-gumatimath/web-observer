@@ -42,6 +42,22 @@ const FIELD_META: Record<ThresholdKey, FieldMeta> = {
 		kind: "float",
 		step: "any",
 	},
+	value_below: {
+		key: "value_below",
+		label: "Alert when value drops below",
+		placeholder: "e.g. 49.99",
+		help: "Only alert when the watched value is below this amount.",
+		kind: "float",
+		step: "any",
+	},
+	value_above: {
+		key: "value_above",
+		label: "Alert when value rises above",
+		placeholder: "e.g. 199.99",
+		help: "Only alert when the watched value is above this amount.",
+		kind: "float",
+		step: "any",
+	},
 	percent_change: {
 		key: "percent_change",
 		label: "Minimum change (%)",
@@ -78,7 +94,10 @@ const FIELD_META: Record<ThresholdKey, FieldMeta> = {
 		key: "min_diff_chars",
 		label: "Min. changed characters",
 		placeholder: "e.g. 50",
-		help: "Ignore tiny edits — only alert when the change is at least this large.",
+		help: (mode) =>
+			mode === "visual"
+				? "Ignore tiny visual changes — only alert when the perceptual screenshot difference reaches this distance (0–256, DCT perceptual hash)."
+				: "Ignore tiny edits — only alert when the change is at least this large.",
 		kind: "int",
 		min: "0",
 		step: "1",
