@@ -1,7 +1,9 @@
 """Smoke-test the model-catalog endpoint and the workspace settings response.
 
-Boots the real FastAPI app with TestClient and checks that the catalog the UI
-consumes is well-formed and consistent with the server-side catalog.
+Boots a minimal FastAPI app containing only the workspaces router — the catalog
+is static configuration and must not depend on the database. Mounting the whole
+application here made the check fail whenever the Postgres host had a DNS blip,
+for a route that never queries it.
 
     .venv312/Scripts/python.exe scripts/smoke_model_catalog.py
 """
@@ -13,13 +15,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.main import app  # noqa: E402
+from app.routers.workspaces import router  # noqa: E402
 from app.services.model_catalog import PROVIDERS  # noqa: E402
 
 
 def main() -> int:
+    app = FastAPI()
+    app.include_router(router)
+
     failures: list[str] = []
     with TestClient(app) as client:
         resp = client.get("/api/v1/model-catalog")
