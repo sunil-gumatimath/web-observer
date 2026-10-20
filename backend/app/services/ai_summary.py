@@ -25,6 +25,11 @@ from app.security.ssrf import (
     resolve_and_validate,
     validate_url_for_fetch,
 )
+from app.services.model_catalog import (
+    candidates_for_base,
+    output_cap_for,
+    provider_for_base,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +85,10 @@ def _effective_llm(llm: dict | None) -> dict:
     A workspace base/model is honored only when that same configuration carries
     a workspace API key. This prevents a legacy or malformed override from
     redirecting the server-managed credential to an attacker-controlled host.
+
+    On the server side the provider is decided by the base URL: the key of the
+    matching provider is used, so a Gemini model is never sent to Kilo (or the
+    other way round) with the wrong credential.
     """
     settings = get_settings()
     workspace_key = (llm or {}).get("api_key")
@@ -95,10 +104,18 @@ def _effective_llm(llm: dict | None) -> dict:
             or settings.ai_max_output_tokens,
             "scope": "workspace",
         }
+    base = settings.llm_api_base
+    provider = provider_for_base(base)
+    if provider is not None and provider.id == "gemini":
+        api_key = settings.gemini_api_key
+        model = settings.gemini_model
+    else:
+        api_key = settings.llm_api_key
+        model = settings.llm_model
     return {
-        "api_key": settings.llm_api_key,
-        "api_base": settings.llm_api_base,
-        "model": settings.llm_model,
+        "api_key": api_key,
+        "api_base": base,
+        "model": model,
         "max_output_tokens": settings.ai_max_output_tokens,
         "scope": "server",
     }
@@ -743,20 +760,19 @@ def _parse_llm_content(
     return cat, summary, is_noise, noise_reason, title, impact, confidence
 
 
-_DEFAULT_FALLBACK_MODELS = (
-    "openrouter/free",
-    "reflection/beam-free",
-    "stealth/glyph-cluster",
-    "nvidia/nemotron-3.5-super-vl:free",
-)
-
-
 def _parse_fallback_setting(raw: str | None) -> list[str]:
+    """Normalise the ``LLM_FALLBACK_MODELS`` setting.
+
+    ``None`` or empty means "use the catalog default for this provider".
+    The literal ``none`` disables failover entirely (primary model only).
+    """
     if raw is None:
-        return list(_DEFAULT_FALLBACK_MODELS)
+        return []
     raw = raw.strip()
     if not raw:
         return []
+    if raw.lower() == "none":
+        return ["__none__"]
     seen: list[str] = []
     for part in raw.split(","):
         name = part.strip()
@@ -766,18 +782,45 @@ def _parse_fallback_setting(raw: str | None) -> list[str]:
 
 
 def _candidate_models(primary: str | None, api_base: str | None) -> list[str]:
-    """Ordered model list: primary first, then configured fallbacks.
+    """Ordered model list: primary first, then same-provider fallbacks.
 
-    Skips OpenRouter-style (``vendor/model:free``) fallbacks when talking to
-    first-party OpenAI — they would 404 and only add latency. The primary is
-    always kept even if it looks cross-provider (explicit user choice).
+    Fallbacks are restricted to models of the provider that ``api_base`` points
+    at — a Kilo model id sent to Google (or vice versa) only 404s and burns the
+    request budget. The primary is always kept even when it is not in the
+    catalog (an explicit user choice).
+
+    An explicit ``LLM_FALLBACK_MODELS`` setting still wins over the catalog
+    default, but cross-provider entries in it are skipped. ``none`` disables
+    failover.
     """
     settings = get_settings()
-    primary_model = (primary or "").strip() or "kilo-auto/free"
+    base = (api_base or "").strip().rstrip("/")
+    provider = provider_for_base(base)
+    # The fallback must match the provider: a Kilo model id sent to Google only
+    # 404s. When the base is unknown there is no provider-specific default, so
+    # keep the historical ``llm_model`` behaviour.
+    provider_default = (
+        settings.gemini_model if provider is not None and provider.id == "gemini" else settings.llm_model
+    )
+    primary_model = (primary or "").strip() or provider_default
     candidates = [primary_model]
-    base = (api_base or "").lower()
-    first_party_openai = "api.openai.com" in base
-    for name in _parse_fallback_setting(getattr(settings, "llm_fallback_models", None)):
+    first_party_openai = "api.openai.com" in base.lower()
+
+    configured = _parse_fallback_setting(getattr(settings, "llm_fallback_models", None))
+    if configured == ["__none__"]:
+        return candidates
+    if not configured:
+        # Default: every model the catalog knows for this provider that can
+        # actually finish the job, best first. Unverified models are excluded
+        # because each failed attempt still spends quota.
+        configured = candidates_for_base(base, verified_only=True)
+    else:
+        # An explicit list may still name another provider's models — drop them.
+        allowed = set(candidates_for_base(base))
+        if allowed:
+            configured = [name for name in configured if name in allowed]
+
+    for name in configured:
         if name in candidates:
             continue
         if first_party_openai and ("/" in name or ":free" in name) and name != primary_model:
@@ -836,7 +879,9 @@ def _request_chat_with_failover(
             payload: dict = {
                 "model": model_candidate,
                 "temperature": temperature,
-                "max_tokens": max_tokens,
+                # Reasoning models get their own measured budget; everything
+                # else keeps the caller's cap.
+                "max_tokens": output_cap_for(base, model_candidate, max_tokens),
                 "messages": messages,
             }
             if use_json:

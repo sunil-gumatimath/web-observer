@@ -34,7 +34,10 @@ def test_triage_no_watch_note_is_passthrough() -> None:
 def test_triage_no_llm_key_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without an LLM key we must never suppress a real change."""
     s = Settings()
+    # Clear every provider key: the active provider is chosen by LLM_API_BASE,
+    # so clearing only the Kilo key would still let a Gemini call through.
     s.llm_api_key = ""
+    s.gemini_api_key = ""
     monkeypatch.setattr(ai_summary, "get_settings", lambda: s)
     out = triage_change(
         monitor_name="Docs",

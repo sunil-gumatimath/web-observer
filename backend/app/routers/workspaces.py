@@ -179,16 +179,20 @@ def get_workspace_settings(
     workspace: Workspace = Depends(require_workspace_member),
 ) -> dict:
     from app.config import get_settings
+    from app.services.ai_summary import _effective_llm
 
     server = get_settings()
     has_workspace_llm_key = bool(workspace.llm_api_key)
+    # Server-level provider config: the base URL decides which provider (and
+    # therefore which key and default model) is in play.
+    server_llm = _effective_llm(None)
     return {
         "workspace_id": str(workspace.id),
         "ai_summaries_enabled": workspace.ai_summaries_enabled,
         "ai_assistant_available": bool(
             server.ai_summaries_enabled
             and workspace.ai_summaries_enabled
-            and (has_workspace_llm_key or server.llm_api_key)
+            and (has_workspace_llm_key or server_llm["api_key"])
         ),
         # Masked booleans — the actual stored keys are never returned.
         "as_llm_api_key": has_workspace_llm_key,
@@ -200,8 +204,41 @@ def get_workspace_settings(
         "llm_model": (
             workspace.llm_model
             if has_workspace_llm_key and workspace.llm_model
-            else server.llm_model
+            else server_llm["model"]
         ),
         "as_resend_api_key": bool(workspace.resend_api_key),
         "email_from": workspace.email_from or server.email_from,
+    }
+
+
+@router.get("/model-catalog")
+def get_model_catalog() -> dict:
+    """The selectable LLM models, grouped by provider.
+
+    Public (no workspace scoping): the catalog is static configuration, not
+    user data. The UI uses it to populate the model picker instead of
+    hard-coding a list that drifts from the provider.
+    """
+    from app.services.model_catalog import PROVIDERS
+
+    return {
+        "providers": [
+            {
+                "id": provider.id,
+                "label": provider.label,
+                "base": provider.base,
+                "free": provider.free,
+                "models": [
+                    {
+                        "value": model.value,
+                        "label": model.label,
+                        "note": model.note,
+                        "verified_200": model.verified_200,
+                        "verified_at": model.verified_at,
+                    }
+                    for model in provider.models
+                ],
+            }
+            for provider in PROVIDERS
+        ],
     }

@@ -78,13 +78,19 @@ class Settings(BaseSettings):
     ai_summaries_enabled: bool = True
     llm_api_key: str | None = None
     llm_api_base: str = "https://api.kilo.ai/api/gateway"
-    llm_model: str = "kilo-auto/free"
+    # Verified to return a complete JSON summary inside the 200-token output cap.
+    llm_model: str = "poolside/laguna-s-2.1:free"
+    # Google Gemini is a second OpenAI-compatible provider. Which provider the
+    # server uses is decided by ``llm_api_base``: the key of the matching
+    # provider is selected automatically (Kilo -> llm_api_key, Gemini ->
+    # gemini_api_key), so a model is never sent to a provider without a key.
+    gemini_api_key: str | None = None
+    gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    gemini_model: str = "gemini-3.1-flash-lite"
     # Comma-separated server-level fallback models tried in order after the
-    # primary. Empty string disables failover (primary only).
-    llm_fallback_models: str = (
-        "openrouter/free,reflection/beam-free,stealth/glyph-cluster,"
-        "nvidia/nemotron-3.5-super-vl:free"
-    )
+    # primary. Empty string disables failover (primary only). Entries for
+    # another provider than LLM_API_BASE are skipped automatically.
+    llm_fallback_models: str = ""
     ai_max_diff_chars: int = 6000
     ai_max_output_tokens: int = 200
     ai_async_enrichment: bool = False  # if true, LLM runs in background worker
