@@ -15,7 +15,8 @@
 | **Distributed Dedup** | Redis-backed TTL cache (`ai_dedup:<hash>`) with process-memory fallback to avoid redundant LLM invocations |
 | **AI Executive Digest** | Batch synthesis briefing included in daily / weekly workspace digests |
 | **Heuristic** | Always available without API keys |
-| **LLM** | Optional OpenAI-compatible chat completions (default `LLM_API_BASE=https://api.kilo.ai/api/gateway`, `LLM_MODEL=kilo-auto/free`; `LLM_FALLBACK_MODELS` tried in order, empty disables failover) |
+| **LLM** | Optional OpenAI-compatible chat completions (default `LLM_API_BASE=https://api.kilo.ai/api/gateway`, `LLM_MODEL=poolside/laguna-s-2.1:free`; `LLM_FALLBACK_MODELS` tried in order, `none` disables failover). A second provider — Google Gemini (`GEMINI_API_KEY` / `GEMINI_MODEL`) — is selected by pointing `LLM_API_BASE` at `generativelanguage.googleapis.com` |
+| **Model catalog** | `GET /api/v1/model-catalog` — the selectable models per provider, shared by the settings UI and the server-side failover (`backend/app/services/model_catalog.py`). Every entry was verified live against the provider with the app's real prompt at the 200-token output cap |
 | **Slack / Discord** | Webhook channels (`type=slack\|discord`) |
 | **Digest** | daily / weekly workspace digests via `digest` service |
 | **Noise feedback** | `POST .../changes/{id}/noise` excludes from notifications & digests |
@@ -27,8 +28,11 @@
 AI_SUMMARIES_ENABLED=true
 LLM_API_KEY=           # empty => heuristic only
 LLM_API_BASE=https://api.kilo.ai/api/gateway
-LLM_MODEL=kilo-auto/free
-LLM_FALLBACK_MODELS=openrouter/free,reflection/beam-free,stealth/glyph-cluster,nvidia/nemotron-3.5-super-vl:free
+LLM_MODEL=poolside/laguna-s-2.1:free
+LLM_FALLBACK_MODELS=   # empty => catalog default for the active provider; "none" => primary only
+GEMINI_API_KEY=        # second provider; active when LLM_API_BASE points at generativelanguage
+GEMINI_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai
+GEMINI_MODEL=gemini-3.1-flash-lite
 AI_MAX_DIFF_CHARS=6000
 AI_MAX_OUTPUT_TOKENS=200
 AI_ASYNC_ENRICHMENT=false   # true => heuristic row now, LLM upgrade in ai_enrich worker

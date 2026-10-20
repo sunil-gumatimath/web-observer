@@ -54,6 +54,15 @@ DATABASE_URL=postgresql+psycopg://monitor:monitor@localhost:5432/web_observer
 
 - Redis — local install / WSL2 / Memurai / Scoop; default `redis://localhost:6379/0`
 
+**Redis inside WSL2** (Windows host, Linux VM) needs two adjustments:
+
+| Symptom | Cause | Fix |
+| ------- | ----- | --- |
+| Every API request takes ~21 s; the log says `Rate limit storage unreachable - falling back to in-memory storage` | Windows resolves `localhost` to `::1` first, but WSL2 only forwards **IPv4** to the host, so each new connection stalls on the IPv6 attempt before falling back | Use the IPv4 literal: `REDIS_URL=redis://127.0.0.1:6379/0` |
+| `Authentication required` / `NOAUTH Authentication required` | The WSL Redis has `requirepass` set | Put the password in the URL: `REDIS_URL=redis://:YOUR_PASSWORD@127.0.0.1:6379/0` |
+
+Check the WSL side with `sudo grep -E '^\s*requirepass' /etc/redis/redis.conf`. If Windows→WSL forwarding breaks entirely, `wsl --shutdown` then `wsl` usually restores it.
+
 ---
 
 ## 2. Backend env
@@ -90,7 +99,17 @@ Preferred on Windows — one command launches all 5 processes hidden (API :8002,
 powershell -File .\scripts\restart-stack.ps1
 ```
 
-Relaunch kills anything on ports `8002`/`3000` first; per-process logs go to `data\logs` (`api.log`, `worker-http.log`, `worker-browser.log`, `scheduler.log`, `frontend.log`, plus `*_err.log`).
+Relaunch stops the processes **this stack** started (tracked in `data\logs\our-processes.txt`, plus anything running from this repo) and frees ports `8002`/`3000`; per-process logs go to `data\logs` (`api.log`, `worker-http.log`, `worker-browser.log`, `scheduler.log`, `frontend.log`, plus `*_err.log`).
+
+**Port conflicts.** A port owned by *another* app is never killed — the stack moves to the next free port instead, and stays wired up: the API's `CORS_ORIGINS` gains the chosen frontend origin and the frontend's `NEXT_PUBLIC_API_BASE_URL` follows the API port. The script prints the URLs it actually bound.
+
+```powershell
+powershell -File .\scripts\restart-stack.ps1                      # auto-shifts if 3000/8002 are taken
+powershell -File .\scripts\restart-stack.ps1 -FrontendPort 3100   # prefer a specific port
+powershell -File .\scripts\stop-stack.ps1                         # stop only our processes
+```
+
+Note: Next.js auto-increments its port when the requested one is busy, so a *second* dev server on this machine can land on ours. The launcher detects that and retries on the next free port.
 
 Or start each process manually (working directory: `backend`, except frontend):
 
@@ -178,15 +197,22 @@ Fetch behavior worth knowing while debugging:
 
 - The SSRF-pinned fetcher tries **every** validated IP in turn — one dead CDN PoP won't fail a check; only connect-level errors trigger failover (`backend/app/services/fetcher.py:_pinned_get`).
 - `readme` monitors hit the GitHub API first (resolves the default branch in 1 request), then fall back to capped raw probes.
-- LLM summaries fail over across `LLM_FALLBACK_MODELS`; empty disables failover (see `docs/phases/phase-05-ai-and-alerts.md` env).
+- LLM summaries fail over across `LLM_FALLBACK_MODELS`; `none` disables failover. The catalog default is the model list of the provider that `LLM_API_BASE` points at (see `backend/app/services/model_catalog.py`).
 
 Optional env (defaults work locally):
 
 ```env
 LLM_API_KEY=            # empty => heuristic summaries only
 LLM_API_BASE=https://api.kilo.ai/api/gateway
-LLM_MODEL=kilo-auto/free
-LLM_FALLBACK_MODELS=openrouter/free,reflection/beam-free,stealth/glyph-cluster,nvidia/nemotron-3.5-super-vl:free
+LLM_MODEL=poolside/laguna-s-2.1:free
+LLM_FALLBACK_MODELS=    # empty => catalog default for the active provider; "none" => primary only
+
+# Second OpenAI-compatible provider (Google Gemini) — active when
+# LLM_API_BASE points at generativelanguage.googleapis.com
+GEMINI_API_KEY=
+GEMINI_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai
+GEMINI_MODEL=gemini-3.1-flash-lite
+
 STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storage
 ```
 
