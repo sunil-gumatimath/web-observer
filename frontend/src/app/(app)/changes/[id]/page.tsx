@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
+import { composeHeadline, parseSummaryParts } from "@/lib/summary";
 
 export default function ChangeDetailPage() {
 	usePageTitle("Change detail");
@@ -153,7 +154,9 @@ export default function ChangeDetailPage() {
 			<PageHeader
 				title="Change detail"
 				description={
-					change.ai_summary || change.diff_summary || "Content change"
+					composeHeadline(parseSummaryParts(change.ai_summary), change.title) ||
+					change.diff_summary ||
+					"Content change"
 				}
 				actions={
 					<>
@@ -204,26 +207,37 @@ export default function ChangeDetailPage() {
 				) : null}
 			</div>
 
-			{change.ai_summary ? (
-				<div className="mb-5 overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)] p-4">
-					<div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
-						<div className="flex items-center gap-2">
-							<svg className="h-4 w-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="currentColor">
-								<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/>
-							</svg>
-							<span>AI Change Summary</span>
+			{change.ai_summary ? (() => {
+				const parts = parseSummaryParts(change.ai_summary);
+				const body = parts.detail || change.diff_summary || "";
+				return (
+					<div className="mb-5 overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)] p-4">
+						<div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
+							<div className="flex items-center gap-2">
+								<svg className="h-4 w-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="currentColor">
+									<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/>
+								</svg>
+								<span>AI Change Summary</span>
+							</div>
+							{change.title ? (
+								<span className="font-semibold text-[var(--fg)] normal-case tracking-normal">
+									{change.title}
+								</span>
+							) : null}
 						</div>
-						{change.title ? (
-							<span className="font-semibold text-[var(--fg)] normal-case tracking-normal">
-								{change.title}
-							</span>
+						{parts.reason ? (
+							<p className="mt-2 text-xs font-medium text-[var(--warn)]">
+								Held as noise: {parts.reason}
+							</p>
+						) : null}
+						{body ? (
+							<p className="mt-2 text-sm leading-relaxed font-medium text-[var(--fg)]">
+								{body}
+							</p>
 						) : null}
 					</div>
-					<p className="mt-2 text-sm leading-relaxed font-medium text-[var(--fg)]">
-						{change.ai_summary}
-					</p>
-				</div>
-			) : null}
+				);
+			})() : null}
 
 			{workspaceId && aiSummariesEnabled ? (
 				<div className="mb-6">

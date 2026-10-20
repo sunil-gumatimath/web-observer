@@ -14,23 +14,24 @@ import {
 	parseImpact,
 	SectionTitle,
 	Spinner,
-	stripImpact,
 } from "@/components/ui";
 import { ConfirmButton } from "@/components/confirm-dialog";
-import { ReadableContent } from "@/components/readable-content";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
 import { api, ApiError, brandAssetUrl } from "@/lib/api";
+import { VALUE_HISTORY_MODES } from "@/lib/modes";
 import {
   isActiveRun,
   runsSignature,
   TERMINAL_RUN_STATUSES as TERMINAL,
 } from "@/lib/monitor-runs";
-import type { ChangeEvent, Monitor, MonitorRun, ValuePoint } from "@/lib/types";
+import type { ChangeEvent, Monitor, MonitorRun, SnapshotAccess, ValuePoint } from "@/lib/types";
 import { ValueChart } from "@/components/value-chart";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
+import { CapturedContentPreview } from "@/components/captured-content-preview";
+import { parseSummaryParts, stripDecoration } from "@/lib/summary";
 
 // Polling budget: the first check can legitimately take a while (cold backend,
 // large pages, browser queue — backend workers allow 120-180s), so the budget
@@ -83,11 +84,13 @@ function MonitorDetailInner() {
 
 	const [pollSlow, setPollSlow] = useState(false);
 	const [pollTimedOut, setPollTimedOut] = useState(false);
-	const [previewText, setPreviewText] = useState<string | null>(null);
+	const [previewSnapshot, setPreviewSnapshot] = useState<SnapshotAccess | null>(null);
 	const [previewLoading, setPreviewLoading] = useState(false);
 	const [showFreshBanner, setShowFreshBanner] = useState(isFresh);
 	const [brandRefreshing, setBrandRefreshing] = useState(false);
 	const [sseConnected, setSseConnected] = useState(false);
+	const [heroImgFailed, setHeroImgFailed] = useState(false);
+	const [screenshotFailed, setScreenshotFailed] = useState(false);
 
 	const pollStartedAt = useRef<number | null>(null);
 	const latestSnapshotId = useRef<string | null>(null);
@@ -112,6 +115,11 @@ function MonitorDetailInner() {
 		monitorIdRef.current = monitorId;
 	}, [isFresh, monitorId]);
 
+	useEffect(() => {
+		setHeroImgFailed(false);
+		setScreenshotFailed(false);
+	}, [monitor?.id, monitor?.brand?.hero_path, monitor?.brand?.hero_url]);
+
 	const load = useCallback(async () => {
 		const ws = await ensureWorkspace();
 		setWorkspaceId(ws);
@@ -123,7 +131,7 @@ function MonitorDetailInner() {
 		setMonitor(m);
 		setRuns(r);
 		setChanges(c);
-		if (m.mode === "product_price" || m.mode === "json_field") {
+		if (VALUE_HISTORY_MODES.includes(m.mode)) {
 			try {
 				const h = await api.getValueHistory(ws, monitorId);
 				setValuePoints(h.points);
@@ -307,7 +315,7 @@ function MonitorDetailInner() {
 		return () => window.clearInterval(id);
 	}, [loading, workspaceId, shouldPoll, refresh]);
 
-	// Load snapshot text preview for latest successful run.
+	// Load snapshot preview for latest successful run.
 	useEffect(() => {
 		const latestOk = runs.find(
 			(r) => r.status === "succeeded" && r.snapshot_id,
@@ -316,7 +324,7 @@ function MonitorDetailInner() {
 		if (!snapId) {
 			if (latestSnapshotId.current !== null) {
 				latestSnapshotId.current = null;
-				setPreviewText(null);
+				setPreviewSnapshot(null);
 				setPreviewLoading(false);
 			}
 			return;
@@ -330,10 +338,10 @@ function MonitorDetailInner() {
 		(async () => {
 			try {
 				const snap = await api.getSnapshot(workspaceId, snapId);
-				if (!cancelled) setPreviewText(snap.normalized_text || "");
+				if (!cancelled) setPreviewSnapshot(snap);
 			} catch {
 				if (!cancelled) {
-					setPreviewText(null);
+					setPreviewSnapshot(null);
 					latestSnapshotId.current = null;
 				}
 			} finally {
@@ -440,29 +448,120 @@ function MonitorDetailInner() {
 
 	const latestRun = runs[0] ?? null;
 	const latestTerminal = runs.find((r) => TERMINAL.has(r.status)) ?? null;
+	const latestOkRun = runs.find((r) => r.status === "succeeded" && r.snapshot_id) ?? null;
 	const latestChange = changes[0] ?? null;
-	const hasSuccessfulSnapshot = runs.some(
-		(r) => r.status === "succeeded" && r.snapshot_id,
-	);
+	const hasSuccessfulSnapshot = Boolean(latestOkRun);
 	// Full result panel: after create (?fresh=1), or while any check is in flight.
 	const showResultCard =
 		showFreshBanner || polling || Boolean(latestRun && isActiveRun(latestRun));
-	const hero = brandAssetUrl(monitor.brand?.hero_path) || monitor.brand?.hero_url;
+	const brandHero = brandAssetUrl(monitor.brand?.hero_path) || monitor.brand?.hero_url;
+	const screenshotFallback =
+		(latestOkRun && brandAssetUrl(`screenshots/${monitor.id}/${latestOkRun.id}.png`)) ||
+		(changes[0]?.run_id && brandAssetUrl(`screenshots/${monitor.id}/${changes[0].run_id}.png`)) ||
+		(latestTerminal?.id && brandAssetUrl(`screenshots/${monitor.id}/${latestTerminal.id}.png`)) ||
+		(previewSnapshot?.content_type?.startsWith("image/") && previewSnapshot?.raw_download_url
+			? previewSnapshot.raw_download_url
+			: null);
+
+	const activeHero = !heroImgFailed && brandHero
+		? brandHero
+		: !screenshotFailed && screenshotFallback
+		? screenshotFallback
+		: null;
 
 	return (
 		<div>
 			{/* Hero Header Banner */}
 			<div className="mb-8 overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--surface-1)]">
 				{/* Top Cover Hero Banner */}
-				<div className="relative h-36 bg-[var(--surface-2)] sm:h-44 border-b border-[var(--hairline)]">
-					{hero ? (
-						<img
-							src={hero}
-							alt=""
-							className="absolute inset-0 size-full object-cover object-top"
-						/>
+				<div className="group relative h-36 bg-[var(--surface-2)] sm:h-44 border-b border-[var(--hairline)] overflow-hidden">
+					{activeHero ? (
+						<>
+							<img
+								src={activeHero}
+								alt={monitor.name ? `${monitor.name} preview` : "Preview"}
+								className="absolute inset-0 size-full object-cover object-top"
+								onError={() => {
+									if (!heroImgFailed && brandHero) {
+										setHeroImgFailed(true);
+									} else if (screenshotFallback) {
+										setScreenshotFailed(true);
+									}
+								}}
+							/>
+							<div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+							<button
+								type="button"
+								onClick={handleRefreshBrand}
+								disabled={brandRefreshing}
+								className="absolute top-3 right-3 hidden group-hover:inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/60 backdrop-blur-md px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black/80 transition shadow-sm"
+								title="Re-scrape page for product preview image"
+							>
+								<svg
+									className={`size-3 ${brandRefreshing ? "animate-spin" : ""}`}
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2}
+										d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+									/>
+								</svg>
+								{brandRefreshing ? "Refreshing…" : "Update preview"}
+							</button>
+						</>
 					) : (
-						<div className="absolute inset-0 bg-[var(--surface-2)]" />
+						<div className="absolute inset-0 flex items-center justify-between px-6 bg-gradient-to-r from-[var(--surface-2)] via-[var(--surface-1)] to-[var(--surface-2)]">
+							<div
+								className="pointer-events-none absolute inset-0 opacity-[0.04] dark:opacity-[0.08]"
+								style={{
+									backgroundImage: "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
+									backgroundSize: "24px 24px",
+								}}
+							/>
+							<div className="relative z-10 flex items-center gap-2.5">
+								<div className="flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] bg-[var(--surface-1)]/90 px-3 py-1.5 shadow-xs backdrop-blur-xs">
+									<span
+										className={`size-2 rounded-full ${
+											brandRefreshing ? "bg-[var(--primary)] animate-ping" : "bg-[var(--ink-subtle)]"
+										}`}
+									/>
+									<span className="text-xs font-medium text-[var(--ink-muted)]">
+										{brandRefreshing ? "Fetching product preview…" : "No product preview image"}
+									</span>
+								</div>
+								{!brandRefreshing && (
+									<button
+										type="button"
+										onClick={handleRefreshBrand}
+										className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hairline)] bg-[var(--surface-1)]/80 px-3 py-1.5 text-xs font-medium text-[var(--ink-subtle)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--ink)] hover:bg-[var(--surface-1)] shadow-xs"
+										title="Re-scrape page for product preview image"
+									>
+										<svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path
+												strokeLinecap="round"
+												strokeLinejoin="round"
+												strokeWidth={2}
+												d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+											/>
+										</svg>
+										Refresh preview
+									</button>
+								)}
+							</div>
+							<div className="pointer-events-none select-none text-right font-mono text-2xl font-black tracking-wider text-[var(--ink)]/5 dark:text-white/5 uppercase sm:text-4xl">
+								{(() => {
+									try {
+										return new URL(monitor.url).hostname.replace(/^www\./, "");
+									} catch {
+										return "";
+									}
+								})()}
+							</div>
+						</div>
 					)}
 				</div>
 
@@ -791,14 +890,28 @@ function MonitorDetailInner() {
 				</div>
 
 				{latestChange ? (() => {
-					const rawSummary = stripImpact(latestChange.ai_summary || "");
-					const title = latestChange.title || (rawSummary.includes(":") && !rawSummary.startsWith("Content changed") && !rawSummary.toLowerCase().includes("likely") ? rawSummary.split(":", 1)[0].trim() : null);
-					const summaryBody = title && rawSummary.startsWith(title + ":") 
-						? rawSummary.slice(title.length + 1).trim() 
-						: rawSummary || latestChange.diff_summary || "Page content changed.";
-					const isHeuristic = !latestChange.title && (rawSummary.toLowerCase().includes("likely") || rawSummary.startsWith("Content changed"));
+					// The stored summary is the model's own text; the title and the
+					// impact live in their own columns. A triaged change prefixes
+					// the summary with a marker line that explains why it was held.
+					const parts = parseSummaryParts(latestChange.ai_summary);
+					const title = latestChange.title?.trim() || null;
+					const reason = parts.reason;
+					const summaryBody =
+						stripDecoration(parts.detail, title) ||
+						latestChange.diff_summary ||
+						"Page content changed.";
+					const isHeuristic =
+						!title &&
+						!latestChange.impact &&
+						latestChange.confidence == null &&
+						(summaryBody.toLowerCase().includes("likely") ||
+							summaryBody.startsWith("Content changed"));
 					const impact = latestChange.impact || parseImpact(latestChange.ai_summary);
-					const hasDiffTelemetry = Boolean(latestChange.diff_summary && latestChange.diff_summary !== rawSummary && latestChange.diff_summary !== summaryBody);
+					const hasDiffTelemetry = Boolean(
+						latestChange.diff_summary &&
+							latestChange.diff_summary !== parts.detail &&
+							latestChange.diff_summary !== summaryBody,
+					);
 
 					return (
 						<div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-5">
@@ -823,7 +936,7 @@ function MonitorDetailInner() {
 										<Badge tone="success">signal</Badge>
 									)}
 									{isHeuristic ? (
-										<span className="inline-flex items-center gap-1 rounded-full bg-[var(--warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--warning)]">
+										<span className="inline-flex items-center gap-1 rounded-full bg-[var(--warn)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--warn)]">
 											Heuristic preview
 										</span>
 									) : null}
@@ -845,7 +958,12 @@ function MonitorDetailInner() {
 										{title}
 									</h3>
 								) : null}
-								<p className={`text-sm leading-relaxed text-[var(--fg)] ${title ? "mt-1.5" : "font-medium"}`}>
+								{reason ? (
+									<p className="mt-1 text-xs font-medium text-[var(--warn)]">
+										Held as noise: {reason}
+									</p>
+								) : null}
+								<p className={`text-sm leading-relaxed text-[var(--fg)] ${title || reason ? "mt-1.5" : "font-medium"}`}>
 									{summaryBody}
 								</p>
 								{hasDiffTelemetry ? (
@@ -857,7 +975,7 @@ function MonitorDetailInner() {
 							</div>
 						</div>
 					);
-				})() : hasSuccessfulSnapshot && latestTerminal?.status === "succeeded" ? (
+				})() : hasSuccessfulSnapshot ? (
 					<div className="rounded-lg border border-[var(--semantic-success)]/30 bg-[var(--semantic-success)]/5 p-5">
 						<div className="flex items-start gap-3">
 							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--semantic-success)]/15 text-[var(--semantic-success)]">
@@ -866,7 +984,7 @@ function MonitorDetailInner() {
 							<div className="min-w-0 flex-1">
 								<h3 className="text-sm font-semibold text-[var(--fg)]">Monitoring active — waiting for changes</h3>
 								<p className="mt-1 text-xs leading-relaxed text-[var(--ink-muted)]">
-									Baseline captured {latestTerminal.finished_at ? new Date(latestTerminal.finished_at).toLocaleString() : ""} · Next check {monitor.next_run_at ? new Date(monitor.next_run_at).toLocaleString() : `every ${monitor.schedule_interval_minutes}m`} · <ModeBadge mode={monitor.mode} />
+									Baseline captured {latestOkRun?.finished_at ? new Date(latestOkRun.finished_at).toLocaleString() : ""} · Next check {monitor.next_run_at ? new Date(monitor.next_run_at).toLocaleString() : `every ${monitor.schedule_interval_minutes}m`} · <ModeBadge mode={monitor.mode} />
 								</p>
 								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 									When a change is detected you&apos;ll get a titled summary + impact here and in Alerts.
@@ -935,57 +1053,14 @@ function MonitorDetailInner() {
 			{hasSuccessfulSnapshot ? (
 				<section className="mb-8">
 					<SectionTitle>Latest captured content</SectionTitle>
-					{previewText &&
-					!monitor.js_required &&
-					(previewText.length < 80 ||
-						/loading\b|enable javascript|requires javascript|please wait/i.test(previewText)) ? (
-						<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 p-3.5 text-xs text-[var(--ink)]">
-							<p className="leading-relaxed">
-								<strong>Note:</strong> This website may require client-side JavaScript to render its full content. If text looks incomplete, enable <em>JavaScript rendering (Playwright)</em>.
-							</p>
-							<Button
-								size="sm"
-								variant="secondary"
-								onClick={() => router.push(`/monitors/${monitor.id}/edit`)}
-								className="shrink-0 text-xs"
-							>
-								Enable JS rendering
-							</Button>
-						</div>
-					) : null}
-					{previewLoading ? (
-						<p className="text-sm text-[var(--ink-subtle)]">Loading captured content…</p>
-					) : previewText != null && previewText.length > 0 ? (
-						<ReadableContent
-							text={previewText}
-							maxChars={25000}
-							baseUrl={monitor?.url}
-						/>
-					) : previewText === "" ? (
-						<Card>
-							<div className="flex flex-wrap items-center justify-between gap-3">
-								<p className="text-sm text-[var(--ink-subtle)]">
-									Captured snapshot is empty — page had no extractable text. If this is a Single-Page App (SPA) or client-rendered site, enable JavaScript rendering.
-								</p>
-								{!monitor.js_required ? (
-									<Button
-										size="sm"
-										variant="secondary"
-										onClick={() => router.push(`/monitors/${monitor.id}/edit`)}
-										className="shrink-0 text-xs"
-									>
-										Enable JS rendering
-									</Button>
-								) : null}
-							</div>
-						</Card>
-					) : (
-						<Card>
-							<p className="text-sm text-[var(--ink-subtle)]">
-								No text preview available yet. Run a check — preview appears after the first successful run.
-							</p>
-						</Card>
-					)}
+					<CapturedContentPreview
+						monitor={monitor}
+						snapshot={previewSnapshot}
+						run={latestOkRun}
+						loading={previewLoading}
+						workspaceId={workspaceId}
+						onEnableJs={() => router.push(`/monitors/${monitor.id}/edit`)}
+					/>
 				</section>
 			) : null}
 
@@ -993,19 +1068,31 @@ function MonitorDetailInner() {
 				<section className="mb-8">
 					<SectionTitle>Visual diff</SectionTitle>
 					{(() => {
-						// Screenshots are captured only when a non-noise change is recorded
-						// (backend _queue_notifications), keyed by that change's run_id —
-						// not by arbitrary successful runs, which usually have no file.
+						// Screenshot keys are per run. Visual monitors store the exact
+						// capture the hash was computed from on every check; other modes
+						// store one per signal change (alert-screenshot worker). Noise
+						// changes never get a file, so they are skipped here.
 						const shotChanges = changes.filter((c) => !c.is_noise).slice(0, 2);
-						const after = shotChanges[0]
-							? brandAssetUrl(`screenshots/${monitor.id}/${shotChanges[0].run_id}.png`)
+						const afterChange = shotChanges[0] ?? null;
+						const beforeChange = shotChanges[1] ?? null;
+						const after = afterChange
+							? brandAssetUrl(`screenshots/${monitor.id}/${afterChange.run_id}.png`)
 							: null;
-						const before = shotChanges[1]
-							? brandAssetUrl(`screenshots/${monitor.id}/${shotChanges[1].run_id}.png`)
+						const before = beforeChange
+							? brandAssetUrl(`screenshots/${monitor.id}/${beforeChange.run_id}.png`)
 							: null;
 						return (
 							<>
-								<VisualDiff before={before} after={after} />
+								<VisualDiff
+									before={before}
+									after={after}
+									beforeCaption={
+										beforeChange ? new Date(beforeChange.created_at).toLocaleString() : null
+									}
+									afterCaption={
+										afterChange ? new Date(afterChange.created_at).toLocaleString() : null
+									}
+								/>
 								{shotChanges.length < 2 ? (
 									<p className="mt-2 text-xs text-[var(--ink-subtle)]">
 										{shotChanges.length === 0
@@ -1042,7 +1129,9 @@ function MonitorDetailInner() {
 				<Card className="!p-4">
 					<p className="section-label">Renderer</p>
 					<p className="mt-2.5 text-sm font-medium text-[var(--fg)]">
-						{monitor.js_required ? "Playwright (JS)" : "HTTP"}
+						{monitor.js_required || monitor.mode === "visual"
+							? "Playwright (JS)"
+							: "HTTP"}
 					</p>
 				</Card>
 				<Card className="!p-4">
@@ -1059,7 +1148,7 @@ function MonitorDetailInner() {
 				</Card>
 			</div>
 
-			{(monitor.mode === "product_price" || monitor.mode === "json_field") ? (
+			{VALUE_HISTORY_MODES.includes(monitor.mode) ? (
 				<section className="mb-10">
 					<SectionTitle>Value history</SectionTitle>
 					<Card>

@@ -29,8 +29,8 @@ import type {
 import {
   ImpactBadge,
   parseImpact,
-  stripImpact,
 } from "@/components/ui";
+import { composeHeadline, parseSummaryParts } from "@/lib/summary";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
@@ -145,7 +145,14 @@ export default function DashboardPage() {
       ? (100 * monitors.length) / usage.max_monitors
       : null;
   const hasMonitor = monitors.length > 0;
-  const hasBaseline = monitors.some((m) => m.latest_change);
+  const hasBaseline = (usage?.checks_count ?? 0) > 0 || monitors.some((m) => m.latest_change);
+  const recentMonitors = [...monitors]
+    .sort((a, b) => {
+      const timeA = new Date(a.latest_change?.created_at || a.created_at).getTime();
+      const timeB = new Date(b.latest_change?.created_at || b.created_at).getTime();
+      return timeB - timeA;
+    })
+    .slice(0, 8);
   const hasChannel = channels.some((c) => c.enabled);
   const showChecklist = monitors.length === 0 || !hasBaseline;
 
@@ -184,14 +191,14 @@ export default function DashboardPage() {
                 Pause all
               </ConfirmButton>
             ) : null}
-            {monitors.length > 0 && active === 0 ? (
+            {monitors.length > 0 && active < monitors.length ? (
               <Button type="button" variant="secondary" disabled={bulkBusy} onClick={handleResumeAll}>
                 Resume all
               </Button>
             ) : null}
             <Link href="/monitors/new">
               <Button type="button">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
                 New monitor
@@ -266,7 +273,7 @@ export default function DashboardPage() {
         />
       ) : (
         <div className="space-y-2">
-          {monitors.slice(0, 8).map((m) => (
+          {recentMonitors.map((m) => (
             <Link key={m.id} href={`/monitors/${m.id}`} className="block">
               <Card hover className="flex items-center justify-between gap-4 !py-4">
                 <div className="flex min-w-0 items-start gap-3">
@@ -278,12 +285,19 @@ export default function DashboardPage() {
                       {m.latest_change?.change_category ? (
                         <span className={`h-2 w-2 rounded-full ${changeDotClass(m.latest_change.change_category)}`} aria-hidden />
                       ) : null}
-                      {m.latest_change?.ai_summary ? <ImpactBadge impact={parseImpact(m.latest_change.ai_summary)} /> : null}
+                      {m.latest_change?.ai_summary ? (
+                        <ImpactBadge
+                          impact={m.latest_change.impact ?? parseImpact(m.latest_change.ai_summary)}
+                        />
+                      ) : null}
                     </div>
                     <p className="truncate text-xs text-[var(--ink-subtle)]">{m.url}</p>
                     <p className="mt-1 truncate text-sm text-[var(--ink-muted)]">
                       {m.latest_change
-                        ? stripImpact(m.latest_change.ai_summary || "") ||
+                        ? composeHeadline(
+                            parseSummaryParts(m.latest_change.ai_summary),
+                            m.latest_change.title,
+                          ) ||
                           m.latest_change.diff_summary ||
                           "Content changed"
                         : "Watching — no changes yet"}

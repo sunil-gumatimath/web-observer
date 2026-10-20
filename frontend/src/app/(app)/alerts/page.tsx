@@ -22,23 +22,17 @@ import { GithubDiff } from "@/components/github-diff";
 import { useToast } from "@/components/toasts";
 import { api } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
-import type { AlertInboxItem, AlertsSummary, ChangeEventDetail } from "@/lib/types";
+import type { AlertInboxItem, AlertsSummary, ChangeEventDetail, Monitor } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
 import { ensureWorkspace } from "@/lib/workspace";
 import { config } from "@/lib/config";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
+import { composeHeadline, parseSummaryParts } from "@/lib/summary";
 
 type Filter = "all" | "unread" | "noise";
 type ImpactFilter = "all" | "high" | "medium" | "low";
 
 const PAGE_SIZE = 100;
-
-/** Pull the AI triage reason out of a noise item's summary, if present. */
-function triageReason(summary: string | null): string | null {
-	if (!summary) return null;
-	const m = summary.match(/^\[AI triage\]\s*(.+)$/i);
-	return m ? m[1] : null;
-}
 
 /** Normalized impact level: critical folds into high. Null when unknown. */
 function impactLevel(a: AlertInboxItem): ImpactFilter | null {
@@ -53,6 +47,7 @@ export default function AlertsPage() {
 	usePageTitle("Alerts");
 	const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 	const [alerts, setAlerts] = useState<AlertInboxItem[]>([]);
+	const [monitors, setMonitors] = useState<Monitor[]>([]);
 	const [summary, setSummary] = useState<AlertsSummary | null>(null);
 	const [filter, setFilter] = useState<Filter>("all");
 	const [query, setQuery] = useState("");
@@ -72,7 +67,7 @@ export default function AlertsPage() {
 	const [loadingDiffs, setLoadingDiffs] = useState<Record<string, boolean>>({});
 
 	const load = useCallback(async (ws: string, f: Filter, lim: number) => {
-		const [items, sum] = await Promise.all([
+		const [items, sum, mons] = await Promise.all([
 			api
 				.listAlerts(ws, {
 					unread_only: f === "unread",
@@ -87,9 +82,11 @@ export default function AlertsPage() {
 							: list,
 				),
 			api.alertsSummary(ws),
+			api.listMonitors(ws).catch(() => []),
 		]);
 		setAlerts(items);
 		setSummary(sum);
+		setMonitors(mons);
 	}, []);
 
 	useEffect(() => {
@@ -117,12 +114,27 @@ export default function AlertsPage() {
 	// flat 60s timer left new alerts invisible for up to a minute.
 	useAutoRefresh(() => setRefreshTick((n) => n + 1));
 
-	// Distinct monitors present in the inbox, for the monitor filter dropdown.
+	// Distinct monitors in the workspace + inbox, for the monitor filter dropdown.
 	const monitorOptions = useMemo(() => {
-		const seen = new Map<string, string>();
-		for (const a of alerts) seen.set(a.monitor_id, a.monitor_name);
-		return [...seen.entries()].map(([id, name]) => ({ id, name }));
-	}, [alerts]);
+		const counts = new Map<string, number>();
+		for (const a of alerts) {
+			counts.set(a.monitor_id, (counts.get(a.monitor_id) ?? 0) + 1);
+		}
+		const seen = new Map<string, { id: string; name: string; count: number }>();
+		for (const m of monitors) {
+			seen.set(m.id, { id: m.id, name: m.name, count: counts.get(m.id) ?? 0 });
+		}
+		for (const a of alerts) {
+			if (!seen.has(a.monitor_id)) {
+				seen.set(a.monitor_id, {
+					id: a.monitor_id,
+					name: a.monitor_name,
+					count: counts.get(a.monitor_id) ?? 1,
+				});
+			}
+		}
+		return [...seen.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+	}, [alerts, monitors]);
 
 	// Client-side search + filters applied on top of the fetched inbox.
 	const visibleAlerts = useMemo(() => {
@@ -328,10 +340,10 @@ export default function AlertsPage() {
 						aria-label="Filter by monitor"
 						className="h-9 w-full"
 					>
-						<option value="all">All monitors</option>
+						<option value="all">All monitors ({monitors.length || monitorOptions.length})</option>
 						{monitorOptions.map((m) => (
 							<option key={m.id} value={m.id}>
-								{m.name}
+								{m.name} {m.count > 0 ? `(${m.count})` : `(0 alerts)`}
 							</option>
 						))}
 					</Select>
@@ -406,39 +418,87 @@ export default function AlertsPage() {
 				) : (
 					<EmptyState
 						title="No alerts yet"
-						body="When a monitor detects a content change, AI will summarize it here."
+						body={
+							monitors.length > 0
+								? `You have ${monitors.length} active monitor${monitors.length === 1 ? "" : "s"} running. The first check captures the baseline without an alert. When a content change is detected on a future check, an AI summary and alert will appear here.`
+								: "When a monitor detects a content change, AI will summarize it here."
+						}
 						action={
-							<Link href="/monitors/new">
-								<Button type="button">Create a monitor</Button>
-							</Link>
+							monitors.length > 0 ? (
+								<div className="flex flex-wrap items-center justify-center gap-2">
+									<Link href="/monitors">
+										<Button type="button">View monitors ({monitors.length})</Button>
+									</Link>
+									<Link href="/monitors/new">
+										<Button type="button" variant="secondary">Create another monitor</Button>
+									</Link>
+								</div>
+							) : (
+								<Link href="/monitors/new">
+									<Button type="button">Create a monitor</Button>
+								</Link>
+							)
 						}
 					/>
 				)
 			) : visibleAlerts.length === 0 ? (
-				<EmptyState
-					title="No matching alerts"
-					body="No alerts match your current search or filters. Try clearing them."
-					action={
-						<Button
-							type="button"
-							variant="secondary"
-							onClick={() => {
-								setQuery("");
-								setMonitorFilter("all");
-								setImpactFilter("all");
-								setDateFrom("");
-								setDateTo("");
-							}}
-						>
-							Clear filters
-						</Button>
-					}
-				/>
+				monitorFilter !== "all" ? (() => {
+					const selMon = monitors.find((m) => m.id === monitorFilter);
+					return (
+						<EmptyState
+							title={`No alerts for ${selMon ? `"${selMon.name}"` : "this monitor"}`}
+							body={
+								filter === "noise"
+									? "No noise held for this monitor. Switch to Signal to check for high-signal alerts."
+									: filter === "unread"
+										? "No unread alerts for this monitor. Switch to Signal to review past alerts."
+										: "This monitor has not detected any content changes yet. The initial check captured the baseline; alerts appear here automatically as soon as a change is detected."
+							}
+							action={
+								<div className="flex flex-wrap items-center justify-center gap-2">
+									<Link href={`/monitors/${monitorFilter}`}>
+										<Button type="button">View monitor details</Button>
+									</Link>
+									<Button
+										type="button"
+										variant="secondary"
+										onClick={() => {
+											setMonitorFilter("all");
+										}}
+									>
+										Show all monitors
+									</Button>
+								</div>
+							}
+						/>
+					);
+				})() : (
+					<EmptyState
+						title="No matching alerts"
+						body="No alerts match your current search or filters. Try clearing them."
+						action={
+							<Button
+								type="button"
+								variant="secondary"
+								onClick={() => {
+									setQuery("");
+									setMonitorFilter("all");
+									setImpactFilter("all");
+									setDateFrom("");
+									setDateTo("");
+								}}
+							>
+								Clear filters
+							</Button>
+						}
+					/>
+				)
 			) : (
 				<div className="space-y-3">
 					{visibleAlerts.map((a) => {
-						const headline = a.ai_summary || a.diff_summary || "Content changed";
-						const reason = a.is_noise ? triageReason(a.ai_summary ?? null) : null;
+						const parts = parseSummaryParts(a.ai_summary);
+						const reason = a.is_noise ? parts.reason : null;
+						const headline = reason ?? composeHeadline(parts, a.title);
 						const isExpanded = Boolean(expandedDiffs[a.id]);
 						const isLoadingDiff = Boolean(loadingDiffs[a.id]);
 						const diffDetail = expandedDiffs[a.id];
@@ -497,7 +557,7 @@ export default function AlertsPage() {
 											</p>
 											{reason ? (
 												<p className="mt-1 text-sm leading-relaxed text-[var(--ink-subtle)] line-through decoration-[var(--hairline-strong)]">
-													{headline}
+													{parts.detail || a.diff_summary || "Content changed"}
 												</p>
 											) : null}
 

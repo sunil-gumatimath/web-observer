@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import type { ChangeEventDetail, Monitor, MonitorRunLog } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
+import { parseSummaryParts } from "@/lib/summary";
 
 function fmt(value: string | null | undefined): string {
 	if (!value) return "—";
@@ -231,11 +232,20 @@ export default function RunLogDetailPage() {
 											Open full change view
 										</Link>
 									</div>
-									{change.ai_summary || change.diff_summary ? (
-										<p className="mb-4 text-sm text-[var(--muted)]">
-											{change.ai_summary || change.diff_summary}
-										</p>
-									) : null}
+									{change.ai_summary || change.diff_summary ? (() => {
+										const parts = parseSummaryParts(change.ai_summary);
+										const body = parts.detail || change.diff_summary || "";
+										return (
+											<div className="mb-4">
+												{parts.reason ? (
+													<p className="mb-1 text-xs font-medium text-[var(--warn)]">
+														Held as noise: {parts.reason}
+													</p>
+												) : null}
+												<p className="text-sm text-[var(--muted)]">{body}</p>
+											</div>
+										);
+									})() : null}
 									<GithubDiff
 										before={change.previous_text}
 										after={change.new_text}
