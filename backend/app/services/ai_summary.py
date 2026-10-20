@@ -185,6 +185,11 @@ def classify_heuristic(diff_text: str, mode: str | None = None) -> str:
             if rx.search(text):
                 return cat
         return "api"
+    if mode in ("rss_feed", "readme", "list_items"):
+        # These modes have a fixed shape (added/removed entries, doc edits) —
+        # classify by mode instead of scanning the text for keywords, so a
+        # feed post mentioning "$" is not reported as a pricing change.
+        return "content"
     for cat, rx in _HEURISTIC_RULES:
         if rx.search(text):
             return cat
@@ -194,6 +199,75 @@ def classify_heuristic(diff_text: str, mode: str | None = None) -> str:
 def template_summary(*, monitor_name: str, category: str, deterministic_summary: str) -> str:
     return (
         f"{monitor_name}: likely {category} change. {deterministic_summary or 'Content changed.'}"
+    )
+
+
+# Markers prefixed to a stored `change_events.ai_summary` when the change was
+# not a plain signal. The marker line carries the reason; the model's own
+# summary of what changed follows on the next line(s) so nothing is lost.
+TRIAGE_MARKER = "[AI triage]"
+CONDITIONAL_MARKER = "[Conditional]"
+
+
+def format_triage_summary(
+    reason: str | None,
+    *,
+    watch_note: str | None = None,
+    detail: str | None = None,
+) -> str:
+    """Compose the stored summary for a change triaged as noise.
+
+    Layout (one line per part, so the UI can split it without heuristics):
+
+        [AI triage] <reason> (watched: <note>)
+        <model summary of what actually changed>
+
+    The reason alone used to *replace* the model's summary, which meant the
+    inbox could not show what changed without opening the diff.
+    """
+    head = f"{TRIAGE_MARKER} {reason or 'flagged as noise'}".strip()
+    note = (watch_note or "").strip()
+    if note:
+        head = f"{head} (watched: {note[:200]})"
+    detail_text = (detail or "").strip()
+    if not detail_text:
+        return head
+    return f"{head}\n{detail_text}"
+
+
+def format_conditional_summary(reason: str | None) -> str:
+    """Compose the stored summary for a deterministically suppressed change."""
+    return f"{CONDITIONAL_MARKER} {reason or 'threshold not met'} (threshold not met)".strip()
+
+
+def apply_triage_reason(
+    enrichment: AIEnrichment,
+    reason: str | None,
+    *,
+    watch_note: str | None = None,
+) -> AIEnrichment:
+    """Return a copy of *enrichment* that surfaces *reason* as the summary.
+
+    The model's own summary is kept (as the detail lines) and the title,
+    impact and confidence survive — the triage reason used to replace the
+    summary and wipe those fields, so a held-back change showed neither what
+    changed nor how severe it was.
+    """
+    return AIEnrichment(
+        summary=format_triage_summary(
+            reason,
+            watch_note=watch_note,
+            detail=enrichment.summary,
+        ),
+        category=enrichment.category,
+        provider=enrichment.provider,
+        model=enrichment.model,
+        is_noise=True,
+        noise_reason=reason,
+        tokens_used=enrichment.tokens_used,
+        title=enrichment.title,
+        impact=enrichment.impact,
+        confidence=enrichment.confidence,
     )
 
 
@@ -412,6 +486,15 @@ def _system_prompt(*, mode: str, has_watch: bool, has_semantic: bool = False) ->
         "site_links": (
             " Mode=site_links: diff is sitemap URLs added/removed. "
             "Summarize scope (e.g. new product section, blog post URL, paginated expansion)."
+        ),
+        "rss_feed": (
+            " Mode=rss_feed: diff is feed entries added/removed. "
+            "Summarize how many entries were added or removed and name the most "
+            "prominent 1-3 entry titles, keeping URLs out."
+        ),
+        "readme": (
+            " Mode=readme: diff is README.md documentation. Summarize which sections, "
+            "commands, or usage notes changed, and whether the change is documentation-only."
         ),
         "page_content": (
             " Mode=page_content: diff is markdown text. Summarize the substantive textual change, "
@@ -1206,29 +1289,18 @@ def enrich_change(
             # Keep original LLM summary but store noise reason separately;
             # pipeline will format display.
             pass
-        # Build actionable display summary: prefix title and suffix impact when available
+        # The stored summary is the model's own text. The title and the impact
+        # live in their own columns (change_events.title / .impact) — baking
+        # them into the blob duplicated the data and forced every consumer
+        # (UI, digest, e-mail) to re-parse the string.
         base_summary = (
-            summary[:1000]
-            if summary
+            summary.strip()
+            if summary and summary.strip()
             else template_summary(
                 monitor_name=monitor_name, category=cat, deterministic_summary=deterministic_summary
             )
         )
-        display_summary = base_summary
-        if title:
-            # title is 3-5 words; prefix for quick scanning
-            display_summary = f"{title}: {base_summary}"
-            # re-truncate to 1000 after prefix
-            display_summary = display_summary[:1000]
-        if impact:
-            # append impact annotation if not already present
-            if f"impact: {impact}" not in display_summary.lower():
-                suffix = f" (impact: {impact})"
-                # ensure within 1000
-                if len(display_summary) + len(suffix) <= 1000:
-                    display_summary = display_summary + suffix
-                else:
-                    display_summary = display_summary[: 1000 - len(suffix)] + suffix
+        display_summary = base_summary[:1000]
         enrichment = AIEnrichment(
             summary=display_summary,
             category=cat,

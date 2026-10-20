@@ -13,7 +13,7 @@ from sqlalchemy import update as sa_update
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import NotificationChannel, NotificationDelivery, NotificationOutbox, Workspace
-from app.models.entities import OutboxStatus
+from app.models.entities import LIST_DIFF_MODES, OutboxStatus
 from app.services.email import send_email
 from app.services.usage import increment_notifications
 from app.workers.broker import redis_broker  # noqa: F401
@@ -98,6 +98,10 @@ def deliver_outbox_message(outbox_id: str) -> None:
         if payload.get("watch_note"):
             body_lines.append(f"*Watching:* {payload.get('watch_note')}")
         summary_text = payload.get("ai_summary") or payload.get("summary") or "Content changed"
+        if payload.get("title"):
+            body_lines.append(f"*Title:* {payload.get('title')}")
+        if payload.get("impact"):
+            body_lines.append(f"*Impact:* {payload.get('impact')}")
         body_lines.append(f"*Summary:* {summary_text}")
         # list_items diffs are link-rich ("+ [title](url)") — render them as
         # plain mrkdwn so Slack/Discord turn them into clickable links, mirroring
@@ -106,7 +110,12 @@ def deliver_outbox_message(outbox_id: str) -> None:
         mode = payload.get("mode")
         diff = payload.get("diff")
         if diff:
-            if mode == "list_items":
+            if mode in LIST_DIFF_MODES:
+                # List-mode diffs are link-rich ("+ [title](url)") — render them
+                # as plain mrkdwn so Slack/Discord turn them into clickable
+                # links, mirroring webdog's readable added/removed list.
+                # Code-fenced diffs are kept for the text/visual modes where
+                # raw +/- lines are more useful.
                 body_lines.append("")
                 body_lines.append("*Changes:*")
                 body_lines.append(str(diff))

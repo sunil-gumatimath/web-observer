@@ -25,7 +25,13 @@ from app.models.entities import (
     OutboxStatus,
     RunStatus,
 )
-from app.services.ai_summary import AIEnrichment, enrich_change, workspace_llm_config
+from app.services.ai_summary import (
+    AIEnrichment,
+    apply_triage_reason,
+    enrich_change,
+    format_conditional_summary,
+    workspace_llm_config,
+)
 from app.services.diffing import short_summary, unified_diff
 from app.services.extract import (
     ExtractionError,
@@ -129,10 +135,13 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
         return list_to_normalized(items), items
 
     if mode == "readme":
-        # README mode: result.text is already normalized markdown from readme fetcher
-        from app.services.extract import normalize_text
+        # README mode: result.text is already markdown from the readme
+        # fetcher. Normalize it with the markdown-aware variant so
+        # paragraph breaks, nested lists and code indentation survive
+        # (plain normalize_text would flatten them).
+        from app.services.extract import normalize_markdown_text
 
-        return normalize_text(result.text), None
+        return normalize_markdown_text(result.text), None
 
     if mode == "visual":
         return (result.text or "").strip(), None
@@ -212,6 +221,28 @@ def _is_price_removal(db: Session, monitor: Monitor, error_code: str) -> bool:
     if monitor.mode != MODE_PRODUCT_PRICE:
         return False
     return _has_previous_success(db, monitor)
+
+
+def _mode_summary(mode: str, prev_text: str, new_text: str) -> str:
+    """Deterministic change summary, tailored to the monitor mode.
+
+    Value modes get an explicit old -> new rendering so the price or field
+    value is visible in the alert body even when no LLM summary is available.
+    Every other mode falls back to the generic text summary.
+    """
+    if mode == MODE_PRODUCT_PRICE:
+        old = (prev_text or "").strip()
+        new = (new_text or "").strip()
+        if old and new:
+            return f"Price changed: {old} -> {new}"
+        return f"Price changed: {new or '(price removed)'}"
+    if mode == MonitorMode.JSON_FIELD.value:
+        old = (prev_text or "").strip()
+        new = (new_text or "").strip()
+        if old and new:
+            return f"Value changed: {old} -> {new}"
+        return f"Value changed: {new}"
+    return short_summary(prev_text, new_text)
 
 
 def _extract_and_store_snapshot(
@@ -331,6 +362,15 @@ def _extract_and_store_snapshot(
                 data=result.content,
                 content_type=ct or "text/html; charset=utf-8",
             )
+            if ct and "image" in ct:
+                try:
+                    put_bytes(
+                        key=f"screenshots/{monitor.id}/{run.id}.png",
+                        data=result.content,
+                        content_type="image/png",
+                    )
+                except Exception as s_exc:
+                    logger.debug("snapshot_screenshot_key_failed error=%s", s_exc)
             add_storage_bytes(db, monitor.workspace_id, nbytes=len(result.content))
         except StorageError as exc:
             logger.warning("snapshot_storage_failed run_id=%s error=%s", run.id, exc)
@@ -539,7 +579,7 @@ def _detect_change(
             )
         else:
             ctx.diff_text = unified_diff(prev_text, normalized)
-            ctx.summary = short_summary(prev_text, normalized)
+            ctx.summary = _mode_summary(monitor.mode, prev_text, normalized)
 
     # Conditional alert config: suppress insignificant changes (thresholds/regex)
     try:
@@ -625,7 +665,7 @@ def _create_change_event(
         # deferred to (or overwritten by) an AI worker.
         conditional_reason = getattr(ctx, "suppressed_reason", None)
         if conditional_reason:
-            enrichment.summary = f"[Conditional] {conditional_reason} (threshold not met)"
+            enrichment.summary = format_conditional_summary(conditional_reason)
             enrichment.provider = "conditional"
             enrichment.is_noise = True
             enrichment.noise_reason = conditional_reason
@@ -678,13 +718,16 @@ def _create_change_event(
     # Conditional suppression overrides AI triage — treat as noise with reason
     if getattr(ctx, "suppressed_reason", None):
         enrichment = AIEnrichment(
-            summary=f"[Conditional] {ctx.suppressed_reason} (threshold not met)",
+            summary=format_conditional_summary(ctx.suppressed_reason),
             category=getattr(enrichment, "category", None) or "other",
             provider=getattr(enrichment, "provider", "heuristic"),
             model=getattr(enrichment, "model", None),
             is_noise=True,
             noise_reason=ctx.suppressed_reason,
             tokens_used=getattr(enrichment, "tokens_used", 0),
+            title=getattr(enrichment, "title", None),
+            impact=getattr(enrichment, "impact", None),
+            confidence=getattr(enrichment, "confidence", None),
         )
         ctx.enrichment = enrichment
         is_noise = True
@@ -716,14 +759,13 @@ def _create_change_event(
         # If LLM already supplied a noise_reason, show it; otherwise generic.
         display_reason = triage_reason or getattr(enrichment, "noise_reason", None)
         if display_reason:
-            enrichment = AIEnrichment(
-                summary=f"[AI triage] {display_reason} (watched: {(watch_note or '')[:200]})",
-                category=enrichment.category,
-                provider=enrichment.provider,
-                model=enrichment.model,
-                is_noise=True,
-                noise_reason=display_reason,
-                tokens_used=getattr(enrichment, "tokens_used", 0),
+            # The reason goes on the first line, the model's own summary of
+            # what changed follows below it — the reason alone used to
+            # replace the summary, hiding the actual change.
+            enrichment = apply_triage_reason(
+                enrichment,
+                display_reason,
+                watch_note=watch_note,
             )
         ctx.enrichment = enrichment
 
@@ -832,6 +874,8 @@ def _queue_notifications(
                     "url": monitor.url,
                     "summary": ctx.summary,
                     "ai_summary": enrichment.summary if enrichment else None,
+                    "title": getattr(enrichment, "title", None) if enrichment else None,
+                    "impact": getattr(enrichment, "impact", None) if enrichment else None,
                     "category": enrichment.category if enrichment else None,
                     "diff": (ctx.diff_text or "")[:50_000],
                     "mode": monitor.mode,
@@ -873,6 +917,8 @@ def _queue_notifications(
             "url": monitor.url,
             "summary": ctx.summary,
             "ai_summary": enrichment.summary if enrichment else None,
+            "title": getattr(enrichment, "title", None) if enrichment else None,
+            "impact": getattr(enrichment, "impact", None) if enrichment else None,
             "category": enrichment.category if enrichment else None,
             "mode": monitor.mode,
             "screenshot_path": screenshot_path,
@@ -905,13 +951,22 @@ def _live_run_status(db: Session, run: MonitorRun) -> str | None:
         return probe.scalar(select(MonitorRun.status).where(MonitorRun.id == run.id))
 
 
-def _enqueue_alert_screenshot(change_id: object, monitor_id: object) -> None:
-    """Hand a screenshot capture to the browser_checks queue (never raises)."""
+def _enqueue_alert_screenshot(change_id: object, monitor: Monitor) -> None:
+    """Hand a screenshot capture to the browser_checks queue (never raises).
+
+    Visual monitors are skipped: their check already stored the exact capture
+    that was hashed and compared under this run's object key, so a delayed
+    recapture would overwrite it with a later page state and the Visual diff
+    slider would then show a change that never triggered the alert.
+    """
+    if monitor.mode == "visual":
+        logger.info("screenshot_enqueue_skipped mode=visual change_id=%s", change_id)
+        return
     try:
         from app.workers.browser_checks import capture_alert_screenshot
 
         capture_alert_screenshot.send(str(change_id))
-        logger.info("screenshot_enqueued change_id=%s monitor_id=%s", change_id, monitor_id)
+        logger.info("screenshot_enqueued change_id=%s monitor_id=%s", change_id, monitor.id)
     except Exception as exc:  # noqa: BLE001 - advisory; notifications already queued
         logger.warning("screenshot_enqueue_failed change_id=%s error=%s", change_id, exc)
 
@@ -979,7 +1034,7 @@ def apply_fetch_result(
         run.error_message = None
         db.commit()
         if monitor.screenshots_enabled:
-            _enqueue_alert_screenshot(change_id, monitor.id)
+            _enqueue_alert_screenshot(change_id, monitor)
         try:
             from app.workers.ai_enrich import enrich_change_event
 
@@ -1019,7 +1074,7 @@ def apply_fetch_result(
     db.commit()
 
     if monitor.screenshots_enabled:
-        _enqueue_alert_screenshot(change.id, monitor.id)
+        _enqueue_alert_screenshot(change.id, monitor)
 
     # enqueue webhook deliveries after commit
     if webhook_ids:

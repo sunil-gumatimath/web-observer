@@ -18,7 +18,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.models import ChangeEvent, Monitor, Snapshot, Workspace
 from app.models.entities import LIST_DIFF_MODES
-from app.services.ai_summary import workspace_llm_config
+from app.services.ai_summary import apply_triage_reason, workspace_llm_config
 from app.workers.broker import redis_broker  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -151,15 +151,18 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
         change.is_noise = bool(enrichment.is_noise)
         noise_surfaced = (
             enrichment.is_noise
-            and enrichment.noise_reason
+            and bool(enrichment.noise_reason)
             and "AI triage" not in enrichment.summary
         )
-        if noise_surfaced:
-            # Ensure noise reason is surfaced
-            change.ai_summary = (
-                f"[AI triage] {enrichment.noise_reason} "
-                f"(watched: {(monitor.watch_note or '')[:200]})"
-            )
+        if noise_surfaced and enrichment.noise_reason:
+            # The reason goes on the first line, the model's own summary of
+            # what changed follows below it — the reason alone used to replace
+            # the summary, hiding the actual change.
+            change.ai_summary = apply_triage_reason(
+                enrichment,
+                enrichment.noise_reason,
+                watch_note=getattr(monitor, "watch_note", None),
+            ).summary
 
         # Token accounting
         try:
