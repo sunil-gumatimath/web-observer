@@ -1,7 +1,10 @@
 import logging
+import os
 import secrets
 from functools import lru_cache
+from pathlib import Path
 
+from dotenv import dotenv_values
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -10,6 +13,65 @@ logger = logging.getLogger(__name__)
 # Values of APP_ENV that opt into relaxed development behaviour.
 # Development mode is strictly opt-in: see ``Settings.is_development``.
 _DEV_ENV_NAMES = frozenset({"development", "dev", "local", "test", "testing"})
+
+#: Fields whose value in the OS environment silently wins over ``.env``.
+#: Keys are fingerprinted in the warning; everything else is safe to print.
+_SECRET_FIELDS = frozenset({"GEMINI_API_KEY", "LLM_API_KEY"})
+_OVERRIDE_CHECKED_FIELDS = (
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
+    "GEMINI_API_BASE",
+    "LLM_API_KEY",
+    "LLM_MODEL",
+    "LLM_API_BASE",
+)
+
+
+def _fingerprint(value: str) -> str:
+    """Last four characters plus length — enough to tell two keys apart."""
+    value = value.strip()
+    return f"...{value[-4:]} (len {len(value)})"
+
+
+def _warn_env_overrides(env_file: Path | None = None) -> list[str]:
+    """Warn when an OS environment variable shadows a ``.env`` entry.
+
+    pydantic-settings resolves constructor kwargs > OS environment > ``.env``,
+    so a leftover ``GEMINI_API_KEY`` set with ``setx`` makes the ``.env`` value
+    dead config. Without this warning the only symptom is "I rotated the key
+    and nothing changed" — or worse, requests billed to an account you thought
+    you had stopped using.
+
+    Returns the names that were overridden, for tests.
+    """
+    path = Path(".env") if env_file is None else env_file
+    if not path.is_file():
+        return []
+    try:
+        file_values = dotenv_values(path)
+    except OSError:  # unreadable file: not worth failing startup over
+        return []
+
+    overridden: list[str] = []
+    for name in _OVERRIDE_CHECKED_FIELDS:
+        env_value = (os.environ.get(name) or "").strip()
+        file_value = (file_values.get(name) or "").strip()
+        if not env_value or not file_value or env_value == file_value:
+            continue
+        overridden.append(name)
+        shown_env = _fingerprint(env_value) if name in _SECRET_FIELDS else env_value
+        shown_file = _fingerprint(file_value) if name in _SECRET_FIELDS else file_value
+        logger.warning(
+            "%s is set in the OS environment and overrides %s "
+            "(using %s, ignoring %s). Unset the OS variable, or the .env "
+            "value will never be used.",
+            name,
+            path.resolve(),
+            shown_env,
+            shown_file,
+        )
+    return overridden
+
 
 
 class Settings(BaseSettings):
@@ -138,6 +200,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    _warn_env_overrides()
     settings = Settings()
 
     if "app_env" not in settings.model_fields_set:
