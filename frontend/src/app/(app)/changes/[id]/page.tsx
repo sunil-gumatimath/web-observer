@@ -141,11 +141,11 @@ export default function ChangeDetailPage() {
 					<div className="min-w-0 flex-1">
 						<Link
 							href={`/monitors/${monitor.id}`}
-							className="text-lg font-bold text-[var(--fg)] hover:text-[var(--accent)]"
+							className="text-lg font-bold text-[var(--fg)] hover:text-[var(--primary)]"
 						>
 							{monitor.name}
 						</Link>
-						<p className="text-xs text-slate-500 font-mono truncate">{monitor.url}</p>
+						<p className="text-xs text-[var(--ink-subtle)] font-mono truncate">{monitor.url}</p>
 					</div>
 				</div>
 			) : null}
@@ -198,17 +198,17 @@ export default function ChangeDetailPage() {
 					</Badge>
 				) : null}
 				{change.confidence !== undefined && change.confidence !== null ? (
-					<span className="inline-flex items-center rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+					<span className="inline-flex items-center rounded-full bg-[var(--surface-2)] border border-[var(--hairline)] px-2 py-0.5 text-[11px] font-medium text-[var(--ink)]">
 						{Math.round(change.confidence * 100)}% confidence
 					</span>
 				) : null}
 			</div>
 
 			{change.ai_summary ? (
-				<div className="mb-5 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 dark:border-[var(--accent)]/25">
-					<div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
+				<div className="mb-5 overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)] p-4">
+					<div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
 						<div className="flex items-center gap-2">
-							<svg className="h-4 w-4 text-[var(--accent)]" viewBox="0 0 24 24" fill="currentColor">
+							<svg className="h-4 w-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="currentColor">
 								<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/>
 							</svg>
 							<span>AI Change Summary</span>
@@ -234,22 +234,22 @@ export default function ChangeDetailPage() {
 			<div className="mb-4 grid gap-3 sm:grid-cols-2">
 				<Card className="!p-4">
 					<p className="section-label">Previous hash</p>
-					<p className="mt-2 break-all font-mono text-xs text-slate-700 dark:text-slate-300">
+					<p className="mt-2 break-all font-mono text-xs text-[var(--ink)]">
 						{change.previous_hash ?? "—"}
 					</p>
 					{prevSnap?.created_at ? (
-						<p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-500">
+						<p className="mt-1.5 text-[11px] text-[var(--ink-subtle)]">
 							Captured {new Date(prevSnap.created_at).toLocaleString()}
 						</p>
 					) : null}
 				</Card>
 				<Card className="!p-4">
 					<p className="section-label">New hash</p>
-					<p className="mt-2 break-all font-mono text-xs text-slate-700 dark:text-slate-300">
+					<p className="mt-2 break-all font-mono text-xs text-[var(--ink)]">
 						{change.new_hash}
 					</p>
 					{newSnap?.created_at ? (
-						<p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-500">
+						<p className="mt-1.5 text-[11px] text-[var(--ink-subtle)]">
 							Captured {new Date(newSnap.created_at).toLocaleString()}
 						</p>
 					) : null}
@@ -257,7 +257,7 @@ export default function ChangeDetailPage() {
 			</div>
 
 			{run ? (
-				<div className="mb-6 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-500">
+				<div className="mb-6 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-subtle)]">
 					<Badge
 						tone={
 							run.status === "succeeded"

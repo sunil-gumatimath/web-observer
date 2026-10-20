@@ -96,7 +96,7 @@ export function VisualDiff({
 
         <div aria-hidden className="pointer-events-none absolute inset-y-0" style={{ left: `${clamped}%` }}>
           <div className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-[var(--primary)]" />
-          <div className="absolute top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--hairline-strong)] bg-[var(--surface-2)] text-xs font-semibold text-[var(--fg)] shadow-md">
+          <div className="absolute top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--hairline-strong)] bg-[var(--surface-2)] text-xs font-semibold text-[var(--fg)]">
             &#8596;
           </div>
         </div>
@@ -123,7 +123,7 @@ export function VisualDiff({
           onChange={(e) => setPos(Math.min(100, Math.max(0, Number(e.target.value))))}
           aria-label="Comparison position"
           aria-valuetext={`${Math.round(clamped)} percent before`}
-          className="absolute bottom-2 left-1/2 w-1/2 -translate-x-1/2 accent-[var(--accent)]"
+          className="absolute bottom-2 left-1/2 w-1/2 -translate-x-1/2 accent-[var(--primary)]"
         />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs">

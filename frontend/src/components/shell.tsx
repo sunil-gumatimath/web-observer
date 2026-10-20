@@ -195,7 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 	return (
 		<div className="min-h-screen bg-[var(--bg)] text-[var(--fg)]" suppressHydrationWarning>
 			<header
-				className="sticky top-0 z-40 h-14 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-md"
+				className="sticky top-0 z-40 h-14 border-b border-[var(--hairline)] bg-[var(--bg)]/90 backdrop-blur-md"
 				suppressHydrationWarning
 			>
 				<div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-4 px-4" suppressHydrationWarning>
@@ -221,7 +221,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 						<button
 							type="button"
 							onClick={() => setPaletteOpen(true)}
-							className="hidden h-8 items-center gap-2 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 text-xs text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-focus)]/50 sm:inline-flex"
+							className="hidden h-8 items-center gap-2 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 text-xs text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] sm:inline-flex"
 							aria-label="Open command palette"
 						>
 							<span aria-hidden>⌕</span>
@@ -285,7 +285,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 				{open ? (
 					<div
 						id="mobile-nav"
-						className="border-b border-[var(--border)] bg-[var(--bg)] px-4 py-3 md:hidden shadow-lg"
+						className="border-b border-[var(--hairline)] bg-[var(--surface-1)] px-4 py-3 md:hidden"
 						suppressHydrationWarning
 					>
 						<nav className="flex flex-col gap-1" suppressHydrationWarning>
@@ -306,7 +306,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 								);
 							})}
 						</nav>
-						<div className="mt-3 flex items-center border-t border-[var(--border)] pt-3 sm:hidden" suppressHydrationWarning>
+						<div className="mt-3 flex items-center border-t border-[var(--hairline)] pt-3 sm:hidden" suppressHydrationWarning>
 							<ClerkAuthControls />
 						</div>
 					</div>

@@ -89,7 +89,6 @@ function MonitorDetailInner() {
 	const [brandRefreshing, setBrandRefreshing] = useState(false);
 	const [sseConnected, setSseConnected] = useState(false);
 
-
 	const pollStartedAt = useRef<number | null>(null);
 	const latestSnapshotId = useRef<string | null>(null);
 	// Fingerprint of the last observed run list: any new run or status change
@@ -272,8 +271,6 @@ function MonitorDetailInner() {
 			}
 			if (stopped || ac.signal.aborted) return;
 
-			// Previously this path left `sseLiveRef` true forever, so the
-			// fallback poller stayed muted and the page froze until reload.
 			setSseConnected(false);
 			sseLiveRef.current = false;
 			retryTimer = window.setTimeout(connect, backoff);
@@ -454,10 +451,10 @@ function MonitorDetailInner() {
 
 	return (
 		<div>
-			{/* Webdog Hero Header Banner */}
-			<div className="mb-8 overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm dark:bg-slate-950/60">
+			{/* Hero Header Banner */}
+			<div className="mb-8 overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--surface-1)]">
 				{/* Top Cover Hero Banner */}
-				<div className="relative h-36 bg-slate-100 sm:h-44 dark:bg-slate-900">
+				<div className="relative h-36 bg-[var(--surface-2)] sm:h-44 border-b border-[var(--hairline)]">
 					{hero ? (
 						<img
 							src={hero}
@@ -465,16 +462,15 @@ function MonitorDetailInner() {
 							className="absolute inset-0 size-full object-cover object-top"
 						/>
 					) : (
-						<div className="absolute inset-0 bg-[var(--surface)]" />
+						<div className="absolute inset-0 bg-[var(--surface-2)]" />
 					)}
-					<div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)]/50 to-transparent" />
 				</div>
 
 				{/* Floating Header Content */}
 				<div className="relative px-5 pb-5 sm:px-6 sm:pb-6">
 					<div className="-mt-10 flex flex-wrap items-end justify-between gap-4">
-						<div className="flex size-18 sm:size-20 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border)] bg-white p-1.5 shadow-md dark:bg-slate-900">
-							<BrandLogo brand={monitor.brand} name={monitor.name} domain={monitor.url} size={64} className="rounded-xl border-0" />
+						<div className="flex size-18 sm:size-20 items-center justify-center overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-1.5">
+							<BrandLogo brand={monitor.brand} name={monitor.name} domain={monitor.url} size={64} className="rounded-md border-0" />
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<a
@@ -576,18 +572,18 @@ function MonitorDetailInner() {
 							{workspaceId ? (
 								<img src={api.badgeUrl(workspaceId, monitor.id)} alt="status badge" className="h-5 rounded" loading="lazy" />
 							) : null}
-							{sseConnected ? <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="live" /> : null}
+							{sseConnected ? <span className="h-2 w-2 rounded-full bg-[var(--semantic-success)] animate-pulse" title="live" /> : null}
 						</div>
 						<a
 							href={monitor.url}
 							target="_blank"
 							rel="noreferrer"
-							className="mt-1 inline-block truncate font-mono text-xs text-slate-500 hover:text-[var(--accent)] dark:text-slate-400"
+							className="mt-1 inline-block truncate font-mono text-xs text-[var(--ink-subtle)] hover:text-[var(--primary)]"
 						>
 							{monitor.url}
 						</a>
 						{monitor.brand?.description ? (
-							<p className="mt-2 max-w-3xl text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+							<p className="mt-2 max-w-3xl text-xs sm:text-sm text-[var(--ink-muted)] leading-relaxed">
 								{monitor.brand.description}
 							</p>
 						) : null}
@@ -598,7 +594,7 @@ function MonitorDetailInner() {
 			{error ? <ErrorBox message={error} /> : null}
 
 			{shareUrl ? (
-				<Card className="mb-8 border-emerald-500/25 bg-emerald-500/5 dark:bg-emerald-500/[0.06]">
+				<Card className="mb-8 border-[var(--semantic-success)]/30 bg-[var(--semantic-success)]/5">
 					<div className="flex flex-wrap items-start justify-between gap-3">
 						<div className="min-w-0 flex-1">
 							<p className="section-label">Public share link</p>
@@ -606,7 +602,7 @@ function MonitorDetailInner() {
 								href={shareUrl}
 								target="_blank"
 								rel="noreferrer"
-								className="mt-1 block truncate text-sm text-[var(--accent)] hover:opacity-80"
+								className="mt-1 block truncate text-sm text-[var(--primary)] hover:opacity-80"
 							>
 								{shareUrl}
 							</a>
@@ -616,13 +612,13 @@ function MonitorDetailInner() {
 						</Button>
 					</div>
 					{shareMsg ? (
-						<p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{shareMsg}</p>
+						<p className="mt-3 text-xs text-[var(--ink-subtle)]">{shareMsg}</p>
 					) : null}
 				</Card>
 			) : null}
 
 			{showResultCard ? (
-				<Card className="mb-8 border-[var(--accent)]/20 bg-[var(--accent)]/5 dark:bg-[var(--accent)]/10">
+				<Card className="mb-8 border-[var(--hairline)] bg-[var(--surface-1)]">
 					<div className="flex flex-wrap items-start justify-between gap-3">
 						<div>
 							<p className="section-label">
@@ -636,7 +632,7 @@ function MonitorDetailInner() {
 											Check is stuck or the worker is offline
 										</span>
 									</div>
-									<p className="text-sm text-slate-600 dark:text-slate-300">
+									<p className="text-sm text-[var(--ink-muted)]">
 										No status change for{" "}
 										{Math.round(POLL_MAX_MS / 1000)}s. Common causes: worker not
 										listening on the right queue, Redis disconnect, or a lost
@@ -663,7 +659,7 @@ function MonitorDetailInner() {
 								(latestRun && isActiveRun(latestRun)) ||
 								(showFreshBanner && !latestTerminal) ? (
 								<div className="mt-3 flex items-center gap-3">
-									<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
+									<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
 									<div>
 										<p className="text-sm font-medium text-[var(--fg)]">
 											{latestRun?.status === "running"
@@ -671,7 +667,7 @@ function MonitorDetailInner() {
 												: "Waiting for worker…"}
 											{latestRun ? ` (${latestRun.status})` : ""}
 										</p>
-										<p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+										<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">
 											{showPollSlow
 												? "This is taking longer than usual. If it stays queued, the browser/HTTP worker may be offline."
 												: "Fetching the page and building a baseline. This usually takes a few seconds."}
@@ -698,11 +694,11 @@ function MonitorDetailInner() {
 											Baseline captured
 										</span>
 									</div>
-									<p className="text-sm text-slate-600 dark:text-slate-300">
+									<p className="text-sm text-[var(--ink-muted)]">
 										First success sets the baseline without an alert. Future
 										checks will notify you only when content changes.
 									</p>
-									<div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
+									<div className="flex flex-wrap gap-3 text-xs text-[var(--ink-subtle)]">
 										{latestTerminal.http_status != null ? (
 											<span>HTTP {latestTerminal.http_status}</span>
 										) : null}
@@ -724,13 +720,13 @@ function MonitorDetailInner() {
 											{latestTerminal.error_code ?? "Check failed"}
 										</span>
 									</div>
-									<p className="text-sm text-slate-600 dark:text-slate-300">
+									<p className="text-sm text-[var(--ink-muted)]">
 										{latestTerminal.error_message ||
 											"The first check did not complete successfully."}
 									</p>
 								</div>
 							) : (
-								<p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+								<p className="mt-3 text-sm text-[var(--ink-muted)]">
 									No finished run yet. If this stays empty, ensure the worker is
 									running, then click Run now.
 								</p>
@@ -777,17 +773,17 @@ function MonitorDetailInner() {
 			<section className="mb-8">
 				<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
 					<div>
-						<h2 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
+						<h2 className="text-sm font-semibold tracking-tight text-[var(--ink)]">
 							AI Change Summaries
 						</h2>
-						<p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+						<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 							Each change gets a 1–2 sentence summary with category and impact.
 						</p>
 					</div>
 					{latestChange ? (
 						<Link
 							href={`/changes/${latestChange.id}`}
-							className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:opacity-80"
+							className="inline-flex items-center gap-1 text-xs font-medium text-[var(--primary)] hover:opacity-80"
 						>
 							View full diff &amp; history →
 						</Link>
@@ -805,10 +801,10 @@ function MonitorDetailInner() {
 					const hasDiffTelemetry = Boolean(latestChange.diff_summary && latestChange.diff_summary !== rawSummary && latestChange.diff_summary !== summaryBody);
 
 					return (
-						<div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 dark:border-[var(--accent)]/25">
-							<div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3 dark:border-[var(--accent)]/20">
+						<div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-5">
+							<div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--hairline)] pb-3">
 								<div className="flex flex-wrap items-center gap-2">
-									<span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[var(--accent)]">
+									<span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[var(--primary)]">
 										<svg className="size-3.5" viewBox="0 0 24 24" fill="currentColor">
 											<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
 										</svg>
@@ -817,7 +813,7 @@ function MonitorDetailInner() {
 									<CategoryBadge category={latestChange.change_category} />
 									<ImpactBadge impact={impact} />
 									{typeof latestChange.confidence === "number" ? (
-										<span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+										<span className="inline-flex items-center gap-1 rounded-full border border-[var(--hairline)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-semibold text-[var(--ink-muted)]">
 											✦ {Math.round(latestChange.confidence <= 1 ? latestChange.confidence * 100 : latestChange.confidence)}% confidence
 										</span>
 									) : null}
@@ -827,17 +823,17 @@ function MonitorDetailInner() {
 										<Badge tone="success">signal</Badge>
 									)}
 									{isHeuristic ? (
-										<span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+										<span className="inline-flex items-center gap-1 rounded-full bg-[var(--warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--warning)]">
 											Heuristic preview
 										</span>
 									) : null}
-									<span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+									<span className="text-xs text-[var(--ink-subtle)] font-mono">
 										{new Date(latestChange.created_at).toLocaleString()}
 									</span>
 								</div>
 								<Link
 									href={`/changes/${latestChange.id}`}
-									className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5"
+									className="inline-flex items-center gap-1 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)]"
 								>
 									Inspect Diff →
 								</Link>
@@ -845,7 +841,7 @@ function MonitorDetailInner() {
 
 							<div className="mt-3.5">
 								{title ? (
-									<h3 className="text-base font-bold text-slate-950 dark:text-white">
+									<h3 className="text-base font-semibold text-[var(--ink)]">
 										{title}
 									</h3>
 								) : null}
@@ -853,8 +849,8 @@ function MonitorDetailInner() {
 									{summaryBody}
 								</p>
 								{hasDiffTelemetry ? (
-									<div className="mt-3 flex items-center gap-2 pt-2.5 border-t border-[var(--accent)]/10 dark:border-[var(--border)] text-[11px] font-mono text-slate-500 dark:text-slate-400">
-										<span className="text-slate-400 dark:text-slate-500">Diff telemetry:</span>
+									<div className="mt-3 flex items-center gap-2 pt-2.5 border-t border-[var(--hairline)] text-[11px] font-mono text-[var(--ink-subtle)]">
+										<span>Diff telemetry:</span>
 										<span>{latestChange.diff_summary}</span>
 									</div>
 								) : null}
@@ -862,36 +858,36 @@ function MonitorDetailInner() {
 						</div>
 					);
 				})() : hasSuccessfulSnapshot && latestTerminal?.status === "succeeded" ? (
-					<div className="rounded-2xl border border-emerald-500/20 bg-emerald-50/40 p-5 shadow-sm dark:border-emerald-500/20 dark:bg-emerald-950/20">
+					<div className="rounded-lg border border-[var(--semantic-success)]/30 bg-[var(--semantic-success)]/5 p-5">
 						<div className="flex items-start gap-3">
-							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--semantic-success)]/15 text-[var(--semantic-success)]">
 								✓
 							</span>
 							<div className="min-w-0 flex-1">
 								<h3 className="text-sm font-semibold text-[var(--fg)]">Monitoring active — waiting for changes</h3>
-								<p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+								<p className="mt-1 text-xs leading-relaxed text-[var(--ink-muted)]">
 									Baseline captured {latestTerminal.finished_at ? new Date(latestTerminal.finished_at).toLocaleString() : ""} · Next check {monitor.next_run_at ? new Date(monitor.next_run_at).toLocaleString() : `every ${monitor.schedule_interval_minutes}m`} · <ModeBadge mode={monitor.mode} />
 								</p>
-								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 									When a change is detected you&apos;ll get a titled summary + impact here and in Alerts.
 								</p>
 							</div>
 						</div>
 					</div>
 				) : polling || (latestRun && isActiveRun(latestRun)) ? (
-					<div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm dark:border-[var(--border)]">
+					<div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-5">
 						<div className="flex items-center gap-3">
-							<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
+							<div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
 							<div>
 								<p className="text-sm font-medium text-[var(--fg)]">Capturing baseline…</p>
-								<p className="text-xs text-slate-500 dark:text-slate-400">First success creates the baseline — summaries appear after the first real change.</p>
+								<p className="text-xs text-[var(--ink-subtle)]">First success creates the baseline — summaries appear after the first real change.</p>
 							</div>
 						</div>
 					</div>
 				) : (
-					<div className="rounded-2xl border border-[var(--border)] bg-slate-50/60 p-5 shadow-sm dark:bg-slate-900/40">
+					<div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-5">
 						<p className="text-sm font-medium text-[var(--fg)]">No baseline yet</p>
-						<p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+						<p className="mt-1 text-xs leading-relaxed text-[var(--ink-muted)]">
 							Run a check to capture the baseline. AI summaries are generated for each change after that.
 						</p>
 						<div className="mt-3 flex flex-wrap items-center gap-2">
@@ -908,23 +904,23 @@ function MonitorDetailInner() {
 				return (
 					<div
 						role="alert"
-						className="mb-8 rounded-2xl border border-rose-500/30 bg-rose-50/60 p-5 shadow-sm dark:bg-rose-950/20"
+						className="mb-8 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/5 p-5"
 					>
 						<div className="flex items-start gap-3">
-							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-base font-bold text-rose-600 dark:text-rose-400">
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--danger)]/15 text-base font-bold text-[var(--danger)]">
 								!
 							</span>
 							<div className="min-w-0 flex-1">
 								<h3 className="text-sm font-semibold text-[var(--fg)]">
 									Monitor is failing — an outage, not a content change
 								</h3>
-								<p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+								<p className="mt-1 text-xs leading-relaxed text-[var(--ink-muted)]">
 									Failed {monitor.consecutive_failures} time{(monitor.consecutive_failures ?? 0) === 1 ? "" : "s"} in a row
 									{lastFailed?.finished_at ? ` · last failure ${new Date(lastFailed.finished_at).toLocaleString()}` : ""}.
 									No change alerts fire while checks fail — a separate failure notice goes to your channels instead.
 								</p>
 								{lastFailed?.error_code || lastFailed?.error_message ? (
-									<p className="mt-1.5 truncate font-mono text-xs text-rose-700 dark:text-rose-300">
+									<p className="mt-1.5 truncate font-mono text-xs text-[var(--danger)]">
 										{lastFailed.error_code}
 										{lastFailed.error_message ? ` — ${lastFailed.error_message}` : ""}
 									</p>
@@ -943,7 +939,7 @@ function MonitorDetailInner() {
 					!monitor.js_required &&
 					(previewText.length < 80 ||
 						/loading\b|enable javascript|requires javascript|please wait/i.test(previewText)) ? (
-						<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-200">
+						<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 p-3.5 text-xs text-[var(--ink)]">
 							<p className="leading-relaxed">
 								<strong>Note:</strong> This website may require client-side JavaScript to render its full content. If text looks incomplete, enable <em>JavaScript rendering (Playwright)</em>.
 							</p>
@@ -958,7 +954,7 @@ function MonitorDetailInner() {
 						</div>
 					) : null}
 					{previewLoading ? (
-						<p className="text-sm text-slate-500">Loading captured content…</p>
+						<p className="text-sm text-[var(--ink-subtle)]">Loading captured content…</p>
 					) : previewText != null && previewText.length > 0 ? (
 						<ReadableContent
 							text={previewText}
@@ -968,7 +964,7 @@ function MonitorDetailInner() {
 					) : previewText === "" ? (
 						<Card>
 							<div className="flex flex-wrap items-center justify-between gap-3">
-								<p className="text-sm text-slate-500 dark:text-slate-400">
+								<p className="text-sm text-[var(--ink-subtle)]">
 									Captured snapshot is empty — page had no extractable text. If this is a Single-Page App (SPA) or client-rendered site, enable JavaScript rendering.
 								</p>
 								{!monitor.js_required ? (
@@ -985,7 +981,7 @@ function MonitorDetailInner() {
 						</Card>
 					) : (
 						<Card>
-							<p className="text-sm text-slate-500 dark:text-slate-400">
+							<p className="text-sm text-[var(--ink-subtle)]">
 								No text preview available yet. Run a check — preview appears after the first successful run.
 							</p>
 						</Card>
@@ -1011,7 +1007,7 @@ function MonitorDetailInner() {
 							<>
 								<VisualDiff before={before} after={after} />
 								{shotChanges.length < 2 ? (
-									<p className="mt-2 text-xs text-[var(--muted)]">
+									<p className="mt-2 text-xs text-[var(--ink-subtle)]">
 										{shotChanges.length === 0
 											? "Screenshots attach to detected changes — none recorded yet. They appear here after the first two signal changes."
 											: "One change captured so far — the comparison appears after the next signal change."}
@@ -1038,7 +1034,7 @@ function MonitorDetailInner() {
 						<ModeBadge mode={monitor.mode} />
 					</div>
 					{monitor.css_selector ? (
-						<p className="mt-2 truncate font-mono text-xs text-slate-500 dark:text-slate-500">
+						<p className="mt-2 truncate font-mono text-xs text-[var(--ink-subtle)]">
 							{monitor.css_selector}
 						</p>
 					) : null}
@@ -1074,16 +1070,16 @@ function MonitorDetailInner() {
 
 			<section className="mb-10">
 				<SectionTitle>Recent runs</SectionTitle>
-				<div className="surface overflow-hidden">
+				<div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)]">
 					<div className="overflow-x-auto">
 						<table className="w-full text-left text-sm">
 							<thead>
-								<tr className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-950/40">
+								<tr className="border-b border-[var(--hairline)] bg-[var(--surface-1)]">
 									{["Status", "HTTP", "Latency", "Error", "Finished"].map(
 										(h) => (
 											<th
 												key={h}
-												className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500"
+												className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-subtle)]"
 											>
 												{h}
 											</th>
@@ -1091,11 +1087,11 @@ function MonitorDetailInner() {
 									)}
 								</tr>
 							</thead>
-							<tbody className="divide-y divide-[var(--border)]">
+							<tbody className="divide-y divide-[var(--hairline)]">
 								{runs.map((r) => (
 									<tr
 										key={r.id}
-										className="transition hover:bg-slate-100/60 dark:hover:bg-white/[0.02]"
+										className="transition hover:bg-[var(--surface-2)]"
 									>
 										<td className="px-4 py-3">
 											<Badge
@@ -1110,16 +1106,16 @@ function MonitorDetailInner() {
 												{r.status}
 											</Badge>
 										</td>
-										<td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+										<td className="px-4 py-3 text-[var(--ink-muted)]">
 											{r.http_status ?? "—"}
 										</td>
-										<td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+										<td className="px-4 py-3 text-[var(--ink-muted)]">
 											{r.latency_ms != null ? `${r.latency_ms}ms` : "—"}
 										</td>
-										<td className="max-w-xs truncate px-4 py-3 text-slate-600 dark:text-slate-400">
+										<td className="max-w-xs truncate px-4 py-3 text-[var(--ink-muted)]">
 											{r.error_code ?? "—"}
 										</td>
-										<td className="px-4 py-3 text-slate-500 dark:text-slate-500">
+										<td className="px-4 py-3 text-[var(--ink-subtle)]">
 											{r.finished_at
 												? new Date(r.finished_at).toLocaleString()
 												: "—"}
@@ -1130,7 +1126,7 @@ function MonitorDetailInner() {
 									<tr>
 										<td
 											colSpan={5}
-											className="px-4 py-10 text-center text-slate-500 dark:text-slate-500"
+											className="px-4 py-10 text-center text-[var(--ink-subtle)]"
 										>
 											{polling
 												? "First check is running…"
@@ -1157,7 +1153,7 @@ function MonitorDetailInner() {
 								<p className="mt-2 text-sm text-[var(--fg)]">
 									{c.ai_summary || c.diff_summary || "Content changed"}
 								</p>
-								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 									{new Date(c.created_at).toLocaleString()}
 								</p>
 							</Card>
@@ -1165,7 +1161,7 @@ function MonitorDetailInner() {
 					))}
 					{changes.length === 0 ? (
 						<Card>
-							<p className="text-sm text-slate-500 dark:text-slate-500">
+							<p className="text-sm text-[var(--ink-subtle)]">
 								No change events yet. First success creates a baseline without
 								an alert.
 							</p>

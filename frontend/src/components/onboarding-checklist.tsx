@@ -161,8 +161,8 @@ export function OnboardingChecklist({
               key={step.key}
               className={
                 state === "current"
-                  ? "flex items-center justify-between gap-4 rounded-lg border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-3 py-2.5 dark:border-[var(--accent)]/20"
-                  : "flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] px-3 py-2.5"
+                  ? "flex items-center justify-between gap-4 rounded-lg border border-[var(--primary)]/30 bg-[var(--surface-2)] px-3 py-2.5"
+                  : "flex items-center justify-between gap-4 rounded-lg border border-[var(--hairline)] px-3 py-2.5"
               }
             >
               <div className="flex min-w-0 items-start gap-3">

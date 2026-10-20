@@ -121,8 +121,6 @@ export default function NewMonitorPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 
-
-
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
 		if (isReadmeMode(mode)) return;
 		const candidate = normalizeUrl(rawUrl ?? url, mode);
@@ -259,7 +257,7 @@ export default function NewMonitorPage() {
 							<div className="flex items-center justify-between">
 								<Label htmlFor="url">URL</Label>
 								{brandLoading ? (
-									<span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--accent)]">
+									<span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--primary)]">
 										<svg className="size-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 											<circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
 											<path d="M12 2a10 10 0 0 1 10 10" />
@@ -277,14 +275,14 @@ export default function NewMonitorPage() {
 								placeholder={isReadmeMode(mode) ? "owner/repo  or  https://github.com/owner/repo" : "https://example.com/pricing or example.com"}
 							/>
 							{isReadmeMode(mode) ? (
-								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 									Tracks the repository&apos;s <code>README.md</code> — any doc change on the default branch triggers a diff &amp; alert.
 								</p>
 							) : null}
 						</div>
 
 						{brandLoading ? (
-							<div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5 text-xs text-[var(--muted)] dark:border-[var(--accent)]/25">
+							<div className="flex items-center gap-2.5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3.5 py-2.5 text-xs text-[var(--ink-subtle)]">
 								<svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
 									<circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
 									<path d="M12 2a10 10 0 0 1 10 10" />
@@ -292,9 +290,9 @@ export default function NewMonitorPage() {
 								<span>Detecting website title, logo, and metadata…</span>
 							</div>
 						) : brand ? (
-							<div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg)] dark:border-[var(--accent)]/25">
+							<div className="overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)]">
 								{brand.hero_url ? (
-									<div className="relative h-20 w-full overflow-hidden bg-slate-100 dark:bg-slate-900">
+									<div className="relative h-20 w-full overflow-hidden bg-[var(--surface-2)]">
 										<img
 											src={brand.hero_url}
 											alt=""
@@ -303,7 +301,7 @@ export default function NewMonitorPage() {
 												(e.target as HTMLElement).parentElement!.style.display = "none";
 											}}
 										/>
-										<div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+										<div className="absolute inset-0 bg-[#010102]/20" />
 									</div>
 								) : null}
 								<div className="flex items-start gap-3 p-3.5">
@@ -311,7 +309,7 @@ export default function NewMonitorPage() {
 										<img
 											src={brand.logo_url}
 											alt=""
-											className="h-10 w-10 shrink-0 rounded-xl border border-[var(--border)] bg-white object-contain p-1 shadow-xs dark:bg-slate-900"
+											className="h-10 w-10 shrink-0 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] object-contain p-1"
 											onError={(e) => {
 												(e.target as HTMLElement).style.display = "none";
 											}}
@@ -322,16 +320,16 @@ export default function NewMonitorPage() {
 											<p className="truncate text-sm font-semibold text-[var(--fg)]">
 												{brand.title || "Discovered Brand"}
 											</p>
-											<span className="rounded-full bg-emerald-500/10 px-2 py-0.2 text-[10px] font-semibold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+											<span className="rounded-full bg-[var(--semantic-success)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--semantic-success)]">
 												Brand Preview
 											</span>
 										</div>
 										{brand.description ? (
-											<p className="mt-0.5 line-clamp-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+											<p className="mt-0.5 line-clamp-2 text-xs text-[var(--ink-muted)] leading-relaxed">
 												{brand.description}
 											</p>
 										) : (
-											<p className="mt-0.5 text-xs text-slate-400">Logo and title detected.</p>
+											<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">Logo and title detected.</p>
 										)}
 									</div>
 								</div>
@@ -344,7 +342,7 @@ export default function NewMonitorPage() {
 									<button
 										key={t.label}
 										type="button"
-										className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium capitalize text-slate-600 transition hover:border-[var(--accent)] hover:text-[var(--accent)] dark:text-slate-300"
+										className="rounded-lg border border-[var(--hairline)] px-2.5 py-1.5 text-xs font-medium capitalize text-[var(--ink-muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--ink)] hover:bg-[var(--surface-2)]"
 										onClick={() => {
 											if (!name.trim()) setName(t.name);
 											setMode(t.mode);
@@ -356,7 +354,7 @@ export default function NewMonitorPage() {
 									</button>
 								))}
 							</div>
-							<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-500">
+							<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 								Pick a preset to pre-fill the mode and interval, then paste your URL.
 							</p>
 						</div>
@@ -365,7 +363,11 @@ export default function NewMonitorPage() {
 							<Select
 								id="mode"
 								value={mode}
-								onChange={(e) => setMode(e.target.value as MonitorMode)}
+								onChange={(e) => {
+									const m = e.target.value as MonitorMode;
+									setMode(m);
+									if (!needsJs(m)) setJsRequired(false);
+								}}
 							>
 								<option value="page_content">
 									Page content (whole page text)
@@ -390,17 +392,17 @@ export default function NewMonitorPage() {
 								</option>
 								</Select>
 								{mode === "list_items" ? (
-								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 								List items: watches a list of elements (headlines, posts, entries) and reports what was added or removed as clickable links. Set the target CSS selector below.
 								</p>
 								) : null}
 								{mode === "json_field" ? (
-								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 								JSON field: watches one value inside a JSON response and reports when it changes. Set the JSON path below.
 								</p>
 								) : null}
 								{mode === "readme" ? (
-								<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 								README: monitors <code>README.md</code> on the repo&apos;s default branch (main/master). Use <code>vercel/next.js</code> or the full GitHub URL.
 								</p>
 								) : null}
@@ -420,7 +422,7 @@ export default function NewMonitorPage() {
 							/>
 							{intervalError(parseInterval(intervalRaw)) &&
 							intervalRaw.trim() !== "" ? (
-								<p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+								<p className="mt-1 text-xs text-[var(--warning)]">
 									{intervalError(parseInterval(intervalRaw))}
 								</p>
 							) : null}
@@ -436,26 +438,26 @@ export default function NewMonitorPage() {
 							/>
 						</div>
 						{needsJs(mode) ? (
-							<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-400 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-white/10">
+							<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--ink)] transition hover:border-[var(--hairline-strong)]">
 								<input
 									type="checkbox"
 									checked={jsRequired}
 									onChange={(e) => setJsRequired(e.target.checked)}
-									className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
+									className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
 								/>
 								JavaScript rendering required (Playwright)
 							</label>
 						) : mode === "readme" ? (
-							<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
+							<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
 								README mode fetches <code>README.md</code> from the repo&apos;s default branch over HTTP.
 							</p>
 						) : mode === "site_links" ? (
-							<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
+							<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
 								Site links mode reads the sitemap over HTTP and watches for
 								added or removed URLs.
 							</p>
 						) : (
-							<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
+							<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
 								RSS mode reads the feed over HTTP and watches for added or removed entries.
 							</p>
 						)}
@@ -467,7 +469,7 @@ export default function NewMonitorPage() {
 								onChange={(e) => setWatchNote(e.target.value)}
 								placeholder="e.g. Only care about pricing plan changes"
 							/>
-							<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+							<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 								Focuses AI summaries and helps you remember intent.
 							</p>
 						</div>
@@ -479,7 +481,7 @@ export default function NewMonitorPage() {
 								onChange={(e) => setSemanticTrigger(e.target.value)}
 								placeholder="e.g. Alert only if pricing increases or a new tier is added"
 							/>
-							<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+							<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 								Requires a configured LLM. Non-matching changes are filtered out; if AI evaluation is unavailable or fails, the change is allowed through (fail-open).
 							</p>
 						</div>
@@ -504,12 +506,12 @@ export default function NewMonitorPage() {
 							<button
 								type="button"
 								onClick={() => setPickerOpen(true)}
-								className="mt-1.5 text-xs font-medium text-[var(--accent)] underline-offset-2 hover:underline"
+								className="mt-1.5 text-xs font-medium text-[var(--primary)] underline-offset-2 hover:underline"
 							>
 								Pick element visually instead
 							</button>
 						) : null}
-						<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+						<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 							{mode === "json_field" ? (
 								<>
 									Path to the value to watch, e.g. <code>$.data.price</code> or{" "}
@@ -534,7 +536,7 @@ export default function NewMonitorPage() {
 											<button
 												key={key}
 												type="button"
-												className="rounded-md border border-[var(--border)] px-2 py-1 text-xs capitalize text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+												className="rounded-md border border-[var(--hairline)] px-2 py-1 text-xs capitalize text-[var(--ink-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
 												onClick={() => {
 													const cur = new Set(
 														ignoreSelectors
@@ -571,23 +573,23 @@ export default function NewMonitorPage() {
 											"Price updated .* ago\nLast (login|visited): .*"
 										}
 									/>
-									<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+									<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 										Matched text is stripped before diffing — useful for
 										timestamps or volatile counters.
 									</p>
 								</div>
 							</>
 						) : null}
-						<label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+						<label className="flex items-center gap-2 text-sm text-[var(--ink-muted)]">
 							<input
 								type="checkbox"
 								checked={runNow}
 								onChange={(e) => setRunNow(e.target.checked)}
-								className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
+								className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
 							/>
 							Run first check immediately (see result, then keep or delete)
 						</label>
-						<div className="flex gap-2 border-t border-[var(--border)] pt-5">
+						<div className="flex gap-2 border-t border-[var(--hairline)] pt-5">
 							<Button type="submit" disabled={saving}>
 								{saving ? "Creating…" : "Create monitor"}
 							</Button>
@@ -728,18 +730,18 @@ function SitemapDiscovery({
 		<Card className="max-w-2xl space-y-5">
 			{result ? (
 				<div className="space-y-3">
-					<p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+					<p className="text-sm font-medium text-[var(--semantic-success)]">
 						Created {result.created_count} monitor
 						{result.created_count === 1 ? "" : "s"}.
 					</p>
 					{result.skipped.length ? (
-						<p className="text-xs text-slate-500 dark:text-slate-500">
+						<p className="text-xs text-[var(--ink-subtle)]">
 							{result.skipped.length} skipped (duplicate URLs already
 							monitored).
 						</p>
 					) : null}
 					{result.errors.length ? (
-						<p className="text-xs text-rose-600 dark:text-rose-400">
+						<p className="text-xs text-[var(--danger)]">
 							{result.errors.length} failed — see server logs.
 						</p>
 					) : null}
@@ -770,7 +772,7 @@ function SitemapDiscovery({
 								{discovering ? "Discovering…" : "Discover"}
 							</Button>
 						</div>
-						<p className="text-xs text-slate-500 dark:text-slate-500">
+						<p className="text-xs text-[var(--ink-subtle)]">
 							Reads the site&apos;s sitemap.xml (or robots.txt) and lists the
 							pages it contains.
 						</p>
@@ -781,7 +783,7 @@ function SitemapDiscovery({
 					{discovery ? (
 						<div className="space-y-4">
 							<div className="flex items-center justify-between gap-3">
-								<p className="text-sm text-slate-600 dark:text-slate-300">
+								<p className="text-sm text-[var(--ink-subtle)]">
 									{discovery.count} page{discovery.count === 1 ? "" : "s"} found
 								</p>
 								<div className="flex gap-2">
@@ -803,19 +805,19 @@ function SitemapDiscovery({
 									</Button>
 								</div>
 							</div>
-							<div className="max-h-72 space-y-1 overflow-y-auto rounded-xl border border-[var(--border)] p-2">
+							<div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-2">
 								{discovery.urls.map((u) => (
 									<label
 										key={u}
-										className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-100/60 dark:hover:bg-white/5"
+										className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--surface-2)]"
 									>
 										<input
 											type="checkbox"
 											checked={selected.has(u)}
 											onChange={() => toggleOne(u)}
-											className="mt-0.5 h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
+											className="mt-0.5 h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
 										/>
-										<span className="min-w-0 break-all text-slate-700 dark:text-slate-300">
+										<span className="min-w-0 break-all text-[var(--ink)]">
 											{u}
 										</span>
 									</label>
@@ -845,7 +847,7 @@ function SitemapDiscovery({
 										<option value="json_field">
 											JSON field (API / JSON responses)
 										</option>
-										</Select>
+									</Select>
 								</div>
 								<div>
 									<Label htmlFor="sm-interval">
@@ -863,7 +865,7 @@ function SitemapDiscovery({
 									/>
 									{intervalError(parseInterval(intervalRaw)) &&
 									intervalRaw.trim() !== "" ? (
-										<p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+										<p className="mt-1 text-xs text-[var(--warning)]">
 											{intervalError(parseInterval(intervalRaw))}
 										</p>
 									) : null}
@@ -885,7 +887,7 @@ function SitemapDiscovery({
 											mode === "json_field" ? "$.data.price" : "article h2 a, .post-title a"
 										}
 									/>
-									<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+									<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 										{mode === "json_field" ? (
 											<>
 												Path to the value to watch on each page, e.g.{" "}
@@ -901,12 +903,12 @@ function SitemapDiscovery({
 								</div>
 							) : null}
 							{needsJs(mode) ? (
-								<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
+								<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--ink)] transition hover:border-[var(--hairline-strong)]">
 									<input
 										type="checkbox"
 										checked={jsRequired}
 										onChange={(e) => setJsRequired(e.target.checked)}
-										className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
+										className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
 									/>
 									JavaScript rendering required (Playwright)
 								</label>
@@ -923,7 +925,7 @@ function SitemapDiscovery({
 												<button
 													key={key}
 													type="button"
-													className="rounded-md border border-[var(--border)] px-2 py-1 text-xs capitalize text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
+													className="rounded-md border border-[var(--hairline)] px-2 py-1 text-xs capitalize text-[var(--ink-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
 													onClick={() => {
 														const cur = new Set(
 															ignoreSelectors
@@ -960,7 +962,7 @@ function SitemapDiscovery({
 												"Price updated .* ago\nLast (login|visited): .*"
 											}
 										/>
-										<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+										<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 											Matched text is stripped before diffing — useful for
 											timestamps or volatile counters.
 										</p>
@@ -968,7 +970,7 @@ function SitemapDiscovery({
 								</div>
 							) : null}
 
-							<div className="flex gap-2 border-t border-[var(--border)] pt-5">
+							<div className="flex gap-2 border-t border-[var(--hairline)] pt-5">
 								<Button
 									type="button"
 									onClick={onCreate}

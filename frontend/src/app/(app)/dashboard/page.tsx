@@ -245,7 +245,7 @@ export default function DashboardPage() {
       <SectionTitle
         action={
           monitors.length > 0 ? (
-            <Link href="/monitors" className="text-xs font-medium text-[var(--accent)] hover:opacity-80">
+            <Link href="/monitors" className="text-xs font-medium text-[var(--primary)] hover:opacity-80">
               View all →
             </Link>
           ) : null
@@ -280,8 +280,8 @@ export default function DashboardPage() {
                       ) : null}
                       {m.latest_change?.ai_summary ? <ImpactBadge impact={parseImpact(m.latest_change.ai_summary)} /> : null}
                     </div>
-                    <p className="truncate text-xs text-slate-500 dark:text-slate-500">{m.url}</p>
-                    <p className="mt-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                    <p className="truncate text-xs text-[var(--ink-subtle)]">{m.url}</p>
+                    <p className="mt-1 truncate text-sm text-[var(--ink-muted)]">
                       {m.latest_change
                         ? stripImpact(m.latest_change.ai_summary || "") ||
                           m.latest_change.diff_summary ||
@@ -289,7 +289,7 @@ export default function DashboardPage() {
                         : "Watching — no changes yet"}
                     </p>
                     {m.latest_change ? (
-                      <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">
+                      <p className="mt-0.5 text-[11px] text-[var(--ink-tertiary)]">
                         {relativeTime(m.latest_change.created_at)}
                         {m.latest_change.is_noise ? " · noise" : ""}
                       </p>

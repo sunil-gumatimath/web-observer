@@ -32,7 +32,7 @@ export function prepareReadableText(raw: string): string {
     .replace(/<img\s+[^>]*alt=['"]?([^'">]*)['"]?[^>]*src=['"]?([^'"\s>]+)['"]?[^>]*\/?>/gi, "![$1]($2)")
     .replace(/<img\s+[^>]*src=['"]?([^'"\s>]+)['"]?[^>]*\/?>/gi, "![]($1)")
     // Match a with single, double or unquoted href
-    .replace(/<a\s+[^>]*href=['"]?([^'"\s>]+)['"]?[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
+    .replace(/<a\s+[^>]*href=['"]?([^'"\s>]+)['"]?[^>]*>(.*?)<\/a>/gi, "[$2]($1)");
   t = decodeHtmlEntities(t);
   // Strip known HTML tags while preserving text angle brackets (e.g. <3, ->, 1 < 2)
   t = t.replace(
@@ -74,7 +74,7 @@ export function renderInlineMarkdown(text: string, baseUrl?: string): React.Reac
               key={`img-${keyIndex++}`}
               src={src}
               alt={alt}
-              className="inline-block max-h-6 max-w-24 rounded object-contain align-middle shadow-xs mx-1 border border-slate-200 dark:border-slate-800"
+              className="inline-block max-h-6 max-w-24 rounded object-contain align-middle mx-1 border border-[var(--hairline)]"
               loading="lazy"
             />
           );
@@ -96,7 +96,7 @@ export function renderInlineMarkdown(text: string, baseUrl?: string): React.Reac
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[var(--accent)] hover:opacity-80 hover:underline font-medium"
+              className="text-[var(--primary)] hover:opacity-80 hover:underline font-medium"
             >
               {renderInlineMarkdown(label, baseUrl)}
             </a>
@@ -109,7 +109,7 @@ export function renderInlineMarkdown(text: string, baseUrl?: string): React.Reac
       nodes.push(
         <code
           key={`code-${keyIndex++}`}
-          className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700/60"
+          className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--ink)] border border-[var(--hairline)]"
         >
           {token.slice(1, -1)}
         </code>
@@ -154,7 +154,6 @@ type Block =
   | { type: "table"; rows: string[][] }
   | { type: "image"; alt: string; src: string }
   | { type: "paragraph"; text: string };
-
 
 function parseBlocks(raw: string): Block[] {
   const text = prepareReadableText(raw);
@@ -340,20 +339,20 @@ export function ReadableContent({
   }
 
   if (!prepared && !rawText) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">{emptyLabel}</p>;
+    return <p className="text-sm text-[var(--ink-subtle)]">{emptyLabel}</p>;
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm dark:bg-slate-950/40">
+    <div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)]">
       {/* Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-slate-50/90 px-4 py-2.5 dark:bg-slate-900/60">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--hairline)] bg-[var(--surface-1)] px-4 py-2.5">
         <div>
           {title ? (
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--ink-subtle)]">
               {title}
             </p>
           ) : null}
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          <p className="text-[11px] text-[var(--ink-subtle)]">
             {wordCount.toLocaleString()} words · ~{Math.max(1, Math.ceil(wordCount / 200))} min read
             {needsTruncate && !expanded ? ` · showing first ${maxChars.toLocaleString()} chars` : expanded ? " · full content" : ""}
           </p>
@@ -361,14 +360,14 @@ export function ReadableContent({
 
         <div className="flex items-center gap-1.5">
           {/* View mode toggle */}
-          <div className="flex rounded-lg border border-[var(--border)] bg-slate-100 p-0.5 dark:bg-slate-800 text-xs">
+          <div className="flex rounded-md border border-[var(--hairline)] bg-[var(--surface-2)] p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setViewMode("formatted")}
-              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+              className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
                 viewMode === "formatted"
-                  ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-slate-100"
-                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+                  ? "bg-[var(--surface-1)] text-[var(--ink)] shadow-xs"
+                  : "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
               }`}
             >
               Formatted
@@ -376,10 +375,10 @@ export function ReadableContent({
             <button
               type="button"
               onClick={() => setViewMode("raw")}
-              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+              className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
                 viewMode === "raw"
-                  ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-slate-100"
-                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+                  ? "bg-[var(--surface-1)] text-[var(--ink)] shadow-xs"
+                  : "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
               }`}
             >
               Raw Text
@@ -397,8 +396,6 @@ export function ReadableContent({
         </div>
       </div>
 
-
-
       {/* Content Body */}
       <div
         className={
@@ -408,7 +405,7 @@ export function ReadableContent({
         }
       >
         {viewMode === "raw" ? (
-          <pre className="font-mono text-xs leading-relaxed text-[var(--fg)] whitespace-pre-wrap break-words bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
+          <pre className="font-mono text-xs leading-relaxed text-[var(--ink-muted)] whitespace-pre-wrap break-words bg-[var(--surface-2)] p-4 rounded-lg border border-[var(--hairline)]">
             {rawDisplayText}
           </pre>
         ) : (
@@ -417,12 +414,12 @@ export function ReadableContent({
               if (block.type === "heading") {
                 const headingClasses =
                   block.level === 1
-                    ? "text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 pt-2 pb-1 border-b border-slate-200/80 dark:border-slate-800"
+                    ? "text-xl font-bold tracking-tight text-[var(--ink)] pt-2 pb-1 border-b border-[var(--hairline)]"
                     : block.level === 2
-                    ? "text-lg font-semibold tracking-tight text-[var(--fg)] pt-1.5"
+                    ? "text-lg font-semibold tracking-tight text-[var(--ink)] pt-1.5"
                     : block.level === 3
-                    ? "text-base font-semibold text-[var(--fg)] pt-1"
-                    : "text-sm font-semibold text-slate-900 dark:text-slate-200";
+                    ? "text-base font-semibold text-[var(--ink)] pt-1"
+                    : "text-sm font-semibold text-[var(--ink)]";
 
                 return (
                   <div key={i} className={headingClasses}>
@@ -433,9 +430,9 @@ export function ReadableContent({
 
               if (block.type === "code_block") {
                 return (
-                  <div key={i} className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-900 text-slate-100 shadow-xs">
+                  <div key={i} className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] text-[var(--ink)]">
                     {block.lang ? (
-                      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-3.5 py-1.5 text-[11px] font-mono text-slate-400">
+                      <div className="flex items-center justify-between border-b border-[var(--hairline)] bg-[var(--surface-3)] px-3.5 py-1.5 text-[11px] font-mono text-[var(--ink-subtle)]">
                         <span>{block.lang}</span>
                       </div>
                     ) : null}
@@ -450,7 +447,7 @@ export function ReadableContent({
                 return (
                   <blockquote
                     key={i}
-                    className="border-l-4 border-[var(--accent)] bg-[var(--surface)] py-2.5 px-4 rounded-r-lg text-slate-700 dark:text-slate-300 italic text-[14px] leading-relaxed"
+                    className="border-l-2 border-[var(--primary)] bg-[var(--surface-2)] py-2.5 px-4 rounded-r-lg text-[var(--ink-muted)] italic text-[14px] leading-relaxed"
                   >
                     {renderInlineMarkdown(block.text, baseUrl)}
                   </blockquote>
@@ -459,7 +456,7 @@ export function ReadableContent({
 
               if (block.type === "list") {
                 return block.ordered ? (
-                  <ol key={i} className="list-decimal space-y-1.5 pl-6 marker:text-slate-400 marker:font-medium">
+                  <ol key={i} className="list-decimal space-y-1.5 pl-6 marker:text-[var(--ink-subtle)] marker:font-medium">
                     {block.items.map((item, j) => (
                       <li key={j} className="pl-1">
                         {renderInlineMarkdown(item, baseUrl)}
@@ -467,7 +464,7 @@ export function ReadableContent({
                     ))}
                   </ol>
                 ) : (
-                  <ul key={i} className="list-disc space-y-1.5 pl-5 marker:text-[var(--accent)]">
+                  <ul key={i} className="list-disc space-y-1.5 pl-5 marker:text-[var(--primary)]">
                     {block.items.map((item, j) => (
                       <li key={j} className="pl-1">
                         {renderInlineMarkdown(item, baseUrl)}
@@ -480,16 +477,16 @@ export function ReadableContent({
               if (block.type === "image") {
                 const src = resolveImageUrl(block.src, baseUrl) || block.src;
                 return (
-                  <figure key={i} className="my-3 overflow-hidden rounded-lg border border-[var(--border)] bg-slate-50/50 dark:bg-slate-900/30 p-2">
+                  <figure key={i} className="my-3 overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] p-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={src}
                       alt={block.alt}
                       loading="lazy"
-                      className="mx-auto max-h-80 w-auto max-w-full rounded object-contain shadow-xs"
+                      className="mx-auto max-h-80 w-auto max-w-full rounded object-contain"
                     />
                     {block.alt ? (
-                      <figcaption className="mt-2 text-center text-xs text-slate-500 dark:text-slate-400">
+                      <figcaption className="mt-2 text-center text-xs text-[var(--ink-subtle)]">
                         {block.alt}
                       </figcaption>
                     ) : null}
@@ -499,16 +496,16 @@ export function ReadableContent({
 
               if (block.type === "table") {
                 return (
-                  <div key={i} className="my-2 overflow-x-auto rounded-lg border border-[var(--border)]">
+                  <div key={i} className="my-2 overflow-x-auto rounded-lg border border-[var(--hairline)]">
                     <table className="w-full text-left text-sm border-collapse">
                       <tbody>
                         {block.rows.map((row, rIdx) => (
                           <tr
                             key={rIdx}
-                            className={`border-b border-[var(--border)] last:border-b-0 ${
+                            className={`border-b border-[var(--hairline)] last:border-b-0 ${
                               rIdx === 0 && block.rows.length > 1
-                                ? "bg-slate-50/90 dark:bg-slate-900/60 font-semibold"
-                                : "hover:bg-slate-50/50 dark:hover:bg-slate-900/30"
+                                ? "bg-[var(--surface-2)] font-semibold text-[var(--ink)]"
+                                : "hover:bg-[var(--surface-2)] text-[var(--ink-muted)]"
                             }`}
                           >
                             {row.map((cell, cIdx) => (

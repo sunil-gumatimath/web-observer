@@ -24,9 +24,9 @@ export default function PublicSharePage() {
   if (error) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Link unavailable</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{error}</p>
-        <Link href="/" className="mt-6 inline-block text-sm text-[var(--accent)] hover:opacity-80">
+        <h1 className="text-xl font-semibold text-[var(--ink)]">Link unavailable</h1>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">{error}</p>
+        <Link href="/" className="mt-6 inline-block text-sm text-[var(--primary)] hover:opacity-80">
           Web Observer
         </Link>
       </div>
@@ -35,7 +35,7 @@ export default function PublicSharePage() {
 
   if (!data) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center text-sm text-slate-500">Loading…</div>
+      <div className="mx-auto max-w-2xl px-4 py-16 text-center text-sm text-[var(--ink-subtle)]">Loading…</div>
     );
   }
 
@@ -44,32 +44,32 @@ export default function PublicSharePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <Link href="/" className="text-sm font-semibold tracking-tight text-[var(--accent)] hover:opacity-80">
+      <Link href="/" className="text-sm font-semibold tracking-tight text-[var(--primary)] hover:opacity-80">
         Web Observer
       </Link>
 
-      <div className="mt-6 flex items-start gap-4 rounded-2xl border border-[var(--border)] bg-white/70 p-5 dark:bg-slate-950/40">
+      <div className="mt-6 flex items-start gap-4 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-5">
         {logo ? (
-          <img src={logo} alt="" className="h-12 w-12 rounded-xl object-contain" />
+          <img src={logo} alt="" className="h-12 w-12 rounded-lg border border-[var(--hairline)] object-contain" />
         ) : (
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--fg)] text-lg font-bold text-white">
+          <div className="flex h-12 w-12 items-center justify-center rounded-[8px] bg-[var(--surface-2)] border border-[var(--hairline)] text-lg font-bold text-[var(--ink)]">
             {data.monitor.name?.slice(0, 1) || "W"}
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-semibold text-slate-900 dark:text-white">
+          <h1 className="truncate text-lg font-semibold text-[var(--ink)]">
             {data.monitor.name}
           </h1>
           <a
             href={data.monitor.url}
             target="_blank"
             rel="noreferrer"
-            className="mt-0.5 block truncate text-sm text-[var(--accent)] hover:opacity-80"
+            className="mt-0.5 block truncate text-sm text-[var(--primary)] hover:opacity-80"
           >
             {data.monitor.url}
           </a>
           {data.monitor.watch_note ? (
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-xs text-[var(--ink-subtle)]">
               Watching: {data.monitor.watch_note}
             </p>
           ) : null}
@@ -78,7 +78,7 @@ export default function PublicSharePage() {
       </div>
 
       {hero ? (
-        <img src={hero} alt={`${data.monitor.name} screenshot`} className="mt-5 w-full rounded-2xl border border-[var(--border)]" />
+        <img src={hero} alt={`${data.monitor.name} screenshot`} className="mt-5 w-full rounded-xl border border-[var(--hairline)]" />
       ) : null}
       {/* Gap: PublicShare exposes no screenshot URLs or run ids, so the
           VisualDiff slider cannot mount here. Screenshot blobs are reachable
@@ -87,17 +87,17 @@ export default function PublicSharePage() {
           payload does not include. Keep this page auth-free: summaries only. */}
       <div className="mt-8">
         <SectionTitle>Visual comparison</SectionTitle>
-        <Card className="text-sm text-slate-500 dark:text-slate-400">
+        <Card className="text-sm text-[var(--ink-subtle)]">
           Screenshot comparisons are available in the app. This public link shares change summaries only.
         </Card>
       </div>
 
       <div className="mt-8">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--ink-subtle)]">
           Changes ({data.total})
         </h2>
         {data.alerts.length === 0 ? (
-          <Card className="text-sm text-slate-500 dark:text-slate-400">
+          <Card className="text-sm text-[var(--ink-subtle)]">
             No changes detected yet.
           </Card>
         ) : (
@@ -108,11 +108,11 @@ export default function PublicSharePage() {
                   <Badge tone={a.change_category ? "warn" : "neutral"}>
                     {a.change_category || "change"}
                   </Badge>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-[var(--ink-subtle)] font-mono">
                     {new Date(a.created_at).toLocaleString()}
                   </span>
                 </div>
-                <p className="text-sm text-slate-800 dark:text-slate-100">
+                <p className="text-sm text-[var(--ink)]">
                   {a.ai_summary || a.diff_summary || "Content changed."}
                 </p>
               </Card>

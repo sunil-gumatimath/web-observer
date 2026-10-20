@@ -159,7 +159,7 @@ export default function RunLogDetailPage() {
 										href={run.monitor_url}
 										target="_blank"
 										rel="noopener noreferrer"
-										className="text-[var(--accent)] underline"
+										className="text-[var(--primary)] underline"
 									>
 										{run.monitor_url}
 									</a>
@@ -226,7 +226,7 @@ export default function RunLogDetailPage() {
 										<CategoryBadge category={change.change_category} />
 										<Link
 											href={`/changes/${change.id}`}
-											className="text-sm text-[var(--accent)] underline"
+											className="text-sm text-[var(--primary)] underline"
 										>
 											Open full change view
 										</Link>

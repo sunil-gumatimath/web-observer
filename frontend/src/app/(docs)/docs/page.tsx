@@ -30,10 +30,10 @@ function DocSection({
 }) {
   return (
     <section id={id} className="scroll-mt-24">
-      <h2 className="mb-3 text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+      <h2 className="mb-3 text-xl font-semibold tracking-[-0.4px] text-[var(--ink)]">
         {title}
       </h2>
-      <div className="space-y-3 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+      <div className="space-y-3 text-sm leading-relaxed text-[var(--ink-muted)]">
         {children}
       </div>
     </section>
@@ -43,12 +43,12 @@ function DocSection({
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)]/10 text-xs font-bold text-[var(--accent)]">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-xs font-bold text-[var(--primary)]">
         {n}
       </span>
       <div>
         <p className="font-medium text-[var(--fg)]">{title}</p>
-        <p className="mt-0.5 text-slate-600 dark:text-slate-400">{children}</p>
+        <p className="mt-0.5 text-[var(--ink-muted)]">{children}</p>
       </div>
     </li>
   );
@@ -71,7 +71,7 @@ export default function DocsPage() {
               <a
                 key={item.id}
                 href={`#${item.id}`}
-                className="block rounded-lg px-2.5 py-1.5 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white"
+                className="block rounded-[8px] px-2.5 py-1.5 text-sm text-[var(--ink-subtle)] transition hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
               >
                 {item.label}
               </a>
@@ -88,7 +88,7 @@ export default function DocsPage() {
                 <a
                   key={item.id}
                   href={`#${item.id}`}
-                  className="rounded-full border border-[var(--border)] px-2.5 py-1 text-xs text-slate-600 hover:border-[var(--accent)]/40 hover:text-[var(--accent)] dark:text-slate-400"
+                  className="rounded-full border border-[var(--hairline)] px-2.5 py-1 text-xs text-[var(--ink-subtle)] hover:border-[var(--hairline-strong)] hover:text-[var(--ink)]"
                 >
                   {item.label}
                 </a>
@@ -104,8 +104,8 @@ export default function DocsPage() {
             </p>
             <p>Use it for pricing pages, changelogs, competitor sites, docs, APIs, or any URL you care about.</p>
             <Card className="!p-4 !shadow-none">
-              <p className="text-sm text-slate-700 dark:text-slate-300">
-                <span className="font-medium text-[var(--accent)]">Not uptime monitoring.</span>{" "}
+              <p className="text-sm text-[var(--ink-muted)]">
+                <span className="font-medium text-[var(--primary)]">Not uptime monitoring.</span>{" "}
                 This app focuses on <em>content change</em> (what changed on the page), not whether the
                 server is merely online.
               </p>
@@ -138,14 +138,14 @@ export default function DocsPage() {
           <DocSection id="quick-start" title="Quick start">
             <ol className="list-decimal space-y-2 pl-5">
               <li>
-                <Link href="/sign-up" className="text-[var(--accent)] hover:opacity-80">
+                <Link href="/sign-up" className="text-[var(--primary)] hover:opacity-80">
                   Create an account
                 </Link>{" "}
                 or sign in.
               </li>
               <li>
                 Open{" "}
-                <Link href="/monitors/new" className="text-[var(--accent)] hover:opacity-80">
+                <Link href="/monitors/new" className="text-[var(--primary)] hover:opacity-80">
                   New monitor
                 </Link>
                 , enter a name and public HTTPS URL.
@@ -163,7 +163,7 @@ export default function DocsPage() {
             </ol>
             <p className="pt-1">
               Also add channels under{" "}
-              <Link href="/settings" className="text-[var(--accent)] hover:opacity-80">
+              <Link href="/settings" className="text-[var(--primary)] hover:opacity-80">
                 Settings
               </Link>{" "}
               so alerts have somewhere to go.
@@ -171,22 +171,22 @@ export default function DocsPage() {
           </DocSection>
 
           <DocSection id="modes" title="Monitor modes">
-            <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+            <div className="overflow-hidden rounded-lg border border-[var(--hairline)]">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[var(--border)] bg-slate-50 dark:bg-slate-950/40">
-                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <tr className="border-b border-[var(--hairline)] bg-[var(--surface-1)]">
+                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--ink-subtle)]">
                       Monitor
                     </th>
-                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--ink-subtle)]">
                       What it watches
                     </th>
-                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--ink-subtle)]">
                       Alerts on
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--border)]">
+                <tbody className="divide-y divide-[var(--hairline)]">
                   <tr>
                     <td className="px-3 py-3 font-medium text-[var(--fg)]">
                       Site links
@@ -226,14 +226,14 @@ export default function DocsPage() {
                     <td className="px-3 py-3 font-medium text-[var(--fg)]">
                       GitHub README
                     </td>
-                    <td className="px-3 py-3">A repo&apos;s README.md on its default branch — enter <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">owner/repo</code> or the full GitHub URL</td>
+                    <td className="px-3 py-3">A repo&apos;s README.md on its default branch — enter <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">owner/repo</code> or the full GitHub URL</td>
                     <td className="px-3 py-3">Documentation changes, with a markdown diff</td>
                   </tr>
                   <tr>
                     <td className="px-3 py-3 font-medium text-[var(--fg)]">
                       JSON field
                     </td>
-                    <td className="px-3 py-3">A single value in a JSON endpoint, addressed by a JSONPath-style query in <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code> (e.g. <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">$.data.price</code>)</td>
+                    <td className="px-3 py-3">A single value in a JSON endpoint, addressed by a JSONPath-style query in <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">css_selector</code> (e.g. <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">$.data.price</code>)</td>
                     <td className="px-3 py-3">Value changes at that path</td>
                   </tr>
                   <tr>
@@ -250,35 +250,35 @@ export default function DocsPage() {
               <strong className="text-[var(--fg)]">JavaScript rendering</strong> —
               enable Playwright when the page only shows content after client-side render.
               Site links, RSS feed, and GitHub README always fetch over plain HTTP
-              (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">js_required</code> is rejected for those modes); the other modes can use Playwright when
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">js_required</code> is enabled.
+              (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">js_required</code> is rejected for those modes); the other modes can use Playwright when
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">js_required</code> is enabled.
             </p>
             <p>
               <strong className="text-[var(--fg)]">Ignore selectors</strong> — for
               page content monitors, list CSS selectors (one per line) to strip cookie banners,
               ads, or timestamps that would otherwise create noise. List items uses its own{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>.
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">css_selector</code>.
             </p>
           </DocSection>
 
           <DocSection id="thresholds" title="Alert thresholds">
             <p>
-              Each monitor can set per-mode <strong className="text-[var(--fg)]">alert thresholds</strong> (stored as <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">alert_config</code>) in the New and Edit monitor forms.
+              Each monitor can set per-mode <strong className="text-[var(--fg)]">alert thresholds</strong> (stored as <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">alert_config</code>) in the New and Edit monitor forms.
               Leave every field empty to alert on <strong className="text-[var(--fg)]">any change</strong>.
-              A change that does not meet its thresholds is kept as <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_noise=true</code> with a reason — stored and viewable, but excluded from notifications and digests.
+              A change that does not meet its thresholds is kept as <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">is_noise=true</code> with a reason — stored and viewable, but excluded from notifications and digests.
             </p>
             <ul className="list-disc space-y-1.5 pl-5">
               <li>
-                <strong className="text-[var(--fg)]">Product price</strong> — <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">price_below</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">price_above</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">percent_change</code> (minimum % move).
+                <strong className="text-[var(--fg)]">Product price</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">price_below</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">price_above</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">percent_change</code> (minimum % move).
               </li>
               <li>
-                <strong className="text-[var(--fg)]">JSON field / page content</strong> — <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">percent_change</code> (minimum % move of the numeric value).
+                <strong className="text-[var(--fg)]">JSON field / page content</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">percent_change</code> (minimum % move of the numeric value).
               </li>
               <li>
-                <strong className="text-[var(--fg)]">List items / site links / RSS feed</strong> — <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">list_min_added</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">list_min_removed</code> (minimum added/removed items).
+                <strong className="text-[var(--fg)]">List items / site links / RSS feed</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_min_added</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_min_removed</code> (minimum added/removed items).
               </li>
               <li>
-                <strong className="text-[var(--fg)]">All modes</strong> — <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">min_diff_chars</code> (minimum changed characters), <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">regex_must_match</code> / <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">regex_must_not_match</code> (new content must / must not match).
+                <strong className="text-[var(--fg)]">All modes</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">min_diff_chars</code> (minimum changed characters), <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">regex_must_match</code> / <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">regex_must_not_match</code> (new content must / must not match).
               </li>
             </ul>
           </DocSection>
@@ -286,7 +286,7 @@ export default function DocsPage() {
           <DocSection id="create" title="Create a monitor">
             <p>
               Go to{" "}
-              <Link href="/monitors/new" className="text-[var(--accent)] hover:opacity-80">
+              <Link href="/monitors/new" className="text-[var(--primary)] hover:opacity-80">
                 New monitor
               </Link>
               .
@@ -298,7 +298,7 @@ export default function DocsPage() {
               </li>
               <li>
                 <strong className="text-[var(--fg)]">URL</strong> — must be a public{" "}
-                <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">
+                <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">
                   https://
                 </code>{" "}
                 address the server can reach (private/internal IPs are blocked for safety).
@@ -312,10 +312,10 @@ export default function DocsPage() {
                 per-monitor override; workspace channels still apply when set in Settings.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Mode-specific input</strong> — list items needs a CSS selector; JSON field needs a JSON path (e.g. <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">$.data.price</code>); GitHub README accepts <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">owner/repo</code> or the full GitHub URL; RSS feed takes the feed URL.
+                <strong className="text-[var(--fg)]">Mode-specific input</strong> — list items needs a CSS selector; JSON field needs a JSON path (e.g. <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">$.data.price</code>); GitHub README accepts <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">owner/repo</code> or the full GitHub URL; RSS feed takes the feed URL.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Alert thresholds</strong> — optional per-mode limits (see <a href="#thresholds" className="text-[var(--accent)] hover:opacity-80">Alert thresholds</a>); blank means alert on any change. Editable in the New and Edit monitor forms.
+                <strong className="text-[var(--fg)]">Alert thresholds</strong> — optional per-mode limits (see <a href="#thresholds" className="text-[var(--primary)] hover:opacity-80">Alert thresholds</a>); blank means alert on any change. Editable in the New and Edit monitor forms.
               </li>
               <li>
                 <strong className="text-[var(--fg)]">Semantic alert condition</strong> — optional
@@ -328,7 +328,7 @@ export default function DocsPage() {
               <strong>Pause</strong> / <strong>Resume</strong>, <strong>Edit</strong>, or{" "}
               <strong>Delete</strong>.
             </p>
-            <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-amber-800 dark:text-amber-200">
+            <p className="rounded-lg border border-[var(--warning)]/25 bg-[var(--warning)]/10 px-3 py-2 text-[var(--ink)]">
               Editing URL, mode, or selector creates a <strong>new baseline</strong> on the next
               success (no alert for that re-baseline).
             </p>
@@ -348,19 +348,19 @@ export default function DocsPage() {
                 content differed from the previous hash. Open one for the full diff.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Visual diffs</strong> — GitHub-style added/removed line views (split + unified) for every content change via <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">GithubDiff</code> + <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">unified_diff</code>.
+                <strong className="text-[var(--fg)]">Visual diffs</strong> — GitHub-style added/removed line views (split + unified) for every content change via <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">GithubDiff</code> + <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">unified_diff</code>.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Opt-in screenshots</strong> — when <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">screenshots_enabled</code> is on, every check captures a fresh Playwright screenshot (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">screenshots/{"{monitor_id}/{run_id}.png"}</code>) with aHash history — off by default to avoid forcing Playwright on text monitors.
+                <strong className="text-[var(--fg)]">Opt-in screenshots</strong> — when <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots_enabled</code> is on, every check captures a fresh Playwright screenshot (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots/{"{monitor_id}/{run_id}.png"}</code>) with aHash history — off by default to avoid forcing Playwright on text monitors.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">AI change summaries & impact</strong> — plain-language titles, summaries, impact rating (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">critical</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">high</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">medium</code>, <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">low</code>), and model confidence scores stored per change.
+                <strong className="text-[var(--fg)]">AI change summaries & impact</strong> — plain-language titles, summaries, impact rating (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">critical</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">high</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">medium</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">low</code>), and model confidence scores stored per change.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">AI semantic triage</strong> — optional per-monitor <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">semantic_trigger</code> and <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">watch_note</code>; non-matching changes are held as <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_noise=true</code> in the dashboard, excluded from alerts, and fail-open on LLM error.
+                <strong className="text-[var(--fg)]">AI semantic triage</strong> — optional per-monitor <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">semantic_trigger</code> and <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">watch_note</code>; non-matching changes are held as <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">is_noise=true</code> in the dashboard, excluded from alerts, and fail-open on LLM error.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Brand-aware dashboard</strong> — adding a website auto-fills logo/title/description/hero from HTML <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">og:*</code> meta and re-hosts via <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">brand-assets/</code> for dashboard + public share pages (no Context.dev).
+                <strong className="text-[var(--fg)]">Brand-aware dashboard</strong> — adding a website auto-fills logo/title/description/hero from HTML <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">og:*</code> meta and re-hosts via <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">brand-assets/</code> for dashboard + public share pages (no Context.dev).
               </li>
             </ul>
             <p>
@@ -372,11 +372,11 @@ export default function DocsPage() {
 
           <DocSection id="alerts" title="Alerts & channels">
             <p>
-              <strong className="text-[var(--fg)]">Alerts inbox</strong> — every change is stored in-app with <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_read</code>/<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">is_noise</code> state, independent of external notifications. Filter Signal / Unread / Noise at <Link href="/alerts" className="text-[var(--accent)] hover:opacity-80">Alerts</Link>.
+              <strong className="text-[var(--fg)]">Alerts inbox</strong> — every change is stored in-app with <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">is_read</code>/<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">is_noise</code> state, independent of external notifications. Filter Signal / Unread / Noise at <Link href="/alerts" className="text-[var(--primary)] hover:opacity-80">Alerts</Link>.
             </p>
             <p>
               Configure channels under{" "}
-              <Link href="/settings" className="text-[var(--accent)] hover:opacity-80">
+              <Link href="/settings" className="text-[var(--primary)] hover:opacity-80">
                 Settings → Alert channels
               </Link>
               :
@@ -402,14 +402,14 @@ export default function DocsPage() {
             </p>
             <p>
               Optional <strong>digests</strong> (daily / weekly) summarize activity with an <strong>AI Executive Briefing</strong> instead of only
-              real-time pings — set cadence and UTC hour in Settings → Preferences. The hour preference is a <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">digest_hour_utc</code> hour-of-day (UTC), so a daily digest arrives at the same UTC time each day.
+              real-time pings — set cadence and UTC hour in Settings → Preferences. The hour preference is a <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">digest_hour_utc</code> hour-of-day (UTC), so a daily digest arrives at the same UTC time each day.
             </p>
           </DocSection>
 
           <DocSection id="share" title="Share links">
             <p>
-              Generate a read-only public page per monitor (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/share/{"{token}"}</code> — unguessable, hashed at rest, no login required).
-              The public page is <strong className="text-[var(--fg)]">summaries only</strong>: it shows change summaries, never screenshots (screenshot comparison stays inside the app). The monitor&apos;s <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">watch_note</code> is shown (“Watching: …”) so viewers know what is being watched.
+              Generate a read-only public page per monitor (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">/share/{"{token}"}</code> — unguessable, hashed at rest, no login required).
+              The public page is <strong className="text-[var(--fg)]">summaries only</strong>: it shows change summaries, never screenshots (screenshot comparison stays inside the app). The monitor&apos;s <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">watch_note</code> is shown (“Watching: …”) so viewers know what is being watched.
             </p>
           </DocSection>
 
@@ -425,20 +425,20 @@ export default function DocsPage() {
               </li>
               <li>
                 <strong className="text-[var(--fg)]">Preferences</strong> — digests
-                and AI summaries (heuristic if no LLM key is set; toggle <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">ai_summaries_enabled</code>).
+                and AI summaries (heuristic if no LLM key is set; toggle <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">ai_summaries_enabled</code>).
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Managed or self-serve keys</strong> — run managed (server provides <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">LLM_API_*</code>/<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">RESEND_API_KEY</code>) or let each workspace bring its own keys in Settings → Workspace keys (overrides global; supports OpenAI or Vercel AI Gateway).
+                <strong className="text-[var(--fg)]">Managed or self-serve keys</strong> — run managed (server provides <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">LLM_API_*</code>/<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">RESEND_API_KEY</code>) or let each workspace bring its own keys in Settings → Workspace keys (overrides global; supports OpenAI or Vercel AI Gateway).
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Teams</strong> — invite members with expiring multi-use links (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/invite/{"{token}"}</code>) and switch between workspaces you belong to.
+                <strong className="text-[var(--fg)]">Teams</strong> — invite members with expiring multi-use links (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">/invite/{"{token}"}</code>) and switch between workspaces you belong to.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Public share links</strong> — generate a read-only public page per monitor (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">/share/{"{token}"}</code> — unguessable, hashed at rest, no login required). Summaries only — see <a href="#share" className="text-[var(--accent)] hover:opacity-80">Share links</a>.
+                <strong className="text-[var(--fg)]">Public share links</strong> — generate a read-only public page per monitor (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">/share/{"{token}"}</code> — unguessable, hashed at rest, no login required). Summaries only — see <a href="#share" className="text-[var(--primary)] hover:opacity-80">Share links</a>.
               </li>
               <li>
                 <strong className="text-[var(--fg)]">API keys & webhooks</strong> —
-                optional automation hooks for external tools (<code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">mtw_*</code> + <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">X-MTW-Signature</code>).
+                optional automation hooks for external tools (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">mtw_*</code> + <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">X-MTW-Signature</code>).
               </li>
             </ul>
           </DocSection>
@@ -446,12 +446,12 @@ export default function DocsPage() {
           <DocSection id="import" title="Bulk import">
             <p>
               Use{" "}
-              <Link href="/import" className="text-[var(--accent)] hover:opacity-80">
+              <Link href="/import" className="text-[var(--primary)] hover:opacity-80">
                 Import
               </Link>{" "}
               to create many monitors from CSV. Expected columns:
             </p>
-            <pre className="overflow-x-auto rounded-xl border border-[var(--border)] bg-slate-50 p-3 font-mono text-xs text-slate-700 dark:bg-slate-950/60 dark:text-slate-300">
+            <pre className="overflow-x-auto rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] p-3 font-mono text-xs text-[var(--ink-muted)]">
               {`name,url,mode,schedule_interval_minutes
 Example,https://example.com/,page_content,60
 Pricing,https://example.com/pricing,product_price,1440
@@ -459,19 +459,19 @@ Links,https://example.com/blog,list_items,60`}
             </pre>
             <p>
               Valid modes:{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">page_content</code>
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">page_content</code>
               ,{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">site_links</code>
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">site_links</code>
               ,{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">product_price</code>
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">product_price</code>
               ,{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">list_items</code>{" "}
-              (requires <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_items</code>{" "}
+              (requires <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">css_selector</code>
               ), and{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">json_field</code>{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">json_field</code>{" "}
               (requires a JSON path in{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">css_selector</code>, e.g.{" "}
-              <code className="rounded bg-slate-100 px-1 text-xs dark:bg-slate-800">$.data.price</code>).
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">css_selector</code>, e.g.{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">$.data.price</code>).
             </p>
           </DocSection>
 
@@ -514,11 +514,11 @@ Links,https://example.com/blog,list_items,60`}
             </div>
 
             <Card className="!p-4 mt-4">
-              <p className="text-sm text-slate-700 dark:text-slate-300">
+              <p className="text-sm text-[var(--ink-muted)]">
                 Need to create a monitor now?{" "}
                 <Link
                   href="/monitors/new"
-                  className="font-medium text-[var(--accent)] hover:opacity-80"
+                  className="font-medium text-[var(--primary)] hover:opacity-80"
                 >
                   New monitor →
                 </Link>

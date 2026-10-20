@@ -40,16 +40,15 @@ export function useToast(): ToastContextValue {
 }
 
 const toneStyles: Record<ToastTone, string> = {
-  success:
-    "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200",
-  error: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-200",
-  info: "border-[var(--accent)]/30 bg-[var(--accent)]/10 text-[var(--accent)]",
+  success: "border-[var(--semantic-success)]/30 bg-[var(--semantic-success)]/10 text-[var(--semantic-success)]",
+  error: "border-[var(--danger)]/30 bg-[var(--danger)]/10 text-[var(--danger)]",
+  info: "border-[var(--primary)]/30 bg-[var(--primary)]/10 text-[var(--primary)]",
 };
 
 const toneDot: Record<ToastTone, string> = {
-  success: "bg-emerald-500",
-  error: "bg-rose-500",
-  info: "bg-[var(--accent)]",
+  success: "bg-[var(--semantic-success)]",
+  error: "bg-[var(--danger)]",
+  info: "bg-[var(--primary)]",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -92,7 +91,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             role="status"
             className={cn(
               "pointer-events-auto flex items-start gap-2.5 rounded-[8px] border px-3 py-2.5 text-xs backdrop-blur-xl animate-fade-in-up",
-              "bg-[var(--surface-1)] border-[var(--hairline-strong)] shadow-xl",
+              "bg-[var(--surface-1)] border-[var(--hairline-strong)]",
               toneStyles[t.tone],
             )}
           >
@@ -112,7 +111,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               type="button"
               onClick={() => dismiss(t.id)}
               aria-label="Dismiss notification"
-              className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:text-[var(--accent)]"
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:text-[var(--primary)]"
             >
               ✕
             </button>

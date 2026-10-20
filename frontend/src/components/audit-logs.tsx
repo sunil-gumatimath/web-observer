@@ -33,7 +33,7 @@ export function AuditLogsPanel({ workspaceId }: { workspaceId: string }) {
       <div className="flex items-center justify-between">
         <div>
           <SectionTitle>Workspace audit logs</SectionTitle>
-          <p className="text-xs text-slate-500 dark:text-slate-500">
+          <p className="text-xs text-[var(--ink-subtle)]">
             Immutable audit record of administrative, auth, and monitor events.
           </p>
         </div>
@@ -52,7 +52,7 @@ export function AuditLogsPanel({ workspaceId }: { workspaceId: string }) {
 
       <Card className="space-y-3">
         {logs.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
+          <p className="rounded-[8px] border border-dashed border-[var(--hairline-strong)] px-3 py-6 text-center text-sm text-[var(--ink-subtle)]">
             {loading ? "Loading audit logs…" : "No audit entries recorded yet."}
           </p>
         ) : (
@@ -65,23 +65,23 @@ export function AuditLogsPanel({ workspaceId }: { workspaceId: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone="info">{log.action}</Badge>
-                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <span className="text-xs font-medium text-[var(--ink)]">
                       {log.resource_type}
                       {log.resource_id ? ` #${log.resource_id.slice(0, 8)}` : ""}
                     </span>
                     {log.actor_email ? (
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                      <span className="text-xs text-[var(--ink-subtle)]">
                         by {log.actor_email}
                       </span>
                     ) : null}
                   </div>
                   {log.meta && Object.keys(log.meta).length > 0 ? (
-                    <pre className="mt-1.5 max-w-full overflow-x-auto rounded bg-slate-100 p-2 font-mono text-xs text-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
+                    <pre className="mt-1.5 max-w-full overflow-x-auto rounded-[6px] border border-[var(--hairline)] bg-[var(--surface-3)] p-2 font-mono text-xs text-[var(--ink)]">
                       {JSON.stringify(log.meta, null, 2)}
                     </pre>
                   ) : null}
                 </div>
-                <div className="text-right text-xs text-slate-400 dark:text-slate-500">
+                <div className="text-right text-xs text-[var(--ink-subtle)]">
                   {new Date(log.created_at).toLocaleString()}
                 </div>
               </div>

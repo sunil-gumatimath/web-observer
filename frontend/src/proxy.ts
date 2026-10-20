@@ -1,42 +1,35 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import type { NextRequest } from "next/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 /**
- * Server-side route protection via Clerk.
+ * Next.js 16 proxy (the former `middleware.ts` convention).
+ *
+ * Authorization is NOT decided here. Clerk deprecated path matching via
+ * `createRouteMatcher()` in favour of resource-based checks, so this file only
+ * installs Clerk's request context (which `auth()` needs in Server Components)
+ * and serves the `__clerk` handshake routes. Every protected server entrypoint
+ * calls `requireSession()` from `@/lib/server-auth` itself.
+ *
  * When Clerk is disabled (no publishable key), pass all requests through
  * untouched — local dev uses the backend X-Internal-Token and the app's own
- * `RequireAuth`/`api.ts` handle auth, so no server redirect is needed.
+ * `RequireAuth`/`api.ts` handle auth.
  */
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/docs(.*)",
-  "/invite(.*)",
-  "/share(.*)",
-  "/api/health(.*)",
-]);
-
 const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const devModeEnabled = process.env.NODE_ENV !== "production";
 
 // Pass-through is strictly a dev-mode convenience.  In a production build the
-// Clerk middleware always runs (even without a publishable key) so routes fail
+// Clerk proxy always runs (even without a publishable key) so requests fail
 // closed instead of silently trusting the client-side internal-token mode.
 export default devModeEnabled && !clerkKey
-  ? function middleware() {
+  ? function proxy() {
       return NextResponse.next();
     }
-  : clerkMiddleware(async (auth, req: NextRequest) => {
-      if (!isPublicRoute(req)) {
-        await auth.protect();
-      }
-    });
+  : clerkMiddleware();
 
 export const config = {
   matcher: [
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
+    "/__clerk/(.*)",
   ],
 };

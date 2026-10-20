@@ -70,7 +70,7 @@ export function SelectorPicker({ open, initialUrl, onClose, onPick }: SelectorPi
 		if (hoveredRef.current === target) return;
 		clearHover();
 		hoveredRef.current = target;
-		target.style.outline = "2px solid #0ea5e9";
+		target.style.outline = "2px solid #5e69d1";
 		target.style.cursor = "crosshair";
 	}
 
@@ -138,16 +138,16 @@ export function SelectorPicker({ open, initialUrl, onClose, onPick }: SelectorPi
 			aria-label="Pick element visually"
 		>
 			<div
-				className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-slate-900"
+				className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[12px] border border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--fg)]"
 				onClick={(e) => e.stopPropagation()}
 			>
-				<div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3">
+				<div className="flex items-center justify-between border-b border-[var(--hairline)] px-5 py-3">
 					<h2 className="text-base font-semibold">Pick element visually</h2>
 					<button
 						type="button"
 						onClick={onClose}
 						aria-label="Close picker"
-						className="rounded-md px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"
+						className="rounded-[6px] px-2 py-1 text-xl leading-none text-[var(--ink-subtle)] hover:text-[var(--ink)] hover:bg-[var(--surface-2)]"
 					>
 						×
 					</button>
@@ -173,7 +173,7 @@ export function SelectorPicker({ open, initialUrl, onClose, onPick }: SelectorPi
 
 					{html ? (
 						<>
-							<p className="text-xs text-slate-500 dark:text-slate-400">
+							<p className="text-xs text-[var(--ink-subtle)]">
 								Hover to highlight, click to select. Preview of{" "}
 								<code className="break-all">{finalUrl}</code>
 								{truncated ? " (page truncated to first 1MB)" : ""}.
@@ -184,19 +184,19 @@ export function SelectorPicker({ open, initialUrl, onClose, onPick }: SelectorPi
 								onMouseOut={clearHover}
 								onClickCapture={onPreviewInteract}
 								onSubmit={stopSubmit}
-								className="max-h-[45vh] overflow-auto rounded-lg border border-[var(--border)] bg-white p-4 text-slate-900"
+								className="max-h-[45vh] overflow-auto rounded-[8px] border border-[var(--hairline)] bg-[var(--canvas)] p-4 text-[var(--ink)]"
 								// Sanitized server-side (no scripts/frames/handlers); inert by interception.
 								dangerouslySetInnerHTML={{ __html: html }}
 							/>
 							{picked ? (
-								<div className="rounded-lg border border-[var(--border)] p-3">
+								<div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] p-3">
 									<div className="flex flex-wrap items-center gap-2">
 										<code className="break-all text-sm font-medium">{picked.selector}</code>
 										<span
 											className={`rounded-full px-2 py-0.5 text-xs font-medium ${
 												picked.matches === 1
-													? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-													: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+													? "bg-[var(--semantic-success)]/10 text-[var(--semantic-success)]"
+													: "bg-[var(--warning)]/10 text-[var(--warning)]"
 											}`}
 										>
 											{picked.matches === 1
@@ -205,7 +205,7 @@ export function SelectorPicker({ open, initialUrl, onClose, onPick }: SelectorPi
 										</span>
 									</div>
 									{picked.sample ? (
-										<p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+										<p className="mt-1 truncate text-xs text-[var(--ink-subtle)]">
 											“{picked.sample}”
 										</p>
 									) : null}
@@ -227,7 +227,7 @@ export function SelectorPicker({ open, initialUrl, onClose, onPick }: SelectorPi
 							) : null}
 						</>
 					) : (
-						<p className="text-sm text-slate-500 dark:text-slate-400">
+						<p className="text-sm text-[var(--ink-subtle)]">
 							Load a preview of the page, then click the element holding the links you want to
 							watch — the CSS selector fills in automatically.
 						</p>

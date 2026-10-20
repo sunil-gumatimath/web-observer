@@ -18,19 +18,19 @@ const RANGES = [7, 14, 30] as const;
 type Range = (typeof RANGES)[number];
 
 const CATEGORY_STYLES: Record<string, string> = {
-	pricing: "bg-emerald-500",
-	availability: "bg-[var(--accent)]",
-	legal: "bg-amber-500",
-	content: "bg-violet-500",
+	pricing: "bg-[var(--semantic-success)]",
+	availability: "bg-[var(--primary)]",
+	legal: "bg-[var(--warning)]",
+	content: "bg-[var(--primary)]",
 	design: "bg-pink-500",
 	api: "bg-indigo-500",
-	security: "bg-rose-500",
-	other: "bg-slate-400",
-	uncategorized: "bg-slate-300 dark:bg-slate-600",
+	security: "bg-[var(--danger)]",
+	other: "bg-[var(--ink-subtle)]",
+	uncategorized: "bg-[var(--surface-3)]",
 };
 
 function categoryClass(cat: string): string {
-	return CATEGORY_STYLES[cat] ?? "bg-slate-400";
+	return CATEGORY_STYLES[cat] ?? "bg-[var(--ink-subtle)]";
 }
 
 function tooltipFor(dayLabel: string, total: number, byCategory: Record<string, number>): string {
@@ -99,7 +99,7 @@ export function ActivityCard({
 								change{view.total === 1 ? "" : "s"} in the last {range} days
 								{pct !== null ? (
 									<span
-										className={`ml-2 text-xs font-medium ${pct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"}`}
+										className={`ml-2 text-xs font-medium ${pct >= 0 ? "text-[var(--semantic-success)]" : "text-[var(--danger)]"}`}
 									>
 										{pct >= 0 ? "+" : ""}
 										{pct}% vs prior {range}d
@@ -156,12 +156,12 @@ export function ActivityCard({
 								key={d.date}
 								title={tooltipFor(d.label, d.total, d.byCategory)}
 								className={`flex-1 overflow-hidden rounded-sm transition-all ${
-									isPeak ? "ring-1 ring-[var(--accent)] ring-offset-1 ring-offset-transparent" : ""
+									isPeak ? "ring-1 ring-[var(--primary)] ring-offset-1 ring-offset-transparent" : ""
 								}`}
 								style={{ height: `${8 + (d.total / max) * 56}px`, minWidth: 3 }}
 							>
 								{d.total === 0 ? (
-									<div className="h-full w-full bg-[var(--accent)] opacity-25" />
+									<div className="h-full w-full bg-[var(--surface-2)] opacity-40" />
 								) : segs.length > 0 ? (
 									<div className="flex h-full w-full flex-col justify-end">
 										{segs.map(([cat, count]) => (
@@ -173,7 +173,7 @@ export function ActivityCard({
 										))}
 									</div>
 								) : (
-									<div className="h-full w-full bg-[var(--accent)]/70 hover:opacity-80" />
+									<div className="h-full w-full bg-[var(--primary)] hover:opacity-80" />
 								)}
 							</div>
 						);
@@ -183,7 +183,7 @@ export function ActivityCard({
 					<span>
 						{first?.label} – {last?.label}
 					</span>
-					<Link href="/alerts" className="font-medium text-[var(--accent)] hover:opacity-80">
+					<Link href="/alerts" className="font-medium text-[var(--primary)] hover:opacity-80">
 						View alerts →
 					</Link>
 				</div>

@@ -379,7 +379,7 @@ export default function AlertsPage() {
 						Clear
 					</Button>
 				)}
-				<div className="ml-auto flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+				<div className="ml-auto flex items-center gap-2 text-xs text-[var(--ink-subtle)]">
 					{lastUpdated ? (
 						<span title={lastUpdated.toLocaleString()}>
 							Updated {relativeTime(lastUpdated.toISOString())}
@@ -448,8 +448,8 @@ export default function AlertsPage() {
 								key={a.id}
 								className={`transition-all ${
 									a.is_read
-										? "!p-0 border border-[var(--border)]"
-										: "!p-0 border-l-4 border-l-[var(--accent)] bg-[var(--accent)]/[0.04] "
+										? "!p-0 border border-[var(--hairline)]"
+										: "!p-0 border border-[var(--hairline-strong)] bg-[var(--surface-2)]/40"
 								}`}
 							>
 								{/* Alert Header Row */}
@@ -478,12 +478,12 @@ export default function AlertsPage() {
 												)}
 												<Link
 													href={`/monitors/${a.monitor_id}`}
-													className="text-sm font-semibold text-[var(--fg)] hover:text-[var(--accent)] truncate"
+													className="text-sm font-semibold text-[var(--fg)] hover:text-[var(--primary)] truncate"
 												>
 													{a.monitor_name}
 												</Link>
-												<span className="text-xs text-slate-400 dark:text-slate-500">·</span>
-												<span className="text-xs text-slate-500 dark:text-slate-400">
+												<span className="text-xs text-[var(--ink-tertiary)]">·</span>
+												<span className="text-xs text-[var(--ink-subtle)]">
 													{relativeTime(a.created_at)}
 												</span>
 											</div>
@@ -496,13 +496,13 @@ export default function AlertsPage() {
 												{reason ?? headline}
 											</p>
 											{reason ? (
-												<p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400 line-through decoration-slate-400/60">
+												<p className="mt-1 text-sm leading-relaxed text-[var(--ink-subtle)] line-through decoration-[var(--hairline-strong)]">
 													{headline}
 												</p>
 											) : null}
 
 											{/* Monitor URL subtitle */}
-											<p className="mt-1.5 truncate text-xs text-slate-500 dark:text-slate-500">
+											<p className="mt-1.5 truncate text-xs text-[var(--ink-subtle)]">
 												{a.monitor_url}
 											</p>
 										</div>
@@ -547,7 +547,7 @@ export default function AlertsPage() {
 											disabled={busy}
 											onClick={() => toggleNoise(a)}
 											title={a.is_noise ? "Restore to signal" : "Mark as noise"}
-											className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400"
+											className="text-xs text-[var(--ink-subtle)] hover:text-[var(--ink)]"
 										>
 											{a.is_noise ? "Signal" : "Noise"}
 										</Button>
@@ -563,7 +563,7 @@ export default function AlertsPage() {
 
 								{/* Inline Diff Accordion View */}
 								{isExpanded && diffDetail ? (
-									<div className="border-t border-[var(--border)] bg-slate-50/50 p-4 dark:bg-slate-900/30">
+									<div className="border-t border-[var(--hairline)] bg-[var(--surface-2)] p-4">
 										<GithubDiff
 											before={diffDetail.previous_text}
 											after={diffDetail.new_text}
@@ -587,7 +587,7 @@ export default function AlertsPage() {
 							>
 								Load more
 							</Button>
-							<p className="text-xs text-slate-500 dark:text-slate-500">
+							<p className="text-xs text-[var(--ink-subtle)]">
 								Showing the first {alerts.length} alerts for this filter.
 							</p>
 						</div>

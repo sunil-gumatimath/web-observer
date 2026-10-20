@@ -65,9 +65,16 @@ export default {
         xl: "16px",
         xxl: "24px",
       },
-      backgroundImage: {
-        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
-        "brand-gradient": "linear-gradient(135deg, #5e6ad2 0%, #828fff 100%)",
+      letterSpacing: {
+        "display-xl": "-3.0px",
+        "display-lg": "-1.8px",
+        "display-md": "-1.0px",
+        headline: "-0.6px",
+        "card-title": "-0.4px",
+        subhead: "-0.2px",
+        "body-lg": "-0.1px",
+        body: "-0.05px",
+        eyebrow: "0.4px",
       },
       animation: {
         "fade-in-up": "fade-in-up 0.25s ease-out both",

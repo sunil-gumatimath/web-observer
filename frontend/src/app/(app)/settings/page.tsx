@@ -137,14 +137,14 @@ export default function SettingsPage() {
           <Card className="!p-4">
             <p className="section-label">API</p>
             <p className="mt-2 truncate text-sm font-medium text-[var(--fg)]">{config.apiBaseUrl}</p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+            <p className="mt-1 text-xs text-[var(--ink-subtle)]">
               Health:{" "}
               <span
                 className={
                   apiStatus.startsWith("ok") || apiStatus.includes("ok")
                     ? "text-emerald-600 dark:text-emerald-400"
                     : apiStatus === "…"
-                      ? "text-slate-500 dark:text-slate-500"
+                      ? "text-[var(--ink-subtle)]"
                       : "text-rose-600 dark:text-rose-400"
                 }
               >
@@ -159,7 +159,7 @@ export default function SettingsPage() {
               {config.clerkEnabled ? "Clerk (Bearer JWT)" : "Internal token (dev)"}
             </p>
             {me ? (
-              <div className="mt-2 space-y-0.5 text-xs text-slate-600 dark:text-slate-400">
+              <div className="mt-2 space-y-0.5 text-xs text-[var(--ink-muted)]">
                 <p>Email: {me.email ?? "—"}</p>
                 <p>Internal: {me.is_internal ? "yes" : "no"}</p>
                 <p className="truncate">
@@ -228,7 +228,7 @@ export default function SettingsPage() {
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly (Mondays)</option>
               </Select>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+              <p className="mt-1 text-xs text-[var(--ink-subtle)]">
                 {keySettings?.as_resend_api_key
                   ? "Digest emails send from your workspace sender (Bring-your-own keys above)."
                   : "Digest emails send from the global default sender — set a workspace Resend key above to use your own domain."}
@@ -249,7 +249,7 @@ export default function SettingsPage() {
                 }}
               />
             </div>
-            <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-400 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-white/10">
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--ink)] transition hover:border-[var(--hairline-strong)]">
               <input
                 type="checkbox"
                 checked={aiEnabled}
@@ -258,11 +258,11 @@ export default function SettingsPage() {
                   setAiEnabled(e.target.checked);
                   setPrefsSaved(false);
                 }}
-                className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
+                className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
               />
               AI summaries & categories (optional LLM; heuristic if no key)
             </label>
-            <p className="text-xs text-slate-500 dark:text-slate-500">
+            <p className="text-xs text-[var(--ink-subtle)]">
               {keySettings?.as_llm_api_key
                 ? `AI summaries use your workspace key (${keySettings.llm_model || "custom model"} via Bring-your-own keys above).`
                 : "AI summaries use the global workspace key — set your own LLM key above to override it."}
@@ -396,7 +396,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="space-y-4">
       <SectionTitle>Optional: API keys & webhooks</SectionTitle>
-      <p className="text-xs text-slate-500 dark:text-slate-500">
+      <p className="text-xs text-[var(--ink-subtle)]">
         API access tokens and outbound signed webhooks (HMAC-SHA256).
       </p>
       {err ? <ErrorBox message={err} /> : null}
@@ -456,21 +456,21 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
         <div className="space-y-2">
           {apiKeys.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-4 text-center text-xs text-slate-500 dark:text-slate-500">
+            <p className="rounded-[8px] border border-dashed border-[var(--hairline-strong)] px-3 py-4 text-center text-xs text-[var(--ink-subtle)]">
               No API keys created yet.
             </p>
           ) : (
             apiKeys.map((k) => (
               <div
                 key={k.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 dark:bg-slate-950/40"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2.5"
               >
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-[var(--fg)]">{k.name}</span>
-                    <span className="font-mono text-xs text-slate-500">{k.key_prefix}…</span>
+                    <span className="font-mono text-xs text-[var(--ink-subtle)]">{k.key_prefix}…</span>
                   </div>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <p className="text-xs text-[var(--ink-subtle)]">
                     Created {new Date(k.created_at).toLocaleDateString()}
                     {k.last_used_at ? ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}` : " · Never used"}
                   </p>
@@ -546,21 +546,21 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
         <div className="space-y-2">
           {webhooks.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-4 text-center text-xs text-slate-500 dark:text-slate-500">
+            <p className="rounded-[8px] border border-dashed border-[var(--hairline-strong)] px-3 py-4 text-center text-xs text-[var(--ink-subtle)]">
               No webhooks registered yet.
             </p>
           ) : (
             webhooks.map((w) => (
               <div
                 key={w.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 dark:bg-slate-950/40"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2.5"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <Badge tone={w.enabled ? "success" : "neutral"}>{w.enabled ? "Active" : "Disabled"}</Badge>
                     <span className="truncate font-mono text-xs text-[var(--fg)]">{w.url}</span>
                   </div>
-                  <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                  <p className="mt-0.5 text-xs text-[var(--ink-subtle)]">
                     Added {new Date(w.created_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -588,19 +588,19 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
             {deliveriesLoading ? "Loading…" : "Refresh"}
           </Button>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-500">
+        <p className="text-xs text-[var(--ink-subtle)]">
           Outbound change webhooks and their delivery status. Retry re-sends a failed or stuck delivery.
         </p>
         <div className="space-y-2">
           {deliveries.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
+            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-6 text-center text-sm text-[var(--ink-subtle)]">
               No deliveries yet. Click Refresh after change events fire.
             </p>
           ) : (
             deliveries.map((d) => (
               <div
                 key={d.id}
-                className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[var(--border)] bg-slate-50/60 px-3.5 py-3 dark:bg-slate-950/40"
+                className="flex flex-wrap items-start justify-between gap-3 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-2)] px-3.5 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -609,11 +609,11 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
                     </Badge>
                     <span className="text-sm font-medium text-[var(--fg)]">{d.event_type}</span>
                   </div>
-                  <p className="mt-1 truncate font-mono text-xs text-slate-500 dark:text-slate-500">{d.id}</p>
+                  <p className="mt-1 truncate font-mono text-xs text-[var(--ink-subtle)]">{d.id}</p>
                   {d.last_error ? (
                     <p className="mt-1 line-clamp-2 text-xs text-rose-600 dark:text-rose-400">{d.last_error}</p>
                   ) : null}
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                  <p className="mt-1 text-xs text-[var(--ink-subtle)]">
                     attempts: {d.attempts}
                     {d.response_code != null ? ` · HTTP ${d.response_code}` : ""} ·{" "}
                     {new Date(d.created_at).toLocaleString()}

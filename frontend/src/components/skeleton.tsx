@@ -3,7 +3,7 @@
 import { cn } from "./ui";
 
 export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div suppressHydrationWarning className={cn("animate-pulse rounded bg-slate-200 dark:bg-slate-700", className)} {...props} />;
+  return <div suppressHydrationWarning className={cn("animate-pulse rounded-[4px] bg-[var(--surface-2)]", className)} {...props} />;
 }
 
 export function SkeletonCard() {
@@ -19,13 +19,13 @@ export function SkeletonCard() {
 export function SkeletonTable({ rows = 5 }: { rows?: number }) {
   return (
     <div suppressHydrationWarning className="surface overflow-hidden">
-      <div suppressHydrationWarning className="h-10 border-b bg-slate-50 dark:bg-slate-800/50 flex gap-4 p-3">
+      <div suppressHydrationWarning className="h-10 border-b border-[var(--hairline)] bg-[var(--surface-1)] flex gap-4 p-3">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-4 w-20" />
       </div>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} suppressHydrationWarning className="flex gap-4 p-3 border-b last:border-0">
+        <div key={i} suppressHydrationWarning className="flex gap-4 p-3 border-b border-[var(--hairline)] last:border-0">
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-5 w-20" />
@@ -52,11 +52,11 @@ export function SkeletonStats() {
 
 export function SkeletonHero() {
   return (
-    <div suppressHydrationWarning className="rounded-2xl border overflow-hidden">
+    <div suppressHydrationWarning className="rounded-[12px] border border-[var(--hairline)] overflow-hidden bg-[var(--surface-1)]">
       <Skeleton className="h-36 sm:h-44 w-full rounded-none" />
       <div suppressHydrationWarning className="p-4 space-y-3">
         <div suppressHydrationWarning className="flex gap-3">
-          <Skeleton className="h-16 w-16 rounded-xl" />
+          <Skeleton className="h-16 w-16 rounded-[8px]" />
           <div suppressHydrationWarning className="space-y-2 flex-1">
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-4 w-64" />

@@ -234,12 +234,12 @@ export default function LogsPage() {
 					<div className="overflow-x-auto">
 						<table className="w-full text-left text-sm">
 							<thead>
-								<tr className="border-b border-[var(--border)] bg-slate-50/60 dark:bg-slate-950/40">
+								<tr className="border-b border-[var(--hairline)] bg-[var(--surface-1)]">
 									{["Monitor", "Status", "Changed", "HTTP", "Latency", "Error", "Finished"].map(
 										(h) => (
 											<th
 												key={h}
-												className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500"
+												className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-subtle)]"
 											>
 												{h}
 											</th>
@@ -251,12 +251,12 @@ export default function LogsPage() {
 								{rows.map((r) => (
 									<tr
 										key={r.id}
-										className="transition hover:bg-slate-100/60 dark:hover:bg-white/[0.02]"
+										className="transition hover:bg-[var(--surface-2)]"
 									>
 										<td className="max-w-xs px-4 py-3">
 											<Link
 												href={`/logs/${r.id}`}
-												className="block truncate font-medium text-[var(--fg)] hover:text-[var(--accent)]"
+												className="block truncate font-medium text-[var(--fg)] hover:text-[var(--primary)]"
 												title="Open run detail"
 											>
 												{r.monitor_name}
@@ -272,23 +272,23 @@ export default function LogsPage() {
 												</Link>
 											) : r.status === "succeeded" ? (
 												<span
-													className="text-slate-400 dark:text-slate-500"
+													className="text-[var(--ink-tertiary)]"
 													title="Baseline or unchanged content"
 												>
 													—
 												</span>
 											) : (
-												<span className="text-slate-500 dark:text-slate-500">—</span>
+												<span className="text-[var(--ink-tertiary)]">—</span>
 											)}
 										</td>
-										<td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+										<td className="px-4 py-3 text-[var(--ink-muted)]">
 											{r.http_status ?? "—"}
 										</td>
-										<td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+										<td className="px-4 py-3 text-[var(--ink-muted)]">
 											{r.latency_ms != null ? `${r.latency_ms}ms` : "—"}
 										</td>
 										<td
-											className="max-w-[14rem] truncate px-4 py-3 text-slate-600 dark:text-slate-400"
+											className="max-w-[14rem] truncate px-4 py-3 text-[var(--ink-muted)]"
 											title={
 												r.error_message
 													? `${r.error_code ?? "error"} — ${r.error_message}`
@@ -297,7 +297,7 @@ export default function LogsPage() {
 										>
 											{r.error_code ?? "—"}
 										</td>
-										<td className="px-4 py-3 text-slate-500 dark:text-slate-500">
+										<td className="px-4 py-3 text-[var(--ink-subtle)]">
 											<span
 												title={new Date(
 													r.finished_at ?? r.scheduled_at,
@@ -316,7 +316,7 @@ export default function LogsPage() {
 
 			{/* Pagination / Load more */}
 			{rows.length < total ? (
-				<p className="mb-4 text-center text-xs text-slate-500 dark:text-slate-500">
+				<p className="mb-4 text-center text-xs text-[var(--ink-subtle)]">
 					Showing {rows.length} of {total} runs for this filter.
 				</p>
 			) : null}

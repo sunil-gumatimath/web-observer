@@ -127,7 +127,7 @@ export function ConfirmButton({
 				>
 					<div
 						ref={panelRef}
-						className="w-full max-w-md rounded-[12px] border border-[var(--hairline-strong)] bg-[var(--surface-1)] p-5 shadow-2xl"
+						className="w-full max-w-md rounded-[12px] border border-[var(--hairline-strong)] bg-[var(--surface-1)] p-5"
 						onClick={(e) => e.stopPropagation()}
 					>
 						<div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-rose-500/10 text-rose-400 border border-rose-500/20">

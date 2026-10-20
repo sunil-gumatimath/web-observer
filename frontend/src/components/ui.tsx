@@ -26,21 +26,21 @@ export function Button({
 }) {
 	const styles = {
 		primary:
-			"bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] active:bg-[var(--primary-focus)] border border-transparent shadow-xs",
+			"bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] active:bg-[var(--primary-focus)] border border-transparent",
 		secondary:
 			"bg-[var(--surface-1)] text-[var(--ink)] border border-[var(--hairline)] hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)]",
 		tertiary:
 			"bg-[var(--canvas)] text-[var(--ink)] border border-transparent hover:bg-[var(--surface-1)] active:bg-[var(--surface-2)]",
 		inverse:
-			"bg-[var(--inverse-canvas)] text-[var(--inverse-ink)] border border-transparent hover:bg-[var(--inverse-surface-1)] active:bg-[var(--inverse-surface-2)] shadow-xs",
+			"bg-[var(--inverse-canvas)] text-[var(--inverse-ink)] border border-transparent hover:bg-[var(--inverse-surface-1)] active:bg-[var(--inverse-surface-2)]",
 		danger:
-			"bg-[var(--danger)] text-white hover:opacity-90 active:opacity-100 border border-transparent shadow-xs",
+			"bg-[var(--danger)] text-white hover:opacity-90 active:opacity-100 border border-transparent",
 		ghost:
 			"bg-transparent text-[var(--ink)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] border border-transparent",
 	}[variant];
 
 	const sizes = {
-		sm: "px-2.5 py-1 text-xs leading-[1.20] rounded-[6px]",
+		sm: "px-2.5 py-1 text-xs leading-[1.20] rounded-[8px]",
 		md: "px-3.5 py-2 text-sm leading-[1.20] rounded-[8px]",
 		lg: "px-4 py-2.5 text-sm leading-[1.20] rounded-[8px] min-h-[40px]",
 	}[size];
@@ -49,7 +49,7 @@ export function Button({
 		<button
 			className={cn(
 				"inline-flex items-center justify-center gap-1.5 font-medium transition",
-				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-focus)]/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--canvas)]",
+				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--canvas)]",
 				"disabled:pointer-events-none disabled:opacity-40",
 				styles,
 				sizes,
@@ -373,7 +373,7 @@ export function SectionTitle({
 
 const segmentedBtn =
 	"rounded-[6px] px-2.5 py-1 text-xs font-medium transition " +
-	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40";
+	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]";
 
 export function SegmentedControl<T extends string>({
 	options,

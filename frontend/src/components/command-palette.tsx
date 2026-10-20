@@ -131,7 +131,7 @@ export function CommandPalette({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-start justify-center bg-black/40 px-4 pt-[12vh] backdrop-blur-sm"
+      className="fixed inset-0 z-[90] flex items-start justify-center bg-black/70 px-4 pt-[12vh] backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close();
       }}
@@ -139,7 +139,7 @@ export function CommandPalette({ open, onClose }: Props) {
       aria-modal="true"
       aria-label="Command palette"
     >
-      <div className="w-full max-w-lg overflow-hidden rounded-[12px] border border-[var(--hairline-strong)] bg-[var(--surface-1)] shadow-2xl animate-fade-in-up">
+      <div className="w-full max-w-lg overflow-hidden rounded-[12px] border border-[var(--hairline-strong)] bg-[var(--surface-1)] animate-fade-in-up">
         <div className="flex items-center gap-2 border-b border-[var(--hairline)] px-4">
           <span className="text-xs font-medium text-[var(--primary)]" aria-hidden>
             ⌘K
@@ -194,7 +194,7 @@ export function CommandPalette({ open, onClose }: Props) {
             ))
           )}
         </div>
-        <div className="flex items-center gap-4 border-t border-[var(--border)] px-4 py-2 text-[11px] text-[var(--muted)]">
+        <div className="flex items-center gap-4 border-t border-[var(--hairline)] px-4 py-2 text-[11px] text-[var(--muted)]">
           <span>↑↓ navigate</span>
           <span>↵ open</span>
           <span className="ml-auto">{items.length} result{items.length === 1 ? "" : "s"}</span>

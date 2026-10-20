@@ -198,7 +198,7 @@ export function ThresholdEditor({
 	return (
 		<div>
 			<SectionTitle>Alert thresholds</SectionTitle>
-			<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+			<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 				Leave all blank to alert on any change.
 			</p>
 			<div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -226,7 +226,7 @@ export function ThresholdEditor({
 									{error}
 								</p>
 							) : (
-								<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+								<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 									{helpFor(meta, mode)}
 								</p>
 							)}
@@ -254,7 +254,7 @@ export function ThresholdEditor({
 									{error}
 								</p>
 							) : (
-								<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+								<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 									{helpFor(meta, mode)}
 								</p>
 							)}

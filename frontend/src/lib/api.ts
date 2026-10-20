@@ -15,6 +15,7 @@ import type {
   InvitePreview,
   InviteRedeem,
   InviteRow,
+  ModelCatalog,
   Monitor,
   MonitorCreateInput,
   MonitorRun,
@@ -583,6 +584,8 @@ export const api = {
   // --- webdog.ai parity: per-account (bring-your-own) keys ---
   getWorkspaceSettings: (workspaceId: string) =>
     request<WorkspaceSettings>(`/api/v1/workspaces/${workspaceId}/settings`),
+
+  getModelCatalog: () => request<ModelCatalog>("/api/v1/model-catalog"),
 
   updateWorkspaceKeys: (
     workspaceId: string,

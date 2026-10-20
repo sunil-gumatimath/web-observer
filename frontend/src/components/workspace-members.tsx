@@ -66,7 +66,7 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
       <div className="flex items-center justify-between">
         <div>
           <SectionTitle>Team members & roles</SectionTitle>
-          <p className="text-xs text-slate-500 dark:text-slate-500">
+          <p className="text-xs text-[var(--ink-subtle)]">
             Manage existing workspace members and adjust their permission levels.
           </p>
         </div>
@@ -86,7 +86,7 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
 
       <Card className="space-y-3">
         {members.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-500">
+          <p className="rounded-[8px] border border-dashed border-[var(--hairline-strong)] px-3 py-6 text-center text-sm text-[var(--ink-subtle)]">
             {loading ? "Loading members…" : "No members found."}
           </p>
         ) : (
@@ -105,7 +105,7 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
                       {m.role}
                     </Badge>
                   </div>
-                  <p className="mt-0.5 truncate font-mono text-xs text-slate-400 dark:text-slate-500">
+                  <p className="mt-0.5 truncate font-mono text-xs text-[var(--ink-subtle)]">
                     ID: {m.user_id}
                   </p>
                 </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, Label, SectionTitle, Select } from "@/components/ui";
+import { Badge, Button, Card, Input, Label, SectionTitle, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { InviteRow } from "@/lib/types";
 
@@ -70,9 +70,9 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
     <Card className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <SectionTitle>Team invite links</SectionTitle>
-        <span className="text-xs text-slate-500">expiring · multi-use</span>
+        <span className="text-xs text-[var(--ink-subtle)]">expiring · multi-use</span>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-500">
+      <p className="text-xs text-[var(--ink-subtle)]">
         Generate a link that lets teammates join this workspace. The token is hashed in our
         database and only shown once. Revoke anytime.
       </p>
@@ -90,24 +90,24 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
         </div>
         <div>
           <Label>Max uses</Label>
-          <input
+          <Input
             type="number"
             min={1}
             max={100}
             value={maxUses}
             onChange={(e) => setMaxUses(Number(e.target.value))}
-            className="w-24 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm focus:border-[var(--focus-purple)] focus:outline-none dark:bg-slate-950"
+            className="w-24"
           />
         </div>
         <div>
           <Label>Expires (days)</Label>
-          <input
+          <Input
             type="number"
             min={1}
             max={365}
             value={expiresDays}
             onChange={(e) => setExpiresDays(Number(e.target.value))}
-            className="w-24 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm focus:border-[var(--focus-purple)] focus:outline-none dark:bg-slate-950"
+            className="w-24"
           />
         </div>
         <Button type="button" variant="secondary" disabled={creating} onClick={create}>
@@ -116,33 +116,33 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
       </div>
 
       {generated ? (
-        <div className="space-y-2 rounded-xl border border-[var(--accent)]/25 bg-[var(--accent)]/10 p-3">
-          <p className="break-all font-mono text-xs text-[var(--accent)]">{generated}</p>
+        <div className="space-y-2 rounded-[8px] border border-[var(--primary)]/25 bg-[var(--surface-2)] p-3">
+          <p className="break-all font-mono text-xs text-[var(--primary-hover)]">{generated}</p>
           <Button type="button" variant="ghost" size="sm" onClick={copy}>
             Copy link
           </Button>
         </div>
       ) : null}
-      {msg ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</p> : null}
-      {err ? <p className="text-sm text-rose-600 dark:text-rose-400">{err}</p> : null}
+      {msg ? <p className="text-sm text-[var(--semantic-success)]">{msg}</p> : null}
+      {err ? <p className="text-sm text-[var(--danger)]">{err}</p> : null}
 
       <div className="space-y-2">
         {invites.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-5 text-center text-sm text-slate-500 dark:text-slate-500">
+          <p className="rounded-[8px] border border-dashed border-[var(--hairline-strong)] px-3 py-5 text-center text-sm text-[var(--ink-subtle)]">
             No invite links yet.
           </p>
         ) : (
           invites.map((inv) => (
             <div
               key={inv.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-slate-50/60 px-3.5 py-2.5 dark:bg-slate-950/40"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-2)] px-3.5 py-2.5"
             >
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Badge tone="neutral">{inv.role}</Badge>
-                <span className="text-slate-600 dark:text-slate-300">
+                <span className="text-[var(--ink-muted)]">
                   {inv.use_count}/{inv.max_uses} used
                 </span>
-                <span className="text-xs text-slate-400 font-mono">{inv.token_prefix}…</span>
+                <span className="text-xs text-[var(--ink-subtle)] font-mono">{inv.token_prefix}…</span>
               </div>
               <Button type="button" variant="ghost" size="sm" onClick={() => revoke(inv.id)}>
                 Revoke

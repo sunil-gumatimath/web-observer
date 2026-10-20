@@ -113,7 +113,7 @@ function buildRows(before: string, after: string): Row[] {
 
 function Gutter({ no }: { no?: number }) {
 	return (
-		<span className="w-10 shrink-0 select-none border-r border-[var(--border)] px-2 text-right text-[11px] tabular-nums text-slate-400 dark:text-slate-500">
+		<span className="w-10 shrink-0 select-none border-r border-[var(--hairline)] px-2 text-right text-[11px] tabular-nums text-[var(--ink-subtle)]">
 			{no ?? ""}
 		</span>
 	);
@@ -137,7 +137,7 @@ function DiffLineText({ text, baseUrl }: { text: string; baseUrl?: string }) {
 								title={s.alt}
 								loading="lazy"
 								referrerPolicy="no-referrer"
-								className="mx-0.5 inline-block max-h-8 max-w-[16rem] rounded border border-[var(--border)] align-middle"
+								className="mx-0.5 inline-block max-h-8 max-w-[16rem] rounded border border-[var(--hairline)] align-middle"
 							/>
 						) : (
 							<span key={i} className="italic opacity-70">
@@ -166,12 +166,12 @@ function SplitCell({
 }) {
 	const bg =
 		variant === "del"
-			? "bg-rose-500/10 text-rose-800 dark:text-rose-200"
+			? "bg-[var(--danger)]/10 text-[var(--danger)]"
 			: variant === "add"
-				? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+				? "bg-[var(--semantic-success)]/10 text-[var(--semantic-success)]"
 				: variant === "equal"
-					? "text-slate-700 dark:text-slate-300"
-					: "bg-slate-500/[0.02]";
+					? "text-[var(--ink-muted)]"
+					: "bg-[var(--surface-1)]";
 
 	return (
 		<div className={cn("flex min-h-[1.375rem] min-w-0 overflow-hidden font-mono text-xs", bg)}>
@@ -180,9 +180,9 @@ function SplitCell({
 				className={cn(
 					"min-w-0 flex-1 overflow-hidden px-2 py-0.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]",
 					variant === "del"
-						? "bg-rose-500/10"
+						? "bg-[var(--danger)]/10"
 						: variant === "add"
-							? "bg-emerald-500/10"
+							? "bg-[var(--semantic-success)]/10"
 							: "",
 				)}
 			>
@@ -288,12 +288,12 @@ export function GithubDiff({
 				}
 			}
 		}
-	return items;
+		return items;
 	}, [rows, scope, expandedSections]);
 
 	if (!hasContent) {
 		return (
-			<p className="text-sm text-slate-500 dark:text-slate-400">No text content.</p>
+			<p className="text-sm text-[var(--ink-subtle)]">No text content.</p>
 		);
 	}
 
@@ -323,29 +323,29 @@ export function GithubDiff({
 						href={baseUrl}
 						target="_blank"
 						rel="noreferrer"
-						className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-600 ring-1 ring-neutral-950/5 transition hover:text-[var(--accent)] hover:ring-[var(--accent)]/25 dark:bg-slate-900 dark:text-slate-400 dark:ring-white/10"
+						className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-[var(--ink-muted)] transition hover:text-[var(--ink)] hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]"
 					>
-						<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden className="size-3.5 shrink-0 text-neutral-400">
+						<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden className="size-3.5 shrink-0 text-[var(--ink-subtle)]">
 							<path d="M6.5 9.5a2.5 2.5 0 0 0 3.54 0l2-2a2.5 2.5 0 0 0-3.54-3.54l-.5.5" />
 							<path d="M9.5 6.5a2.5 2.5 0 0 0-3.54 0l-2 2a2.5 2.5 0 0 0 3.54 3.54l.5-.5" />
 						</svg>
 						<span className="truncate font-mono">{host}</span>
 					</a>
 				) : (
-					<span className="text-slate-600 dark:text-slate-300 font-medium text-xs">Before → After</span>
+					<span className="text-[var(--ink-muted)] font-medium text-xs">Before → After</span>
 				)}
 			</div>
 
 			<div className="flex flex-wrap items-center gap-2">
 				{/* Scope toggle: Changes only vs Full page */}
-				<div className="flex rounded-lg border border-[var(--border)] bg-slate-100 p-0.5 dark:bg-slate-800 text-xs">
+				<div className="flex rounded-md border border-[var(--hairline)] bg-[var(--surface-2)] p-0.5 text-xs">
 					<button
 						type="button"
 						onClick={() => setScope("changes")}
-						className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+						className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
 							scope === "changes"
-								? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-slate-100"
-								: "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+								? "bg-[var(--surface-1)] text-[var(--ink)] shadow-xs"
+								: "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
 						}`}
 					>
 						Changes only
@@ -353,17 +353,17 @@ export function GithubDiff({
 					<button
 						type="button"
 						onClick={() => setScope("full")}
-						className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+						className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
 							scope === "full"
-								? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-slate-100"
-								: "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+								? "bg-[var(--surface-1)] text-[var(--ink)] shadow-xs"
+								: "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
 						}`}
 					>
 						Full page
 					</button>
 				</div>
 
-				<div className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800/70">
+				<div className="flex items-center gap-1 rounded-md bg-[var(--surface-2)] p-0.5 border border-[var(--hairline)]">
 					<SegmentedControl
 						ariaLabel="Diff view"
 						value={view}
@@ -379,16 +379,16 @@ export function GithubDiff({
 	);
 
 	const diffSummaryHeader = (
-		<div className="flex items-center justify-between gap-3 border-b border-neutral-950/5 bg-neutral-50/80 px-3 py-2 dark:border-white/5 dark:bg-slate-900/50">
-			<p className="text-xs font-semibold text-neutral-700 dark:text-slate-300">
+		<div className="flex items-center justify-between gap-3 border-b border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-2">
+			<p className="text-xs font-semibold text-[var(--ink)]">
 				{scope === "changes" ? "Changes detected" : "Full document diff"}
 			</p>
 			{!tooLarge ? (
 				<div className="flex items-center gap-1.5 tabular-nums">
-					<span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[0.6875rem] font-semibold text-emerald-700 ring-1 ring-emerald-600/15 ring-inset dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-500/20">
+					<span className="inline-flex items-center gap-0.5 rounded-full border border-[var(--semantic-success)]/20 bg-[var(--semantic-success)]/10 px-2 py-0.5 text-[0.6875rem] font-semibold text-[var(--semantic-success)]">
 						<span aria-hidden>＋</span>{added} added
 					</span>
-					<span className="inline-flex items-center gap-0.5 rounded-full bg-rose-50 px-2 py-0.5 text-[0.6875rem] font-semibold text-rose-700 ring-1 ring-rose-600/15 ring-inset dark:bg-rose-950/30 dark:text-rose-300 dark:ring-rose-500/20">
+					<span className="inline-flex items-center gap-0.5 rounded-full border border-[var(--danger)]/20 bg-[var(--danger)]/10 px-2 py-0.5 text-[0.6875rem] font-semibold text-[var(--danger)]">
 						<span aria-hidden>－</span>{removed} removed
 					</span>
 				</div>
@@ -407,24 +407,24 @@ export function GithubDiff({
 								const t = line.trimStart();
 								if (t.startsWith("+") && !t.startsWith("+++"))
 									return (
-										<span key={i} className="add block text-emerald-700 dark:text-emerald-300 bg-emerald-500/10">
+										<span key={i} className="add block text-[var(--semantic-success)] bg-[var(--semantic-success)]/10">
 											{line}
 										</span>
 									);
 								if (t.startsWith("-") && !t.startsWith("---"))
 									return (
-										<span key={i} className="del block text-rose-700 dark:text-rose-300 bg-rose-500/10">
+										<span key={i} className="del block text-[var(--danger)] bg-[var(--danger)]/10">
 											{line}
 										</span>
 									);
 								return (
-									<span key={i} className="block text-slate-600 dark:text-slate-400">
+									<span key={i} className="block text-[var(--ink-muted)]">
 										{line}
 									</span>
 								);
 							})
 						) : (
-							<span className="text-slate-500">No diff available.</span>
+							<span className="text-[var(--ink-subtle)]">No diff available.</span>
 						)}
 					</pre>
 				</CardShell>
@@ -436,20 +436,20 @@ export function GithubDiff({
 		return (
 			<div className="min-w-0 w-full max-w-full overflow-hidden">
 				{header}
-				<div className="overflow-hidden rounded-xl ring-1 ring-neutral-950/[0.08] shadow-xs dark:ring-white/10">
+				<div className="overflow-hidden rounded-lg border border-[var(--hairline)]">
 					{diffSummaryHeader}
-					<div className="max-h-[min(75vh,36rem)] overflow-auto bg-white dark:bg-slate-950">
+					<div className="max-h-[min(75vh,36rem)] overflow-auto bg-[var(--surface-1)]">
 						<table className="w-full border-collapse font-mono text-xs">
 							<tbody>
 								{diffItems.map((item, i) => {
 									if (item.type === "collapsed") {
 										return (
-											<tr key={`collapsed-${i}`} className="bg-slate-100/70 dark:bg-slate-900/80 border-y border-[var(--border)]">
-												<td colSpan={2} className="py-1.5 px-3 text-center text-xs text-slate-500 dark:text-slate-400">
+											<tr key={`collapsed-${i}`} className="bg-[var(--surface-2)] border-y border-[var(--hairline)]">
+												<td colSpan={2} className="py-1.5 px-3 text-center text-xs text-[var(--ink-subtle)]">
 													<button
 														type="button"
 														onClick={() => expandHunk(item.startIdx, item.endIdx)}
-														className="text-[var(--accent)] hover:opacity-80 font-medium hover:underline inline-flex items-center gap-1"
+														className="text-[var(--primary)] hover:opacity-80 font-medium hover:underline inline-flex items-center gap-1"
 													>
 														<span>↕ Expand {item.count} unchanged lines</span>
 													</button>
@@ -461,9 +461,9 @@ export function GithubDiff({
 									const r = item.row;
 									if (r.kind === "equal") {
 										return (
-											<tr key={`row-${item.index}`} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
-												<td aria-hidden className="w-8 border-r border-[var(--border)] px-2 text-center text-[11px] select-none text-slate-400">{r.rightNo ?? r.leftNo}</td>
-												<td className="px-3 py-1 whitespace-pre-wrap text-slate-600 dark:text-slate-300 break-words">
+											<tr key={`row-${item.index}`} className="hover:bg-[var(--surface-2)] transition">
+												<td aria-hidden className="w-8 border-r border-[var(--hairline)] px-2 text-center text-[11px] select-none text-[var(--ink-subtle)]">{r.rightNo ?? r.leftNo}</td>
+												<td className="px-3 py-1 whitespace-pre-wrap text-[var(--ink-muted)] break-words">
 													<DiffLineText text={r.right ?? r.left ?? ""} baseUrl={baseUrl} />
 												</td>
 											</tr>
@@ -472,10 +472,10 @@ export function GithubDiff({
 
 									if (r.kind === "del") {
 										return (
-											<tr key={`del-${item.index}`} className="bg-rose-50/60 dark:bg-rose-950/20">
-												<td aria-hidden className="w-8 border-r border-neutral-950/5 bg-rose-100/80 px-2 text-center font-semibold select-none text-rose-700 dark:border-white/5 dark:bg-rose-900/30 dark:text-rose-300">−</td>
-												<td className="px-3 py-1 break-all whitespace-pre-wrap text-rose-900 dark:text-rose-200">
-													<mark className="rounded-sm bg-rose-200/80 px-0.5 text-rose-950 dark:bg-rose-900/40 dark:text-rose-100 [box-decoration-break:clone]">
+											<tr key={`del-${item.index}`} className="bg-[var(--danger)]/10">
+												<td aria-hidden className="w-8 border-r border-[var(--hairline)] bg-[var(--danger)]/15 px-2 text-center font-semibold select-none text-[var(--danger)]">−</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-[var(--danger)]">
+													<mark className="rounded-sm bg-[var(--danger)]/20 px-0.5 text-[var(--ink)] [box-decoration-break:clone]">
 														<DiffLineText text={r.left ?? ""} baseUrl={baseUrl} />
 													</mark>
 												</td>
@@ -485,10 +485,10 @@ export function GithubDiff({
 
 									if (r.kind === "add") {
 										return (
-											<tr key={`add-${item.index}`} className="bg-emerald-50/60 dark:bg-emerald-950/20">
-												<td aria-hidden className="w-8 border-r border-neutral-950/5 bg-emerald-100/80 px-2 text-center font-semibold select-none text-emerald-700 dark:border-white/5 dark:bg-emerald-900/30 dark:text-emerald-300">+</td>
-												<td className="px-3 py-1 break-all whitespace-pre-wrap text-emerald-900 dark:text-emerald-200">
-													<mark className="rounded-sm bg-emerald-200/80 px-0.5 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100 [box-decoration-break:clone]">
+											<tr key={`add-${item.index}`} className="bg-[var(--semantic-success)]/10">
+												<td aria-hidden className="w-8 border-r border-[var(--hairline)] bg-[var(--semantic-success)]/15 px-2 text-center font-semibold select-none text-[var(--semantic-success)]">+</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-[var(--semantic-success)]">
+													<mark className="rounded-sm bg-[var(--semantic-success)]/20 px-0.5 text-[var(--ink)] [box-decoration-break:clone]">
 														<DiffLineText text={r.right ?? ""} baseUrl={baseUrl} />
 													</mark>
 												</td>
@@ -498,18 +498,18 @@ export function GithubDiff({
 
 									return (
 										<React.Fragment key={`rep-${item.index}`}>
-											<tr className="bg-rose-50/60 dark:bg-rose-950/20">
-												<td aria-hidden className="w-8 border-r border-neutral-950/5 bg-rose-100/80 px-2 text-center font-semibold select-none text-rose-700 dark:border-white/5 dark:bg-rose-900/30 dark:text-rose-300">−</td>
-												<td className="px-3 py-1 break-all whitespace-pre-wrap text-rose-900 dark:text-rose-200">
-													<mark className="rounded-sm bg-rose-200/80 px-0.5 text-rose-950 dark:bg-rose-900/40 dark:text-rose-100 [box-decoration-break:clone]">
+											<tr className="bg-[var(--danger)]/10">
+												<td aria-hidden className="w-8 border-r border-[var(--hairline)] bg-[var(--danger)]/15 px-2 text-center font-semibold select-none text-[var(--danger)]">−</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-[var(--danger)]">
+													<mark className="rounded-sm bg-[var(--danger)]/20 px-0.5 text-[var(--ink)] [box-decoration-break:clone]">
 														<DiffLineText text={r.left ?? ""} baseUrl={baseUrl} />
 													</mark>
 												</td>
 											</tr>
-											<tr className="bg-emerald-50/60 dark:bg-emerald-950/20">
-												<td aria-hidden className="w-8 border-r border-neutral-950/5 bg-emerald-100/80 px-2 text-center font-semibold select-none text-emerald-700 dark:border-white/5 dark:bg-emerald-900/30 dark:text-emerald-300">+</td>
-												<td className="px-3 py-1 break-all whitespace-pre-wrap text-emerald-900 dark:text-emerald-200">
-													<mark className="rounded-sm bg-emerald-200/80 px-0.5 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100 [box-decoration-break:clone]">
+											<tr className="bg-[var(--semantic-success)]/10">
+												<td aria-hidden className="w-8 border-r border-[var(--hairline)] bg-[var(--semantic-success)]/15 px-2 text-center font-semibold select-none text-[var(--semantic-success)]">+</td>
+												<td className="px-3 py-1 break-all whitespace-pre-wrap text-[var(--semantic-success)]">
+													<mark className="rounded-sm bg-[var(--semantic-success)]/20 px-0.5 text-[var(--ink)] [box-decoration-break:clone]">
 														<DiffLineText text={r.right ?? ""} baseUrl={baseUrl} />
 													</mark>
 												</td>
@@ -533,7 +533,7 @@ export function GithubDiff({
 			<div aria-hidden="true" className="min-w-0 w-full max-w-full overflow-hidden">
 				<CardShell>
 					{diffSummaryHeader}
-					<div className="grid w-full min-w-0 grid-cols-2 border-b border-[var(--border)] bg-slate-50/70 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
+					<div className="grid w-full min-w-0 grid-cols-2 border-b border-[var(--hairline)] bg-[var(--surface-1)] text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ink-subtle)]">
 						<div className="min-w-0 overflow-hidden px-3 py-1.5">Before</div>
 						<div className="min-w-0 overflow-hidden px-3 py-1.5">After</div>
 					</div>
@@ -543,12 +543,12 @@ export function GithubDiff({
 								return (
 									<div
 										key={`collapsed-${i}`}
-										className="border-y border-[var(--border)] bg-slate-100/80 py-1.5 text-center dark:bg-slate-900/90"
+										className="border-y border-[var(--hairline)] bg-[var(--surface-2)] py-1.5 text-center"
 									>
 										<button
 											type="button"
 											onClick={() => expandHunk(item.startIdx, item.endIdx)}
-											className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] hover:opacity-80 hover:underline"
+											className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:opacity-80 hover:underline"
 										>
 											<span>↕ Expand {item.count} unchanged lines</span>
 										</button>
@@ -592,7 +592,7 @@ export function GithubDiff({
 
 function CardShell({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm dark:bg-slate-950/40">
+		<div className="w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)]">
 			{children}
 		</div>
 	);

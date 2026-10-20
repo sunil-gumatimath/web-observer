@@ -101,7 +101,16 @@
   /* Elevation & Focus */
   --elev-flat: none;
   --elev-raised: none;
-  --focus-ring: 0 0 0 2px rgba(94, 106, 210, 0.45);
+  /* Focus ring — DESIGN.md: "2px {colors.primary-focus} outline at 50% opacity".
+     Mirrors --primary-focus (#5e69d1) at 50% alpha. Kept as an explicit rgba
+     because Tailwind cannot apply an opacity modifier to a var() value, so
+     `ring-[var(--primary-focus)]/50` silently falls back to blue-500. */
+  --ring-focus: rgb(94 105 209 / 0.5);
+  /* Flat ring: ring sits directly against the control's own border (inputs). */
+  --focus-ring: 0 0 0 2px var(--ring-focus);
+  /* Offset ring: 1px canvas gap then the 2px ring, so the ring still reads on
+     a filled primary button. Matches Tailwind's ring-2 + ring-offset-1. */
+  --focus-ring-offset: 0 0 0 1px var(--canvas), 0 0 0 3px var(--ring-focus);
   --motion-fast: 120ms;
   --motion-base: 180ms;
   --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
@@ -126,6 +135,10 @@
   --accent-on: var(--on-primary);
   --accent-hover: var(--primary-hover);
   --accent-active: var(--primary-focus);
+  /* Pre-alpha'd accent. Tailwind 3 silently drops `bg-[var(--accent)]/25`
+     (an opacity modifier cannot be applied to a var()), so tinted fills and
+     rings must reference an alpha-carrying variable instead. */
+  --accent-soft: rgb(94 106 210 / 0.25);
   --ring: rgba(94, 106, 210, 0.45);
   --field-bg: var(--surface-1);
   --field-border: var(--hairline);
@@ -185,6 +198,10 @@ html.light,
   --accent-on: var(--on-primary);
   --accent-hover: var(--primary-hover);
   --accent-active: var(--primary-focus);
+  /* Pre-alpha'd accent. Tailwind 3 silently drops `bg-[var(--accent)]/25`
+     (an opacity modifier cannot be applied to a var()), so tinted fills and
+     rings must reference an alpha-carrying variable instead. */
+  --accent-soft: rgb(94 106 210 / 0.25);
   --ring: rgba(94, 106, 210, 0.45);
   --field-bg: #ffffff;
   --field-border: var(--hairline);
@@ -252,6 +269,10 @@ html.light,
   --accent-on: var(--on-primary);
   --accent-hover: var(--primary-hover);
   --accent-active: var(--primary-focus);
+  /* Pre-alpha'd accent. Tailwind 3 silently drops `bg-[var(--accent)]/25`
+     (an opacity modifier cannot be applied to a var()), so tinted fills and
+     rings must reference an alpha-carrying variable instead. */
+  --accent-soft: rgb(94 106 210 / 0.25);
   --ring: rgba(94, 106, 210, 0.45);
   --field-bg: var(--surface-1);
   --field-border: var(--hairline);
@@ -400,7 +421,7 @@ a:hover {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     padding: 8px 14px;
     border-radius: var(--radius-md);
     font-family: var(--font-body);
@@ -410,12 +431,13 @@ a:hover {
     transition:
       color var(--motion-fast) var(--ease-standard),
       background-color var(--motion-fast) var(--ease-standard),
-      border-color var(--motion-fast) var(--ease-standard);
+      border-color var(--motion-fast) var(--ease-standard),
+      box-shadow var(--motion-fast) var(--ease-standard);
   }
 
   .btn-linear:focus-visible {
     outline: none;
-    box-shadow: var(--focus-ring);
+    box-shadow: var(--focus-ring-offset);
   }
 
   .btn-linear-primary {

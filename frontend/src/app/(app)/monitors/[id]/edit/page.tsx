@@ -38,7 +38,6 @@ function normalizeUrl(input: string, mode?: MonitorMode): string {
 	return `https://${trimmed}`;
 }
 
-
 const MIN_INTERVAL_MIN = 15;
 const MAX_INTERVAL_MIN = 24 * 60; // once a day
 
@@ -128,8 +127,6 @@ export default function EditMonitorPage() {
 			cancelled = true;
 		};
 	}, [monitorId]);
-
-
 
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
 		if (isReadmeMode(mode)) return;
@@ -247,19 +244,19 @@ export default function EditMonitorPage() {
 							placeholder={isReadmeMode(mode) ? "owner/repo  or  https://github.com/owner/repo" : undefined}
 						/>
 						{isReadmeMode(mode) ? (
-							<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+							<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 								Tracks the repository&apos;s <code>README.md</code> — any doc change on the default branch triggers a diff &amp; alert.
 							</p>
 						) : null}
 					</div>
 					{brand ? (
-						<div className="rounded-xl border border-[var(--border)] bg-slate-50/60 p-3.5 dark:bg-slate-950/40">
+						<div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-3.5">
 							<div className="flex items-start gap-3">
 								{brand.logo_url ? (
 									<img
 										src={brand.logo_url}
 										alt=""
-										className="h-9 w-9 rounded-lg object-contain border border-[var(--border)] bg-white p-0.5 dark:bg-slate-900"
+										className="h-9 w-9 rounded-md object-contain border border-[var(--hairline)] bg-[var(--surface-1)] p-0.5"
 									/>
 								) : null}
 								<div className="min-w-0 flex-1">
@@ -269,16 +266,16 @@ export default function EditMonitorPage() {
 										</p>
 									) : null}
 									{brand.description ? (
-										<p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
+										<p className="mt-0.5 line-clamp-2 text-xs text-[var(--ink-muted)]">
 											{brand.description}
 										</p>
 									) : (
-										<p className="text-xs text-slate-400">No brand description detected.</p>
+										<p className="text-xs text-[var(--ink-subtle)]">No brand description detected.</p>
 									)}
 								</div>
 							</div>
 							{brand.hero_url ? (
-								<div className="mt-3 overflow-hidden rounded-lg border border-[var(--border)]">
+								<div className="mt-3 overflow-hidden rounded-md border border-[var(--hairline)]">
 									<img
 										src={brand.hero_url}
 										alt="Website thumbnail preview"
@@ -316,7 +313,7 @@ export default function EditMonitorPage() {
 							<option value="visual">
 								Visual diff (screenshot comparison)
 							</option>
-							</Select>
+						</Select>
 					</div>
 					<div>
 						<Label htmlFor="interval">
@@ -333,7 +330,7 @@ export default function EditMonitorPage() {
 						/>
 						{intervalError(parseInterval(intervalRaw)) &&
 						intervalRaw.trim() !== "" ? (
-							<p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+							<p className="mt-1 text-xs text-[var(--warning)]">
 								{intervalError(parseInterval(intervalRaw))}
 							</p>
 						) : null}
@@ -347,26 +344,26 @@ export default function EditMonitorPage() {
 						/>
 					</div>
 					{needsJs(mode) ? (
-						<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--border)] bg-slate-50/60 px-3 py-2.5 text-sm text-slate-700 transition hover:border-slate-400 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:border-white/10">
+						<label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-2.5 text-sm text-[var(--ink)] transition hover:border-[var(--hairline-strong)]">
 							<input
 								type="checkbox"
 								checked={jsRequired}
 								onChange={(e) => setJsRequired(e.target.checked)}
-								className="h-4 w-4 rounded border-slate-400 bg-white text-[var(--accent)] focus:ring-[var(--accent)] dark:border-slate-600 dark:bg-slate-900"
+								className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
 							/>
 							JavaScript rendering required
 						</label>
 					) : mode === "readme" ? (
-						<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
+						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
 							README mode fetches <code>README.md</code> from the repo&apos;s default branch over HTTP.
 						</p>
 					) : mode === "site_links" ? (
-						<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
+						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
 							Site links mode reads the sitemap over HTTP and watches for added
 							or removed URLs.
 						</p>
 					) : (
-						<p className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--muted)] dark:border-[var(--border)]">
+						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
 							RSS mode reads the feed over HTTP and watches for added or removed entries.
 						</p>
 					)}
@@ -378,7 +375,7 @@ export default function EditMonitorPage() {
 							onChange={(e) => setWatchNote(e.target.value)}
 							placeholder="e.g. Only care about pricing plan changes"
 						/>
-						<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+						<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 							Focuses AI summaries and helps you remember intent.
 						</p>
 					</div>
@@ -390,7 +387,7 @@ export default function EditMonitorPage() {
 							onChange={(e) => setSemanticTrigger(e.target.value)}
 							placeholder="e.g. Alert only if pricing increases or a new tier is added"
 						/>
-						<p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+						<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 							Requires a configured LLM. Non-matching changes are filtered out; if AI evaluation is unavailable or fails, the change is allowed through (fail-open).
 						</p>
 					</div>
@@ -411,7 +408,7 @@ export default function EditMonitorPage() {
 								mode === "json_field" ? "$.data.price" : "article h2 a, .post-title a"
 							}
 						/>
-						<p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+						<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 							{mode === "json_field" ? (
 								<>
 									Path to the value to watch, e.g. <code>$.data.price</code> or{" "}
@@ -451,7 +448,7 @@ export default function EditMonitorPage() {
 							</div>
 						</>
 					) : null}
-					<div className="flex gap-2 border-t border-[var(--border)] pt-5">
+					<div className="flex gap-2 border-t border-[var(--hairline)] pt-5">
 						<Button type="submit" disabled={saving}>
 							{saving ? "Saving…" : "Save changes"}
 						</Button>

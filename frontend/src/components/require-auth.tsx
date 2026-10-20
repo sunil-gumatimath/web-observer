@@ -33,12 +33,12 @@ function ClerkRequireAuth({ children }: { children: ReactNode }) {
     if (waitedTooLong) {
       return (
         <Card className="mx-auto max-w-lg p-6">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <h1 className="text-lg font-semibold text-[var(--fg)]">
             Sign-in is taking too long
           </h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+          <p className="mt-2 text-sm text-[var(--ink-muted)]">
             Clerk did not finish loading a session. Check your network, disable blockers for{" "}
-            <code className="text-xs">clerk.accounts.dev</code>, then retry.
+            <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)]">clerk.accounts.dev</code>, then retry.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/sign-in">
@@ -57,8 +57,8 @@ function ClerkRequireAuth({ children }: { children: ReactNode }) {
   if (!isSignedIn) {
     return (
       <Card className="mx-auto max-w-lg p-6">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Sign in required</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+        <h1 className="text-lg font-semibold text-[var(--fg)]">Sign in required</h1>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">
           You need a Clerk session to load workspaces and monitors. API calls cannot use the
           internal token while Clerk is enabled.
         </p>

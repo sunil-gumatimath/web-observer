@@ -50,10 +50,10 @@ function lastCheckKey(m: Monitor): number {
 
 /** Status dot: green = checking, red = recent check failures, grey = paused. */
 function statusDot(m: Monitor): { cls: string; label: string } {
-	if (!m.enabled) return { cls: "bg-slate-300 dark:bg-slate-600", label: "Paused" };
+	if (!m.enabled) return { cls: "bg-[var(--ink-tertiary)]", label: "Paused" };
 	if ((m.consecutive_failures ?? 0) > 0)
-		return { cls: "bg-rose-500", label: `${m.consecutive_failures} recent check failures` };
-	return { cls: "bg-emerald-500", label: "Active" };
+		return { cls: "bg-[var(--danger)]", label: `${m.consecutive_failures} recent check failures` };
+	return { cls: "bg-[var(--semantic-success)]", label: "Active" };
 }
 
 function MonitorStatusDot({ monitor }: { monitor: Monitor }) {
@@ -237,7 +237,7 @@ export default function MonitorsPage() {
 			{error ? <ErrorBox message={error} /> : null}
 
 			{selected.size > 0 && (
-				<div className="mb-3 flex items-center gap-2 rounded-xl border bg-amber-50 dark:bg-amber-900/20 p-2 text-sm">
+				<div className="mb-3 flex items-center gap-2 rounded-[8px] border border-[var(--hairline-strong)] bg-[var(--surface-2)] p-2 text-sm text-[var(--ink)]">
 					<span>{selected.size} selected</span>
 					<Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => runBulk("pause")}>Pause</Button>
 					<Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => runBulk("resume")}>Resume</Button>
@@ -338,7 +338,7 @@ export default function MonitorsPage() {
 									<div className="overflow-x-auto">
 										<table className="w-full text-left text-sm">
 											<thead>
-												<tr className="border-b border-[var(--border)] bg-[var(--surface-bg)]">
+												<tr className="border-b border-[var(--hairline)] bg-[var(--surface-1)]">
 													<th className="px-2 py-3">
 														<input
 															type="checkbox"
@@ -388,7 +388,7 @@ export default function MonitorsPage() {
 												{filtered.map((m) => (
 													<tr
 														key={m.id}
-														className="cursor-pointer transition hover:bg-slate-100/60 dark:hover:bg-white/[0.03]"
+														className="cursor-pointer transition hover:bg-[var(--surface-2)]"
 														onClick={() => router.push(`/monitors/${m.id}`)}
 													>
 														<td className="px-2 py-3.5" onClick={(e) => e.stopPropagation()}>
@@ -405,7 +405,7 @@ export default function MonitorsPage() {
 																<BrandLogo brand={m.brand} name={m.name} domain={m.url} size={24} />
 																<Link
 																	href={`/monitors/${m.id}`}
-																	className="font-medium text-slate-900 hover:text-[var(--accent)] dark:text-slate-100"
+																	className="font-medium text-[var(--ink)] hover:text-[var(--primary-hover)]"
 																>
 																	{m.name}
 																</Link>
@@ -414,13 +414,13 @@ export default function MonitorsPage() {
 																) : null}
 															</div>
 														</td>
-														<td className="max-w-xs truncate px-4 py-3.5 text-slate-600 dark:text-slate-400">
+														<td className="max-w-xs truncate px-4 py-3.5 text-[var(--ink-subtle)]">
 															{m.url}
 														</td>
 														<td className="px-4 py-3.5">
 															<ModeBadge mode={m.mode} />
 														</td>
-														<td className="px-4 py-3.5 text-slate-600 dark:text-slate-400">
+														<td className="px-4 py-3.5 text-[var(--ink-subtle)]">
 															every {m.schedule_interval_minutes}m
 														</td>
 														<td className="px-4 py-3.5">
@@ -451,7 +451,7 @@ export default function MonitorsPage() {
 												router.push(`/monitors/${m.id}`);
 											}
 										}}
-										className="glass-card !p-4 transition cursor-pointer hover:border-[var(--accent)]/40 dark:hover:border-[var(--accent)]/20"
+										className="glass-card !p-4 transition cursor-pointer hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]"
 									>
 										<div className="flex items-start justify-between gap-2">
 											<div className="flex items-center gap-2.5 min-w-0">
@@ -477,7 +477,7 @@ export default function MonitorsPage() {
 												{m.enabled ? "active" : "paused"}
 											</Badge>
 										</div>
-										<p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-500">
+										<p className="mt-1 truncate text-xs text-[var(--ink-subtle)]">
 											{m.url}
 										</p>
 										<div className="mt-3 flex flex-wrap gap-2">

@@ -32,7 +32,7 @@ export function ValueChart({ points }: { points: ValuePoint[] }) {
 
 	if (points.length === 0) {
 		return (
-			<p className="text-sm text-slate-500 dark:text-slate-500">
+			<p className="text-sm text-[var(--ink-subtle)]">
 				No numeric values recorded yet — history builds up as checks run.
 			</p>
 		);
@@ -40,7 +40,7 @@ export function ValueChart({ points }: { points: ValuePoint[] }) {
 	if (!geom) {
 		const only = points[0];
 		return (
-			<p className="text-sm text-slate-500 dark:text-slate-500">
+			<p className="text-sm text-[var(--ink-subtle)]">
 				Current value: <strong className="text-[var(--fg)]">{only.value}</strong> — the
 				trend appears after the next check.
 			</p>
@@ -55,23 +55,23 @@ export function ValueChart({ points }: { points: ValuePoint[] }) {
 					{geom.last.value}
 				</span>
 				<span
-					className={`text-sm font-medium ${up ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}
+					className={`text-sm font-medium ${up ? "text-[var(--semantic-success)]" : "text-[var(--danger)]"}`}
 				>
 					{up ? "▲" : "▼"} {Math.abs(delta).toFixed(2)} since{" "}
 					{new Date(geom.first.t).toLocaleDateString()}
 				</span>
-				<span className="text-xs text-slate-500 dark:text-slate-500">
+				<span className="text-xs text-[var(--ink-subtle)]">
 					{points.length} points · low {geom.lo} · high {geom.hi}
 				</span>
 			</div>
 			<svg
 				viewBox={`0 0 ${W} ${H}`}
-				className="w-full rounded-xl border border-[var(--border)] bg-slate-50/60 dark:bg-slate-950/40"
+				className="w-full rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)]"
 				role="img"
 				aria-label={`Value trend: ${geom.first.value} to ${geom.last.value}`}
 			>
-				<path d={geom.d} fill="none" stroke="var(--accent)" strokeWidth="2" />
-				<circle cx={geom.lx} cy={geom.ly} r="3.5" fill="var(--accent)" />
+				<path d={geom.d} fill="none" stroke="var(--primary)" strokeWidth="2" />
+				<circle cx={geom.lx} cy={geom.ly} r="3.5" fill="var(--primary)" />
 			</svg>
 		</div>
 	);

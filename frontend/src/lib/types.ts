@@ -351,6 +351,33 @@ export type WorkspaceSettings = {
   email_from: string | null;
 };
 
+export type CatalogModel = {
+  value: string;
+  label: string;
+  note: string;
+  /** True when the model completes the app's JSON task within a 200-token cap. */
+  verified_200: boolean;
+  /**
+   * Output-token budget the model was measured to need, or null when it never
+   * returned a complete reply. 200 = fits the default cap; higher = the server
+   * applies that cap automatically for this model only.
+   */
+  verified_at: number | null;
+};
+
+export type CatalogProvider = {
+  id: string;
+  label: string;
+  base: string;
+  /** True when every model on the provider is free to use. */
+  free: boolean;
+  models: CatalogModel[];
+};
+
+export type ModelCatalog = {
+  providers: CatalogProvider[];
+};
+
 export type PublicShareAlert = {
   id: string;
   change_category: string | null;

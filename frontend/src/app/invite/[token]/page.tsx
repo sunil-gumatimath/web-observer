@@ -47,34 +47,34 @@ export default function InvitePage() {
 
   return (
     <div className="mx-auto mt-16 max-w-md px-4">
-      <Link href="/" className="text-sm font-semibold tracking-tight text-[var(--accent)] hover:opacity-80">
+      <Link href="/" className="text-sm font-semibold tracking-tight text-[var(--primary)] hover:opacity-80">
         Web Observer
       </Link>
 
       {done ? (
         <Card className="mt-6 space-y-3 border-emerald-500/40">
           <p className="text-sm text-emerald-700 dark:text-emerald-300">✓ {done}</p>
-          <p className="text-xs text-slate-500">Taking you to your dashboard…</p>
+          <p className="text-xs text-[var(--ink-subtle)]">Taking you to your dashboard…</p>
         </Card>
       ) : (
         <Card className="mt-6 space-y-4">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <h1 className="text-lg font-semibold text-[var(--ink)]">
             {error ? "Invite unavailable" : `Join ${preview?.workspace_name ?? "this workspace"}?`}
           </h1>
           {error ? (
             <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
           ) : !preview ? (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <p className="text-sm text-[var(--ink-subtle)]">Loading…</p>
           ) : (
             <>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
+              <p className="text-sm text-[var(--ink-muted)]">
                 You&apos;ll be added as <span className="font-medium">{preview.role}</span>.
               </p>
               {!me ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[var(--ink-subtle)]">
                   You&apos;ll need to{" "}
                   <Link
-                    className="text-[var(--accent)] underline"
+                    className="text-[var(--primary)] underline"
                     href={`/sign-in?redirect_url=/invite/${encodeURIComponent(token)}`}
                   >
                     sign in
