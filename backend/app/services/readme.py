@@ -8,7 +8,7 @@ import logging
 import re
 from urllib.parse import urlparse
 
-from app.services.extract import ExtractionError, normalize_text
+from app.services.extract import ExtractionError, normalize_markdown_text
 from app.services.fetcher import FetchError, fetch_url
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,9 @@ _GITHUB_RE = re.compile(
     re.IGNORECASE,
 )
 _SHORT_RE = re.compile(r"^(?P<owner>[\w.\-]+)/(?P<repo>[\w.\-]+)$")
+# Only GitHub is fetchable: the README is read from api.github.com and
+# raw.githubusercontent.com. Any other host could never succeed.
+_GITHUB_HOSTS = {"github.com", "www.github.com"}
 
 
 def parse_github_repo(input_url: str) -> tuple[str, str, str | None]:
@@ -72,6 +75,49 @@ def parse_github_repo(input_url: str) -> tuple[str, str, str | None]:
         "invalid_url",
         f"Could not parse GitHub repo from '{input_url}'. Use 'owner/repo' or 'https://github.com/owner/repo'.",
     )
+
+
+def normalize_readme_url(input_url: str) -> str:
+    """Validate a readme monitor URL and return its canonical GitHub form.
+
+    Accepts the ``owner/repo`` shorthand and any ``github.com/owner/repo`` URL
+    (optionally with a ``/tree/<branch>`` suffix) and returns
+    ``https://github.com/owner/repo`` — plus ``/tree/<branch>`` when a branch
+    was named. Any other host is rejected: the fetch path only ever talks to
+    api.github.com / raw.githubusercontent.com, so a non-GitHub URL could never
+    succeed and would only burn probes before failing with ``readme_not_found``.
+    """
+    raw = (input_url or "").strip()
+    if not raw:
+        raise ExtractionError("invalid_url", "A GitHub repository is required.")
+
+    candidate = raw
+    if "://" in candidate:
+        parsed = urlparse(candidate)
+        host = (parsed.hostname or "").lower()
+        if host not in _GITHUB_HOSTS:
+            raise ExtractionError(
+                "invalid_url",
+                f"'{raw}' is not a GitHub repository. readme mode supports "
+                "github.com repos or the 'owner/repo' shorthand.",
+            )
+        candidate = f"https://github.com{parsed.path}"
+    elif candidate.lower().startswith("github.com/"):
+        candidate = f"https://{candidate}"
+    elif _SHORT_RE.match(candidate):
+        candidate = f"https://github.com/{candidate}"
+    else:
+        raise ExtractionError(
+            "invalid_url",
+            f"Could not parse GitHub repo from '{raw}'. Use 'owner/repo' or "
+            "'https://github.com/owner/repo'.",
+        )
+
+    owner, repo, branch = parse_github_repo(candidate)
+    canonical = f"https://github.com/{owner}/{repo}"
+    if branch:
+        canonical += f"/tree/{branch}"
+    return canonical
 
 
 def _candidate_raw_urls(owner: str, repo: str, branch_hint: str | None) -> list[str]:
@@ -141,7 +187,7 @@ def _fetch_github_api_readme(
         decoded = base64.b64decode(content_b64).decode("utf-8", errors="replace")
     except Exception:  # noqa: BLE001
         return None
-    normalized = normalize_text(decoded)
+    normalized = normalize_markdown_text(decoded)
     if not normalized:
         return None
     return normalized, data.get("download_url") or api_url
@@ -163,7 +209,7 @@ def fetch_readme_text(
     """
     owner, repo, branch_hint = parse_github_repo(repo_input)
 
-    # 1) GitHub API first: one request instead of up to 21 raw probes, and it
+    # 1) GitHub API first: one request instead of up to 14 raw probes, and it
     # follows the repo's actual default branch (not just main/master).
     last_exc: Exception | None = None
     try:
@@ -182,7 +228,7 @@ def fetch_readme_text(
         last_exc = exc
 
     # 2) Fallback: raw URLs with a capped per-probe timeout so a missing repo
-    # (or a dead CDN PoP) cannot stack 21 x 30s hangs past the worker limit.
+    # (or a dead CDN PoP) cannot stack 14 x 10s hangs past the worker limit.
     probe_timeout = max(5, min(timeout_seconds, 10))
     for raw_url in _candidate_raw_urls(owner, repo, branch_hint):
         try:
@@ -203,7 +249,7 @@ def fetch_readme_text(
             # GitHub raw may return 404 page with 200? Check for obvious not-found
             if text.strip().lower().startswith("404:"):
                 continue
-            normalized = normalize_text(text)
+            normalized = normalize_markdown_text(text)
             if not normalized:
                 continue
             return normalized, raw_url

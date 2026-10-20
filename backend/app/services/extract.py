@@ -31,6 +31,8 @@ class ExtractionError(Exception):
 
 _WS_RE = re.compile(r"[ \t]+")
 _BLANK_RE = re.compile(r"\n{3,}")
+# Trailing whitespace-only lines (blank lines that still carry spaces/tabs).
+_WS_ONLY_LINE_RE = re.compile(r"^[ \t]+$", re.MULTILINE)
 
 
 def extract_text(
@@ -191,6 +193,40 @@ def normalize_text(text: str) -> str:
     text = "\n".join(line for line in lines if line != "")
     text = _BLANK_RE.sub("\n\n", text)
     return text.strip()
+
+
+def normalize_markdown_text(text: str) -> str:
+    """Normalize a markdown document while preserving its block structure.
+
+    :func:`normalize_text` is meant for scraped page text: it trims every
+    line and drops blank lines. That is destructive for markdown, so a
+    README monitor used it and the result rendered badly — paragraph breaks
+    disappeared, nested lists flattened, and indented code blocks lost their
+    indentation (which also produced noisy diffs).
+
+    This variant keeps the document shape intact:
+    - line endings are normalized to ``\\n`` and a BOM is dropped;
+    - blank lines, indentation and trailing spaces are preserved (they are
+      meaningful in markdown: paragraph breaks, nested lists, hard line
+      breaks, indented code);
+    - runs of 3+ blank lines collapse to a single blank line;
+    - leading/trailing blank lines are trimmed.
+
+    HTML entities are deliberately *not* unescaped here: ``&lt;div&gt;``
+    inside a fenced code block must stay literal, and the markdown
+    renderer decodes entities for display anyway.
+    """
+    if not text:
+        return ""
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Normalize whitespace-only lines to truly empty lines so blank-line
+    # runs collapse consistently (indentation of blank lines is meaningless).
+    text = _WS_ONLY_LINE_RE.sub("", text)
+    # Collapse 3+ newlines (2+ blank lines) into a single blank line.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip("\n")
 
 
 # Minimum readable size for a main-content extraction to be trusted. Below this
