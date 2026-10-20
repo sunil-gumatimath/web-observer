@@ -33,6 +33,47 @@ export function resolveImageUrl(src: string, baseUrl?: string): string | null {
 }
 
 /**
+ * Base URL used to resolve relative asset paths inside a repo README.
+ *
+ * A README on GitHub references sibling files relatively (`docs/logo.png`),
+ * but those live on `raw.githubusercontent.com`, not on `github.com`. The
+ * branch is taken from the monitor URL when it was pinned (`/tree/<branch>`),
+ * otherwise `HEAD` resolves to the default branch.
+ */
+export function readmeAssetBase(repoUrl?: string | null): string | null {
+  if (!repoUrl) return null;
+  const m = /github\.com\/([^/\s?#]+)\/([^/\s?#]+)(?:\/tree\/([^/\s?#]+))?/i.exec(repoUrl);
+  if (!m) return null;
+  const owner = m[1];
+  const repo = m[2].replace(/\.git$/i, "");
+  const branch = m[3] || "HEAD";
+  if (!owner || !repo) return null;
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/`;
+}
+
+/**
+ * Resolve an asset URL referenced by markdown against a base URL.
+ *
+ * Absolute http(s) and `data:image/` URLs are kept as-is; relative paths are
+ * resolved against *baseUrl*. Unsafe schemes (javascript:, blob:, file:) are
+ * rejected.
+ */
+export function resolveMarkdownAssetUrl(src: string, baseUrl?: string | null): string | null {
+  const raw = (src || "").trim();
+  if (!raw) return null;
+  if (/^data:image\//i.test(raw)) return raw;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (!baseUrl) return null;
+  try {
+    const resolved = new URL(raw, baseUrl);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Split one physical line into text / image segments, preserving order.
  * Linked image groups contribute their inner images; the link href itself is
  * dropped (the wrapper is navigation noise around the visual).

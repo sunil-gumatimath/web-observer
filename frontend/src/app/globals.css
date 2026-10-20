@@ -59,6 +59,8 @@
 
   --semantic-success: #27a644;
   --warn: #eab308;
+  /* Alias: several components use --warning for the same amber token. */
+  --warning: var(--warn);
   --danger: #ef4444;
 
   /* Font variables */
@@ -178,6 +180,7 @@ html.light,
 
   --semantic-success: #16a34a;
   --warn: #d97706;
+  --warning: var(--warn);
   --danger: #dc2626;
 
   --bg: var(--canvas);
@@ -249,6 +252,7 @@ html.light,
 
   --semantic-success: #27a644;
   --warn: #eab308;
+  --warning: var(--warn);
   --danger: #ef4444;
 
   --bg: var(--canvas);
