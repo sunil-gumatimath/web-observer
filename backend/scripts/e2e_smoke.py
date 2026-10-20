@@ -1,4 +1,5 @@
 """End-to-end API smoke test against a running local stack."""
+
 from __future__ import annotations
 
 import sys
@@ -212,7 +213,7 @@ def main() -> int:
     print("\n===== SUMMARY =====")
     fails = [x for x in results if x[0] == "FAIL"]
     print(f"{len(results) - len(fails)} passed, {len(fails)} failed")
-    for st, name, detail in fails:
+    for _st, name, detail in fails:
         print(f"  FAIL: {name} — {detail}")
     return 1 if fails else 0
 

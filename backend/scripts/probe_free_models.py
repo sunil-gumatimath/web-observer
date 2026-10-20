@@ -23,11 +23,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from verify_llm_providers import DIFF  # noqa: E402
+
 from app.config import get_settings  # noqa: E402
 from app.services.ai_summary import _candidate_models, _effective_llm, enrich_change  # noqa: E402
 from app.services.model_catalog import KILO_BASE  # noqa: E402
-
-from verify_llm_providers import DIFF  # noqa: E402
 
 KILO_MODELS_URL = "https://api.kilo.ai/api/gateway/models"
 
@@ -46,7 +46,6 @@ def probe(model: str, cap: int) -> tuple[bool, str]:
     os.environ["AI_MAX_OUTPUT_TOKENS"] = str(cap)
     get_settings.cache_clear()
 
-    settings = get_settings()
     cfg = _effective_llm(None)
     chain = _candidate_models(cfg["model"], cfg["api_base"])
 
@@ -65,11 +64,7 @@ def probe(model: str, cap: int) -> tuple[bool, str]:
         return False, f"error: {type(exc).__name__}: {exc}"
     elapsed = time.perf_counter() - started
 
-    ok = (
-        out.provider == "llm"
-        and "24.99" in (out.summary or "")
-        and out.category == "pricing"
-    )
+    ok = out.provider == "llm" and "24.99" in (out.summary or "") and out.category == "pricing"
     detail = f"{out.provider}/{out.category} {elapsed:5.1f}s chain={len(chain)}"
     if not ok:
         detail += f" summary={(out.summary or '')[:48]!r}"
@@ -89,7 +84,10 @@ def main() -> int:
     for index, model in enumerate(models, 1):
         ok, detail = probe(model, cap)
         results[model] = ok
-        print(f"[{index:2d}/{len(models)}] {'PASS' if ok else 'FAIL'} {model:52s} {detail}", flush=True)
+        print(
+            f"[{index:2d}/{len(models)}] {'PASS' if ok else 'FAIL'} {model:52s} {detail}",
+            flush=True,
+        )
 
     passing = [m for m, ok in results.items() if ok]
     print(f"\n{len(passing)}/{len(models)} complete the JSON task at {cap} tokens")

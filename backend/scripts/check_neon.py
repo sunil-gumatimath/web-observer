@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 # Ensure backend root is on sys.path when script is run directly
 backend_root = str(Path(__file__).resolve().parent.parent)
 if backend_root not in sys.path:
     sys.path.insert(0, backend_root)
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text  # noqa: E402
 
-from app.config import get_settings
+from app.config import get_settings  # noqa: E402
 
 
 def main() -> None:
