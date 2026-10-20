@@ -10,7 +10,7 @@ import dramatiq
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import ChangeEvent, Monitor, NotificationOutbox, Workspace
-from app.models.entities import OutboxStatus, RunStatus
+from app.models.entities import PLAIN_HTTP_MODES, OutboxStatus, RunStatus
 from app.services.browser_fetch import fetch_url_browser
 from app.services.domain_guard import _redis
 from app.services.failure_notify import record_run_outcome
@@ -20,18 +20,15 @@ from app.workers.run_guard import execute_monitored_run
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-MODE_SITE_LINKS = "site_links"
-MODE_README = "readme"
-
 
 @dramatiq.actor(queue_name="browser_checks", max_retries=2, time_limit=180_000)
 def run_browser_check(run_id: str) -> None:
     """Execute a JS-required or visual monitor run with Playwright."""
 
     def _pre_run_hook(monitor, run, db):
-        # Defense-in-depth: site_links/readme monitors must never run through
-        # Playwright — they fetch sitemap/README over plain HTTP.
-        if monitor.mode in (MODE_SITE_LINKS, MODE_README):
+        # Defense-in-depth: site_links/rss_feed/readme monitors must never run
+        # through Playwright — they fetch sitemap/feed/README over plain HTTP.
+        if monitor.mode in PLAIN_HTTP_MODES:
             from app.workers.checks import run_http_check
 
             run.status = RunStatus.QUEUED.value
@@ -115,6 +112,17 @@ def run_browser_check(run_id: str) -> None:
                 full_page=True,
                 clip_selector=monitor.css_selector,
             )
+            try:
+                from app.services.storage import put_bytes
+
+                put_bytes(
+                    key=f"screenshots/{monitor.id}/{run_id}.png",
+                    data=capture.png_bytes,
+                    content_type="image/png",
+                )
+            except Exception as s_exc:
+                logger.debug("visual_screenshot_path_save_failed error=%s", s_exc)
+
             result = visual_to_fetch_result(capture, url=monitor.url)
         else:
             result = fetch_url_browser(
@@ -140,6 +148,26 @@ def run_browser_check(run_id: str) -> None:
     )
 
 
+def _attach_screenshot_to_pending(db, change: ChangeEvent, screenshot_path: str) -> int:
+    """Point still-pending outbox payloads at a screenshot. Returns rows updated."""
+    from sqlalchemy import select
+    from sqlalchemy.orm.attributes import flag_modified
+
+    pending = db.scalars(
+        select(NotificationOutbox).where(
+            NotificationOutbox.change_event_id == change.id,
+            NotificationOutbox.status == OutboxStatus.PENDING.value,
+        )
+    ).all()
+    for outbox in pending:
+        payload = dict(outbox.payload or {})
+        payload["screenshot_path"] = screenshot_path
+        outbox.payload = payload
+        flag_modified(outbox, "payload")
+    db.commit()
+    return len(pending)
+
+
 @dramatiq.actor(queue_name="browser_checks", max_retries=2, time_limit=120_000)
 def capture_alert_screenshot(change_event_id: str) -> None:
     """Capture a change-alert screenshot off the critical check path.
@@ -151,10 +179,7 @@ def capture_alert_screenshot(change_event_id: str) -> None:
     """
     from uuid import UUID
 
-    from sqlalchemy import select
-    from sqlalchemy.orm.attributes import flag_modified
-
-    from app.services.storage import put_bytes
+    from app.services.storage import object_exists, put_bytes
 
     try:
         change_uuid = UUID(str(change_event_id))
@@ -171,11 +196,33 @@ def capture_alert_screenshot(change_event_id: str) -> None:
         if monitor is None:
             logger.warning("screenshot_monitor_missing change_id=%s", change_event_id)
             return
+        screenshot_path = f"screenshots/{monitor.id}/{change.run_id}.png"
+        if monitor.mode == "visual" and object_exists(screenshot_path):
+            # The check stored the capture that was hashed and compared. A
+            # recapture seconds later would overwrite it with the page's
+            # *current* state — the comparison could then show two identical
+            # images for a change that was genuinely detected.
+            updated = _attach_screenshot_to_pending(db, change, screenshot_path)
+            logger.info(
+                "screenshot_reused change_id=%s outbox_updated=%s",
+                change_event_id,
+                updated,
+            )
+            return
         try:
             from app.services.visual import capture_screenshot
 
-            cap = capture_screenshot(monitor.url, timeout_seconds=30, full_page=True)
-            screenshot_path = f"screenshots/{monitor.id}/{change.run_id}.png"
+            # For visual monitors css_selector IS the clip region — honour it
+            # so the attached screenshot matches the compared region. For other
+            # modes css_selector means something else (a list selector or a
+            # JSON path), so the full page is captured instead.
+            clip = monitor.css_selector if monitor.mode == "visual" else None
+            cap = capture_screenshot(
+                monitor.url,
+                timeout_seconds=30,
+                full_page=True,
+                clip_selector=clip,
+            )
             put_bytes(
                 key=screenshot_path,
                 data=cap.png_bytes,
@@ -192,20 +239,9 @@ def capture_alert_screenshot(change_event_id: str) -> None:
         # Stitch the attachment into still-pending outbox payloads so the
         # delivered notification carries the screenshot when it made it in
         # time; already-sent messages keep their original payload.
-        pending = db.scalars(
-            select(NotificationOutbox).where(
-                NotificationOutbox.change_event_id == change.id,
-                NotificationOutbox.status == OutboxStatus.PENDING.value,
-            )
-        ).all()
-        for outbox in pending:
-            payload = dict(outbox.payload or {})
-            payload["screenshot_path"] = screenshot_path
-            outbox.payload = payload
-            flag_modified(outbox, "payload")
-        db.commit()
+        updated = _attach_screenshot_to_pending(db, change, screenshot_path)
         logger.info(
             "screenshot_captured change_id=%s outbox_updated=%s",
             change_event_id,
-            len(pending),
+            updated,
         )

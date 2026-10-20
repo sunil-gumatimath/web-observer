@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import difflib
 import re
 from typing import Any
 
+from app.models.entities import LIST_DIFF_MODES, VALUE_MODES
 from app.services.structured import diff_lists, items_from_normalized
 
 # User-supplied regexes run inside check workers against fetched page text.
@@ -16,6 +18,10 @@ from app.services.structured import diff_lists, items_from_normalized
 # "does not match" reason in the change row either way.
 _MAX_PATTERN_LEN = 256
 _MAX_REGEX_TEXT_CHARS = 200_000
+
+# Cap on the strings compared by difflib when sizing a change. Snapshot text
+# can reach ~50k chars; SequenceMatcher is O(n*m) in the worst case.
+_MAX_DIFF_COMPARE_CHARS = 50_000
 
 
 def _bounded_search(pattern: str, text: str) -> bool | None:
@@ -30,9 +36,70 @@ def _bounded_search(pattern: str, text: str) -> bool | None:
     return rx.search(text[:_MAX_REGEX_TEXT_CHARS]) is not None
 
 
+def _changed_char_count(before: str, after: str) -> int:
+    """Number of characters that actually differ between two snapshots.
+
+    A plain length delta (``abs(len(a) - len(b))``) reports 0 for a same-size
+    rewrite — including the common price case ``"USD 19.99" -> "USD 24.99"``,
+    which would let ``min_diff_chars`` suppress a genuine price move. Counting
+    the non-equal opcodes measures the real size of the edit instead.
+    """
+    if before == after:
+        return 0
+    a = (before or "")[:_MAX_DIFF_COMPARE_CHARS]
+    b = (after or "")[:_MAX_DIFF_COMPARE_CHARS]
+    matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    total = 0
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        total += max(i2 - i1, j2 - j1)
+    return total
+
+
+def _visual_hash(text: str, key: str) -> str | None:
+    """Extract a hash line (``phash:`` / ``ahash:``) from a visual snapshot."""
+    for line in (text or "").splitlines():
+        if line.startswith(f"{key}:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def _visual_distance(before: str, after: str) -> int | None:
+    """Perceptual (hamming) distance between two visual captures.
+
+    Prefers the DCT pHash — the digest change detection compares — and only
+    falls back to the legacy aHash for snapshots taken before pHash existed.
+    Comparing on the aHash while detecting on the pHash suppressed real
+    changes: an aHash barely moves on a text edit (1-2 bits), so any
+    ``min_diff_chars`` above that silenced changes detection had just flagged.
+
+    Returns *None* when neither digest is readable, so the caller can fall back
+    to a generic size measure.
+    """
+    from app.services.visual import hamming_distance_hex
+
+    for key in ("phash", "ahash"):
+        pa = _visual_hash(before, key)
+        na = _visual_hash(after, key)
+        if not pa or not na:
+            continue
+        try:
+            return hamming_distance_hex(pa, na)
+        except ValueError:
+            # Corrupt digest — try the next one rather than reporting 0.
+            continue
+    return None
+
+
 def _parse_price_value(text: str) -> float | None:
     """Extract numeric value from normalized price like 'USD 19.99'."""
     return parse_monitor_value(text, "product_price")
+
+
+def _parse_json_number(text: str) -> float | None:
+    """Numeric value of a json_field snapshot's normalized text."""
+    return parse_monitor_value(text, "json_field")
 
 
 def parse_monitor_value(text: str, mode: str) -> float | None:
@@ -72,8 +139,10 @@ def should_alert(
     If no alert_config is set, always returns (True, None) — any hash difference alerts.
     Supports:
       - price_below / price_above (float) for product_price
+      - value_below / value_above (float) for json_field
       - percent_change (float) — minimum % change to alert
-      - min_diff_chars (int) — minimum character difference
+      - min_diff_chars (int) — minimum character difference (for visual mode:
+        the minimum perceptual distance: pHash, aHash for legacy snapshots)
       - regex_must_match (str) — new_text must match regex to alert
       - regex_must_not_match (str) — suppress if matches
       - list_min_added / list_min_removed (int) for list modes
@@ -114,20 +183,37 @@ def should_alert(
                     pass
 
     # JSON field numeric thresholds (reusing price logic)
-    if mode == "json_field" and "percent_change" in cfg:
-        try:
-            pct = float(cfg["percent_change"])
-            old_v = float(prev_text.strip()) if prev_text.strip() else None
-            new_v = float(new_text.strip()) if new_text.strip() else None
-            if old_v is not None and new_v is not None and old_v != 0:
-                change_pct = abs(new_v - old_v) / abs(old_v) * 100
-                if change_pct < pct:
-                    return False, f"value change {change_pct:.1f}% < {pct}%"
-        except (ValueError, TypeError, ZeroDivisionError):
-            pass
+    if mode == "json_field":
+        new_val = _parse_json_number(new_text)
+        if new_val is not None:
+            if "value_below" in cfg:
+                try:
+                    thresh = float(cfg["value_below"])
+                    if new_val >= thresh:
+                        return False, f"value {new_val} not below {thresh}"
+                except (ValueError, TypeError):
+                    pass
+            if "value_above" in cfg:
+                try:
+                    thresh = float(cfg["value_above"])
+                    if new_val <= thresh:
+                        return False, f"value {new_val} not above {thresh}"
+                except (ValueError, TypeError):
+                    pass
+        if "percent_change" in cfg:
+            try:
+                pct = float(cfg["percent_change"])
+                old_v = _parse_json_number(prev_text)
+                new_v = _parse_json_number(new_text)
+                if old_v is not None and new_v is not None and old_v != 0:
+                    change_pct = abs(new_v - old_v) / abs(old_v) * 100
+                    if change_pct < pct:
+                        return False, f"value change {change_pct:.1f}% < {pct}%"
+            except (ValueError, TypeError, ZeroDivisionError):
+                pass
 
     # List thresholds
-    if mode in ("list_items", "site_links", "rss_feed"):
+    if mode in LIST_DIFF_MODES:
         try:
             before = items_before if items_before is not None else items_from_normalized(prev_text)
             after = items_after if items_after is not None else items_from_normalized(new_text)
@@ -147,11 +233,20 @@ def should_alert(
     if "min_diff_chars" in cfg:
         try:
             need = int(cfg["min_diff_chars"])
-            # Count diff chars as absolute length delta + changed chars estimate
-            diff_len = abs(len(new_text) - len(prev_text))
+            if mode == "visual":
+                # Visual snapshots carry hashes, not text — the meaningful
+                # "size of the change" is the perceptual distance (same digest
+                # change detection used).
+                diff_len = _visual_distance(prev_text, new_text)
+                if diff_len is None:
+                    diff_len = _changed_char_count(prev_text, new_text)
+            elif mode in VALUE_MODES:
+                # "USD 19.99" -> "USD 24.99" has a length delta of 0 but is a
+                # real change — count the characters that actually differ.
+                diff_len = _changed_char_count(prev_text, new_text)
+            else:
+                diff_len = _changed_char_count(prev_text, new_text)
             if diff_len < need:
-                # Also check unified diff-like: require at least need differing chars
-                # Simple heuristic: suppress if change is too small
                 return False, f"diff {diff_len} chars < {need}"
         except (ValueError, TypeError):
             pass
@@ -169,14 +264,17 @@ def should_alert(
             pass
 
     # Regex filters
-    if "regex_must_match" in cfg:
-        result = _bounded_search(str(cfg["regex_must_match"]), new_text)
-        if result is False or result is None:
-            return False, f"new content does not match {cfg['regex_must_match']}"
-    if "regex_must_not_match" in cfg:
-        result = _bounded_search(str(cfg["regex_must_not_match"]), new_text)
-        if result:
-            return False, f"new content matches excluded {cfg['regex_must_not_match']}"
+    # Visual snapshots are hash strings, not page text — a content regex can
+    # never match them, so applying one would silently suppress every alert.
+    if mode != "visual":
+        if "regex_must_match" in cfg:
+            result = _bounded_search(str(cfg["regex_must_match"]), new_text)
+            if result is False or result is None:
+                return False, f"new content does not match {cfg['regex_must_match']}"
+        if "regex_must_not_match" in cfg:
+            result = _bounded_search(str(cfg["regex_must_not_match"]), new_text)
+            if result:
+                return False, f"new content matches excluded {cfg['regex_must_not_match']}"
 
     return True, None
 

@@ -40,6 +40,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
     meta = {
         "ok": True,
         "ahash": capture.ahash,
+        "phash": capture.phash,
         "sha256": capture.sha256,
         "width": capture.width,
         "height": capture.height,

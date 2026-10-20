@@ -148,6 +148,29 @@ def get_bytes(key: str) -> bytes | None:
         return None
 
 
+def object_exists(key: str) -> bool:
+    """True when ``key`` already holds an object. Never raises.
+
+    Used to avoid overwriting a capture that has already been hashed and
+    compared (a later recapture would show a different page state).
+    """
+    if _use_local():
+        path = _resolve_local_path(key)
+        if path is None:
+            return False
+        return path.is_file()
+
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    settings = get_settings()
+    try:
+        _client().head_object(Bucket=settings.s3_bucket, Key=key)
+        return True
+    except (BotoCoreError, ClientError) as exc:
+        logger.debug("storage_head_failed key=%s error=%s", key, exc)
+        return False
+
+
 def delete_object(key: str) -> None:
     if _use_local():
         path = _resolve_local_path(key)

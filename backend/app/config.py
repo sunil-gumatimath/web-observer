@@ -110,7 +110,12 @@ class Settings(BaseSettings):
     circuit_window_seconds: int = 300
     circuit_open_seconds: int = 600
     consecutive_failure_notify_threshold: int = 3
-    visual_ahash_threshold: int = 5  # hamming distance for visual "same"
+    visual_ahash_threshold: int = 5  # hamming distance for visual "same" (legacy aHash path)
+    # Hamming distance (out of 256 bits) for the DCT pHash path — the digest
+    # used by new visual captures. 8/256 (~3%) flags a single rewritten
+    # headline on a real page while staying bit-identical for an unchanged
+    # page (measured distance 0 across separate browser launches).
+    visual_phash_threshold: int = 8
 
     # Retention
     snapshot_retention_days: int = 30

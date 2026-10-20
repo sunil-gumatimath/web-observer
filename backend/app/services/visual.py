@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import logging
+import math
 import os
 import subprocess
 import sys
@@ -48,6 +49,74 @@ def hamming_distance_hex(a: str, b: str) -> int:
     return (ai ^ bi).bit_count()
 
 
+# --- DCT perceptual hash (pHash) -------------------------------------------
+#
+# Why not aHash: the average hash compares every pixel against the image
+# mean, so for a text-heavy page (mostly white background) nearly every bit
+# is 1 and the digest barely moves. Measured on a real rendered page,
+# rewriting a single headline changed the aHash by 1-2 bits out of 64 and
+# removing a list item by 2 — i.e. every genuine edit stayed *below* the
+# "similar" threshold and was silently reported as "no change".
+#
+# pHash compares the low-frequency 2D DCT spectrum instead, which reacts to
+# localised layout/text changes. On the same real page the rewrite moved
+# 12-36 bits, while two captures of an unchanged page are bit-identical
+# (distance 0) even across separate browser launches.
+_PHASH_INPUT_SIZE = 32
+_PHASH_LOW_FREQ = 16  # 16x16 = 256 bits
+
+
+def _dct_2d_low_freq(pixels: list[int], size: int, low_freq: int) -> list[list[float]]:
+    """Low-frequency block of the 2D DCT-II of a square grayscale image.
+
+    Pure Python on purpose: numpy is not a dependency of this project and a
+    32x32 DCT is a few milliseconds of work per capture.
+    """
+    cos_table = [
+        [math.cos(math.pi * (2 * i + 1) * k / (2 * size)) for i in range(size)] for k in range(size)
+    ]
+    # rows[r][k] = DCT along the row axis
+    rows: list[list[float]] = []
+    for r in range(size):
+        row = pixels[r * size : (r + 1) * size]
+        rows.append([sum(row[i] * cos_table[k][i] for i in range(size)) for k in range(size)])
+    # cols[c][k] = DCT along the column axis of the row-transformed matrix
+    cols: list[list[float]] = []
+    for c in range(size):
+        col = [rows[r][c] for r in range(size)]
+        cols.append([sum(col[i] * cos_table[k][i] for i in range(size)) for k in range(size)])
+    # cols[c][k_row] == D[k_row][k_col]
+    return [[cols[c][k] for c in range(low_freq)] for k in range(low_freq)]
+
+
+def perceptual_hash(
+    image_bytes: bytes,
+    *,
+    input_size: int = _PHASH_INPUT_SIZE,
+    low_freq: int = _PHASH_LOW_FREQ,
+) -> str:
+    """Compute a DCT perceptual hash (pHash) hex string using Pillow."""
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise FetchError("internal_error", "Pillow is required for visual monitoring") from exc
+
+    img = Image.open(io.BytesIO(image_bytes)).convert("L")
+    img = img.resize((input_size, input_size), Image.Resampling.LANCZOS)
+    pixels = list(img.getdata())
+    low = _dct_2d_low_freq(pixels, input_size, low_freq)
+    # Median of the AC coefficients decides which blocks are "darker" than
+    # the average — the standard pHash construction.
+    ac = [low[r][c] for r in range(low_freq) for c in range(low_freq) if (r or c)]
+    med = sorted(ac)[len(ac) // 2]
+    value = 0
+    for r in range(low_freq):
+        for c in range(low_freq):
+            value = (value << 1) | (1 if low[r][c] > med else 0)
+    width = (low_freq * low_freq + 3) // 4
+    return f"{value:0{width}x}"
+
+
 @dataclass
 class VisualCapture:
     png_bytes: bytes
@@ -55,6 +124,9 @@ class VisualCapture:
     sha256: str
     width: int
     height: int
+    # DCT perceptual hash (hex). Empty only for legacy captures produced
+    # before pHash existed; the pipeline falls back to the aHash then.
+    phash: str = ""
 
 
 _DEFAULT_BROWSER_UA = (
@@ -204,6 +276,12 @@ def _capture_screenshot_inline(
     ahash = average_hash(png)
     sha = hashlib.sha256(png).hexdigest()
 
+    try:
+        phash = perceptual_hash(png)
+    except Exception as phash_exc:  # noqa: BLE001 - degrade to the legacy aHash
+        logger.warning("phash_failed error=%s", phash_exc)
+        phash = ""
+
     width, height = 0, 0
     try:
         from PIL import Image
@@ -213,7 +291,14 @@ def _capture_screenshot_inline(
     except Exception as dim_exc:  # noqa: BLE001 - dimensions are metadata
         logger.debug("image_dimensions_unavailable error=%s", dim_exc)
 
-    return VisualCapture(png_bytes=png, ahash=ahash, sha256=sha, width=width, height=height)
+    return VisualCapture(
+        png_bytes=png,
+        ahash=ahash,
+        sha256=sha,
+        width=width,
+        height=height,
+        phash=phash,
+    )
 
 
 def _capture_screenshot_subprocess(
@@ -308,6 +393,7 @@ def _capture_screenshot_subprocess(
             sha256=str(meta.get("sha256") or hashlib.sha256(png).hexdigest()),
             width=width,
             height=height,
+            phash=str(meta.get("phash") or ""),
         )
 
 
@@ -352,9 +438,12 @@ def capture_screenshot(
 
 
 def visual_to_fetch_result(capture: VisualCapture, *, url: str) -> FetchResult:
-    """Represent visual capture as FetchResult for pipeline (normalized = ahash line)."""
+    """Represent visual capture as FetchResult for pipeline (normalized = hashes)."""
     normalized = (
-        f"ahash:{capture.ahash}\nsha256:{capture.sha256}\nsize:{capture.width}x{capture.height}"
+        f"ahash:{capture.ahash}\n"
+        f"phash:{capture.phash}\n"
+        f"sha256:{capture.sha256}\n"
+        f"size:{capture.width}x{capture.height}"
     )
     return FetchResult(
         final_url=url,
@@ -366,21 +455,73 @@ def visual_to_fetch_result(capture: VisualCapture, *, url: str) -> FetchResult:
     )
 
 
-def visual_diff_summary(prev_text: str, new_text: str, *, threshold: int = 5) -> tuple[str, str]:
-    """Return (summary, text_diff) for visual hashes stored in normalized_text."""
+def _parse_hash(text: str, key: str) -> str:
+    """Extract a hash value from a normalized visual snapshot blob."""
+    for line in (text or "").splitlines():
+        if line.startswith(f"{key}:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def visual_diff_summary(
+    prev_text: str,
+    new_text: str,
+    *,
+    threshold: int = 5,
+    phash_threshold: int | None = None,
+) -> tuple[str, str]:
+    """Return (summary, text_diff) for visual hashes stored in normalized_text.
+
+    The pHash (DCT) digest is compared when both snapshots carry one; the
+    legacy aHash is only used as a fallback for snapshots taken before pHash
+    existed.  ``threshold`` applies to the aHash path, ``phash_threshold`` to
+    the pHash path (defaults to the configured value).
+    """
 
     def _parse_ahash(t: str) -> str:
-        for line in t.splitlines():
-            if line.startswith("ahash:"):
-                return line.split(":", 1)[1].strip()
-        return t.strip()
+        return _parse_hash(t, "ahash") or (t or "").strip()
 
     pa, na = _parse_ahash(prev_text), _parse_ahash(new_text)
-    dist = hamming_distance_hex(pa, na) if pa and na else 64
-    similar = dist <= threshold
-    if similar:
-        summary = f"Visual similar (ahash distance={dist})"
+    pp, np_ = _parse_hash(prev_text, "phash"), _parse_hash(new_text, "phash")
+
+    used = "ahash"
+    if pp and np_:
+        pa, na = pp, np_
+        used = "phash"
+        if phash_threshold is None:
+            from app.config import get_settings
+
+            # getattr with a default: a worker process still running an older
+            # config module must not crash the check.
+            phash_threshold = int(getattr(get_settings(), "visual_phash_threshold", 8))
+        active_threshold = phash_threshold
     else:
-        summary = f"Visual change detected (ahash distance={dist}, threshold={threshold})"
-    diff = f"previous ahash: {pa}\nnew ahash:      {na}\ndistance:       {dist}\n"
+        active_threshold = threshold
+
+    try:
+        dist = hamming_distance_hex(pa, na) if pa and na else None
+    except ValueError:
+        # Corrupt / non-hex digest: never silently call it "unchanged".
+        dist = None
+
+    if dist is None:
+        summary = f"Visual change detected ({used} unreadable – treated as changed)"
+        diff = (
+            f"previous {used}: {pa or '(unreadable)'}\n"
+            f"new {used}:      {na or '(unreadable)'}\n"
+            "distance:       unknown\n"
+        )
+        return summary, diff
+
+    similar = dist <= active_threshold
+    if similar:
+        summary = f"Visual similar ({used} distance={dist})"
+    else:
+        summary = f"Visual change detected ({used} distance={dist}, threshold={active_threshold})"
+    diff = (
+        f"previous {used}: {pa}\n"
+        f"new {used}:      {na}\n"
+        f"distance:       {dist}\n"
+        f"threshold:      {active_threshold}\n"
+    )
     return summary, diff
