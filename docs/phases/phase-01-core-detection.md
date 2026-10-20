@@ -10,7 +10,7 @@ Status: **Shipped** (historical record).
 
 | Capability | Implementation |
 | ---------- | -------------- |
-| SSRF-safe fetch | `app/services/http_fetch.py` (target allowlist/blocklist, redirect limits) |
+| SSRF-safe fetch | `app/security/ssrf.py` + `app/services/fetcher.py` (target allowlist/blocklist, redirect limits, pinned fetcher) |
 | Extract / normalize / hash / diff | `app/services/pipeline.py` (+ `readability.py`, category/type classification) |
 | Baseline rule | First successful run sets the baseline — no alert on baseline |
 | Runs / snapshots / change events | `MonitorRun`, `Snapshot`, `ChangeEvent` (`docs/architecture.md`) |

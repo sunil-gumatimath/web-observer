@@ -202,7 +202,7 @@ Status: Proposed only — see ADR 007; threat model still prohibits until accept
 ### 5.4 Real-Time Streaming via Server-Sent Events (SSE)
 
 * **Status: partially shipped.** The stream endpoint
-  (`GET /api/v1/workspaces/{ws}/monitors/{id}/stream`) is live and drives the
+  (`GET /api/v1/workspaces/{ws}/monitors/{id}/events`) is live and drives the
   monitor detail page. Worker/scheduler/reaper status transitions publish
   instantly via Redis-backed ORM `after_flush` wakeup hints
   (`backend/app/services/live_events.py`, best-effort — the stream always

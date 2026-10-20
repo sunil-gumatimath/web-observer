@@ -49,3 +49,6 @@ DESIGN.md
 
 # Local Redis persistence
 dump.rdb
+
+# Local implementation spec
+newmodes.md

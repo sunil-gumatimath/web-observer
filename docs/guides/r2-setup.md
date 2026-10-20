@@ -1,7 +1,7 @@
 # Cloudflare R2 for snapshots (10GB free, zero egress)
 
-Backend already speaks S3/R2 via boto3 (`backend/app/services/storage.py:70`,
-`backend/app/config.py:58-66`). No code change needed — only env + secrets.
+Backend already speaks S3/R2 via boto3 (`backend/app/services/storage.py:67`,
+`backend/app/config.py:120-127`). No code change needed — only env + secrets.
 
 ## Secrets required (you create these)
 

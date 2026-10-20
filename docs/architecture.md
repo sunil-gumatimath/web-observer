@@ -18,7 +18,7 @@ flowchart TB
         API["FastAPI app.main:app\n/health /ready /api/v1/*"]
         AUTH["auth.py\nClerk JWT + mtw_ API keys + X-Internal-Token"]
         RUNS["routers/monitors.py\nGET /workspaces/{id}/runs (Logs) + CSV/JSON\nexport via services/run_logs.py"]
-        LIVE["SSE stream\nGET /monitors/{id}/stream\n1h lifetime, 15s heartbeats,\n1.5s poll-tick fallback"]
+        LIVE["SSE stream\nGET /monitors/{id}/events\n1h lifetime, 15s heartbeats,\n1.5s poll-tick fallback"]
     end
     subgraph SchedProc["Scheduler process"]
         SCHED["app.scheduler\nclaim_due_monitors + lease + reap"]
@@ -47,7 +47,7 @@ flowchart TB
     OBJ[("Object storage\nlocal disk or S3 snapshots")]
 
     UI -->|"HTTPS + Bearer/JWT"| API
-    UI -->|"opens SSE /monitors/{id}/stream\n+ receives run-status events"| LIVE
+    UI -->|"opens SSE /monitors/{id}/events\n+ receives run-status events"| LIVE
     API --> AUTH
     AUTH --> CLERK
     API --> NEO
@@ -182,12 +182,12 @@ classDiagram
         +UUID new_snapshot_id
         +UUID previous_snapshot_id
         +String diff_summary
-        +String ai_summary  (noise_reason surfaced here as [Conditional]/[AI triage] prefix)
+        +String ai_summary  (the model's own summary; a marker line prefixes it when the change was held back)
         +String title  (migration 012)
         +String impact  critical|high|medium|low (012)
         +float confidence  0.0-1.0 (012)
         +bool is_noise
-        +String noise_reason  (triage reason in ai_summary text, no dedicated column)
+        +String noise_reason  (triage reason on the marker line of ai_summary, no dedicated column)
         +bool is_read
     }
     class NotificationChannel {
@@ -294,7 +294,7 @@ sequenceDiagram
     participant WH as Webhook Worker
     participant EXT as Resend/Slack/Targets
 
-    U->>SSE: open GET /workspaces/{ws}/monitors/{id}/stream
+    U->>SSE: open GET /workspaces/{ws}/monitors/{id}/events
     note over SSE: 1h lifetime · 15s heartbeat · Redis hints wake it early,<br/>else it re-reads DB on a 1.5s poll tick
 
     S->>DB: claim_due_monitors (SELECT .. FOR UPDATE SKIP LOCKED)
@@ -388,7 +388,7 @@ flowchart TD
     T -->|met| L[enrich_change — AI summary + title/impact/confidence\nwatch_note triage + semantic_trigger]
     L --> Q{AI-triaged noise?}
     Q -->|yes| S
-    Q -->|no signal| V[capture screenshot when screenshots_enabled\nscreenshots/{monitor_id}/{run_id}.png]
+    Q -->|no signal| V[capture screenshot when screenshots_enabled\nscreenshots/{monitor_id}/{change.run_id}.png]
     V --> M[queue NotificationOutbox\nper enabled channel]
     M --> N[enqueue WebhookDelivery\nper enabled endpoint]
     N --> O[(CHANGE DETECTED\nnotify out)]
@@ -437,7 +437,7 @@ flowchart TB
 * **Rate limiting** (`app/rate_limit.py`): default 60/min per verified principal (or IP), enforced on every route by `SlowAPIMiddleware` (decorated endpoints keep stricter limits). Counters are shared via Redis; when Redis is unreachable the limiter **fails open** to per-process in-memory counters with automatic recovery (`in_memory_fallback_enabled`), so a Redis outage cannot turn unrelated requests into 500s.
 * **Delivery reliability (review follow-ups)**: outbox and webhook sends claim rows atomically (`PENDING→PROCESSING`) with an attempts cap and a reaper that re-enqueues abandoned rows; usage counters use Postgres `ON CONFLICT` upserts + atomic increments; the browser-check daily quota is plan-aware with a once-per-run reservation; the stuck-run reaper uses a fenced conditional `UPDATE...WHERE status`, and `run_guard` refuses to run hooks/claims for runs not in `scheduled`/`queued` — preventing double-sends after retries.
 * **SSRF guard** (`security/ssrf.py`): blocks private/loopback/link-local/metadata IPs and credentialed URLs before any fetch; redirects are re-validated in the fetcher. The pinned fetcher (`services/fetcher.py:_pinned_get`) tries every validated IP in turn, so one dead CDN PoP can't fail a check — only connect-level errors trigger failover. `readme` monitors hit the GitHub API first (default-branch aware), then capped raw probes.
-* **Newer endpoints not in the diagrams above**: `GET .../runs` (workspace run logs, shared filters via `services/run_logs.py`), `GET .../export/runs` (CSV/JSON, 20k-run cap, audited), `GET .../monitors/{id}/stream` (SSE live run status), `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`.
+* **Newer endpoints not in the diagrams above**: `GET .../runs` (workspace run logs, shared filters via `services/run_logs.py`), `GET .../export/runs` (CSV/JSON, 20k-run cap, audited), `GET .../monitors/{id}/events` (SSE live run status), `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`.
 * **Live status streaming** (`services/live_events.py`): an ORM `after_flush` hook installed in `models/__init__.py` publishes best-effort Redis hints on every `MonitorRun.status` write site (pipeline, workers, scheduler, reaper) — one hook instead of ~15 instrumented call sites. The SSE endpoint always re-reads authoritative state from Postgres before emitting, so a lost or spurious hint changes latency only, never correctness. Without Redis the publisher circuit-breaks and the stream falls back to a 1.5s poll tick.
 * **Run-status staging** (`services/pipeline.py`): the terminal `SUCCEEDED` status is staged only on paths that commit immediately, so the pre-commit reaper fence never reads a run's own staged value as external news (a reaper bug once rolled back genuine changes on the *changed* path); the fence probe goes through a fresh session.
 * **Quotas/plans** (`services/usage.py`, `services/plans.py`): daily check/notification/storage counters per workspace, gated by plan.
