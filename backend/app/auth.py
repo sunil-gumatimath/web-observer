@@ -13,7 +13,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
 import jwt
 from fastapi import BackgroundTasks, Depends, Header, HTTPException, Request, status
 from jwt import PyJWKClient
@@ -78,7 +77,8 @@ def verify_clerk_token(token: str, settings: Settings) -> dict[str, Any]:
             algorithms=["RS256"],
             issuer=settings.clerk_issuer,
             options={"verify_aud": False},  # Clerk session tokens often omit aud
-            leeway=10,
+            # 60s leeway to tolerate local clock skew/drift against Clerk servers
+            leeway=60,
         )
         return payload
     except jwt.PyJWTError as exc:
@@ -366,31 +366,3 @@ def list_user_workspaces(db: Session, principal: AuthPrincipal) -> list[Workspac
             .order_by(Workspace.created_at)
         ).all()
     )
-
-
-def fetch_clerk_user_email(clerk_user_id: str, settings: Settings) -> str | None:
-    """Optional: resolve email via Clerk Backend API when JWT lacks email claim."""
-    if not settings.clerk_secret_key:
-        return None
-    try:
-        from app.security.ssl_context import get_ssl_context
-
-        resp = httpx.get(
-            f"https://api.clerk.com/v1/users/{clerk_user_id}",
-            headers={"Authorization": f"Bearer {settings.clerk_secret_key}"},
-            timeout=10.0,
-            verify=get_ssl_context(),
-        )
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        addresses = data.get("email_addresses") or []
-        primary_id = data.get("primary_email_address_id")
-        for addr in addresses:
-            if addr.get("id") == primary_id:
-                return addr.get("email_address")
-        if addresses:
-            return addresses[0].get("email_address")
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("clerk_user_lookup_failed error=%s", exc)
-    return None

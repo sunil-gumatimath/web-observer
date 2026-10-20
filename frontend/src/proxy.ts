@@ -16,6 +16,7 @@ import { NextResponse } from "next/server";
  */
 const clerkKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const devModeEnabled = process.env.NODE_ENV !== "production";
+const clockSkewInMs = Number(process.env.CLERK_CLOCK_SKEW_MS ?? "60000");
 
 // Pass-through is strictly a dev-mode convenience.  In a production build the
 // Clerk proxy always runs (even without a publishable key) so requests fail
@@ -24,7 +25,9 @@ export default devModeEnabled && !clerkKey
   ? function proxy() {
       return NextResponse.next();
     }
-  : clerkMiddleware();
+  : clerkMiddleware({
+      clockSkewInMs: Number.isFinite(clockSkewInMs) ? clockSkewInMs : 60_000,
+    });
 
 export const config = {
   matcher: [
