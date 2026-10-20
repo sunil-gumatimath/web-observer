@@ -75,13 +75,92 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
     meta.description = (meta.description or "").strip()[:500] or None
 
     hero_candidates: list[str] = []
-    for key in ("og:image", "og:image:secure_url", "twitter:image", "image"):
+    # 1. Standard OpenGraph, Twitter, and Product meta tags
+    for key in (
+        "og:image",
+        "og:image:url",
+        "og:image:secure_url",
+        "twitter:image",
+        "twitter:image:src",
+        "product:image",
+        "product:image:url",
+        "image",
+    ):
         val = _content_for(key)
         if val:
             u = _abs(final_url, val)
             if u and u not in hero_candidates:
                 hero_candidates.append(u)
-    # Also collect any <meta itemprop="image"> already covered via _content_for
+
+    # 2. Rel image links (image_src, startup image)
+    for sel in ('link[rel="image_src"]', 'link[rel="apple-touch-startup-image"]'):
+        for node in scope.css(sel):
+            href = node.attributes.get("href")
+            if href:
+                u = _abs(final_url, href)
+                if u and u not in hero_candidates:
+                    hero_candidates.append(u)
+
+    # 3. Schema.org JSON-LD product/item images (e-commerce standard: Shopify, Amazon, WooCommerce, etc.)
+    import json
+    for node in scope.css('script[type="application/ld+json"]'):
+        try:
+            raw = (node.text() or "").strip()
+            if not raw:
+                continue
+            data = json.loads(raw)
+            items = data if isinstance(data, list) else [data]
+            if isinstance(data, dict) and "@graph" in data and isinstance(data["@graph"], list):
+                items.extend(data["@graph"])
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                img_val = item.get("image")
+                if not img_val:
+                    continue
+                cand_urls: list[str] = []
+                if isinstance(img_val, str):
+                    cand_urls.append(img_val)
+                elif isinstance(img_val, list):
+                    for elem in img_val:
+                        if isinstance(elem, str):
+                            cand_urls.append(elem)
+                        elif isinstance(elem, dict) and "url" in elem and isinstance(elem["url"], str):
+                            cand_urls.append(elem["url"])
+                        elif isinstance(elem, dict) and "contentUrl" in elem and isinstance(elem["contentUrl"], str):
+                            cand_urls.append(elem["contentUrl"])
+                elif isinstance(img_val, dict):
+                    if "url" in img_val and isinstance(img_val["url"], str):
+                        cand_urls.append(img_val["url"])
+                    elif "contentUrl" in img_val and isinstance(img_val["contentUrl"], str):
+                        cand_urls.append(img_val["contentUrl"])
+                for c in cand_urls:
+                    u = _abs(final_url, c)
+                    if u and u not in hero_candidates:
+                        hero_candidates.append(u)
+        except Exception:
+            continue
+
+    # 4. Fallback product image HTML elements if still empty
+    if not hero_candidates:
+        for sel in (
+            'img[itemprop="image"]',
+            'img#landingImage',
+            'img.product-featured-image',
+            'img.product__image',
+            'img[data-main-image]',
+        ):
+            for node in scope.css(sel):
+                src = (
+                    node.attributes.get("data-old-hires")
+                    or node.attributes.get("data-src")
+                    or node.attributes.get("src")
+                )
+                if src:
+                    u = _abs(final_url, src)
+                    if u and u not in hero_candidates:
+                        hero_candidates.append(u)
+
     meta.hero_candidates = hero_candidates
 
     logo_candidates: list[str] = []

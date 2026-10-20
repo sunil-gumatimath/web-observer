@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 import uuid
@@ -11,7 +12,7 @@ from sqlalchemy import create_engine, text
 
 from app.config import get_settings
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("API_BASE", "http://127.0.0.1:8002")
 HEADERS = {
     "X-Internal-Token": "dev-internal-token",
     "Content-Type": "application/json",

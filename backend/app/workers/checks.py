@@ -9,7 +9,7 @@ import dramatiq
 
 from app.config import get_settings
 from app.models import Monitor
-from app.models.entities import RunStatus
+from app.models.entities import PLAIN_HTTP_MODES, RunStatus
 from app.services.fetcher import FetchError, FetchResult, fetch_url
 from app.services.sitemap import SitemapError, sitemap_monitor_text
 from app.workers.broker import redis_broker  # noqa: F401
@@ -27,12 +27,11 @@ def run_http_check(run_id: str) -> None:
     """Execute a single HTTP monitor run end-to-end."""
 
     def _pre_run_hook(monitor, run, db):
-        # Misrouted browser job. site_links/readme must stay on THIS worker even when
-        # js_required is set: their fetch paths are plain HTTP, so handing them to
-        # Playwright would snapshot the wrong content.
+        # Misrouted browser job. site_links/rss_feed/readme must stay on THIS
+        # worker even when js_required is set: their fetch paths are plain
+        # HTTP, so handing them to Playwright would snapshot the wrong content.
         if (monitor.js_required or monitor.mode == "visual") and monitor.mode not in (
-            MODE_SITE_LINKS,
-            MODE_README,
+            PLAIN_HTTP_MODES
         ):
             from app.workers.browser_checks import run_browser_check
 

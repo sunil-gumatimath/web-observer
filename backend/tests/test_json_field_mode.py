@@ -121,9 +121,15 @@ def test_create_accepts_json_field_with_path() -> None:
     assert m.css_selector == "$.data.price"
 
 
-def test_update_rejects_json_field_without_path() -> None:
+def test_update_rejects_json_field_with_blanked_path() -> None:
+    """An explicit blank path is rejected at the schema layer.
+
+    Switching mode *without* touching the selector is legal here: the monitor
+    may already carry a selector, and only the router knows the merged state
+    (it rejects the PATCH with 400 when the merged monitor has no path).
+    """
     with pytest.raises(ValidationError, match="json_field"):
-        MonitorUpdate(mode="json_field")
+        MonitorUpdate(mode="json_field", css_selector=None)
 
 
 def test_update_accepts_json_field_with_path() -> None:

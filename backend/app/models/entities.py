@@ -40,6 +40,7 @@ class MonitorMode(enum.StrEnum):
                       (e.g. ``$.data.price``); the URL must return JSON.
     ``RSS_FEED``      RSS/Atom feed item list; diff on GUID/link.
     ``README``        GitHub repo README.md markdown; tracks doc changes.
+    ``VISUAL``        full-page screenshot compared by perceptual aHash distance.
     """
 
     PAGE_CONTENT = "page_content"
@@ -55,8 +56,35 @@ class MonitorMode(enum.StrEnum):
 # Single source of truth for valid mode strings. API schemas, bulk import,
 # and the pipeline all validate against this — never inline a local tuple.
 MONITOR_MODES: tuple[str, ...] = tuple(m.value for m in MonitorMode)
+
+# Modes whose normalized content is a list of items ("- [text](href)" lines).
+# They are diffed item-by-item (added / removed) instead of line-by-line.
 LIST_DIFF_MODES: frozenset[str] = frozenset(
-    (MonitorMode.SITE_LINKS.value, MonitorMode.LIST_ITEMS.value)
+    (
+        MonitorMode.SITE_LINKS.value,
+        MonitorMode.LIST_ITEMS.value,
+        MonitorMode.RSS_FEED.value,
+    )
+)
+
+# Modes that are always fetched over plain HTTP. Playwright would snapshot the
+# wrong content for them, so js_required is rejected at the API layer and the
+# workers bounce them back onto the HTTP queue as defense in depth.
+PLAIN_HTTP_MODES: frozenset[str] = frozenset(
+    (
+        MonitorMode.SITE_LINKS.value,
+        MonitorMode.RSS_FEED.value,
+        MonitorMode.README.value,
+    )
+)
+
+# Modes that extract a single numeric value — they get a value-history chart
+# and numeric thresholds.
+VALUE_MODES: frozenset[str] = frozenset(
+    (
+        MonitorMode.PRODUCT_PRICE.value,
+        MonitorMode.JSON_FIELD.value,
+    )
 )
 
 

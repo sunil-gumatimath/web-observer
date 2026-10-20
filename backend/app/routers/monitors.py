@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -31,7 +32,13 @@ from app.models import (
     Snapshot,
     Workspace,
 )
-from app.models.entities import LIST_DIFF_MODES, RunStatus
+from app.models.entities import (
+    LIST_DIFF_MODES,
+    MONITOR_MODES,
+    PLAIN_HTTP_MODES,
+    VALUE_MODES,
+    RunStatus,
+)
 from app.rate_limit import limiter
 from app.schemas import (
     AlertInboxItem,
@@ -341,7 +348,7 @@ def list_monitors(
         .select_from(Monitor)
         .outerjoin(latest_ce, true())
         .where(Monitor.workspace_id == workspace_id)
-        .order_by(Monitor.created_at)
+        .order_by(Monitor.created_at.desc())
     ).all()
 
     monitors: list[Monitor] = []
@@ -411,17 +418,19 @@ def create_monitor(
         )
 
     if body.mode == "readme":
-        # Validate GitHub repo format instead of generic SSRF http check
+        # Validate the GitHub repo and store its canonical URL so share links
+        # and alert emails never show a bare "owner/repo" shorthand.
         try:
-            from app.services.readme import parse_github_repo
+            from app.services.readme import normalize_readme_url
 
-            parse_github_repo(body.url)
+            readme_url = normalize_readme_url(body.url)
         except Exception as exc:  # noqa: BLE001
             code = getattr(exc, "code", "invalid_url")
             raise HTTPException(
                 status_code=400, detail={"error_code": code, "message": str(exc)}
             ) from exc
     else:
+        readme_url = body.url
         try:
             # No DNS at create time: the worker re-validates with resolve_dns=True
             # before any outbound fetch. Doing it here only added ~20-70ms per
@@ -438,7 +447,7 @@ def create_monitor(
     monitor = Monitor(
         workspace_id=workspace_id,
         name=body.name,
-        url=body.url,
+        url=readme_url,
         mode=body.mode,
         css_selector=body.css_selector,
         schedule_interval_minutes=body.schedule_interval_minutes,
@@ -559,6 +568,13 @@ class SitemapCreateIn(BaseModel):
         for u in v:
             if len(u) > 2048:
                 raise ValueError("individual URLs are capped at 2048 characters")
+        return v
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        if v not in MONITOR_MODES:
+            raise ValueError(f"mode must be one of {', '.join(MONITOR_MODES)}")
         return v
 
 
@@ -764,14 +780,20 @@ def update_monitor(
     bumps_config = bool(config_fields & data.keys())
     # alert_config changes do not bump config_version (thresholds don't affect baseline)
 
-    if "url" in data and data["url"] is not None:
-        # Determine effective mode after patch (body.mode may be None)
-        effective_mode = data.get("mode") or monitor.mode
-        if effective_mode == "readme":
-            try:
-                from app.services.readme import parse_github_repo
+    # Effective mode after this PATCH (body.mode may be absent from the payload).
+    effective_mode = data.get("mode") or monitor.mode
 
-                parse_github_repo(str(data["url"]))
+    if "url" in data:
+        if data["url"] is None:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="url cannot be null")
+        if effective_mode == "readme":
+            # Store the canonical GitHub URL so share links and alert emails
+            # never show a bare "owner/repo" shorthand.
+            try:
+                from app.services.readme import normalize_readme_url
+
+                data["url"] = normalize_readme_url(str(data["url"]))
             except Exception as exc:  # noqa: BLE001
                 code = getattr(exc, "code", "invalid_url")
                 raise HTTPException(
@@ -784,6 +806,25 @@ def update_monitor(
                 raise HTTPException(
                     status_code=400, detail={"error_code": exc.code, "message": str(exc)}
                 ) from exc
+    elif effective_mode == "readme" and "mode" in data:
+        # Switching an existing monitor to readme mode: its current URL must
+        # be a GitHub repository, otherwise every run would fail.
+        try:
+            from app.services.readme import normalize_readme_url
+
+            data["url"] = normalize_readme_url(str(monitor.url))
+        except Exception as exc:  # noqa: BLE001
+            code = getattr(exc, "code", "invalid_url")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error_code": code,
+                    "message": (
+                        f"{exc} — set the monitor's URL to a GitHub repository "
+                        "when switching it to readme mode"
+                    ),
+                },
+            ) from exc
 
     for key, value in data.items():
         if key == "tags":
@@ -793,6 +834,33 @@ def update_monitor(
     if "schedule_interval_minutes" in data and data["schedule_interval_minutes"] is not None:
         monitor.base_interval_minutes = data["schedule_interval_minutes"]
         monitor.consecutive_unchanged = 0
+
+    # --- merged-state validation -------------------------------------------
+    # The schema validators only see the payload; these checks see the state
+    # the monitor is actually about to be stored with.
+    if effective_mode in ("list_items", "json_field"):
+        if not (monitor.css_selector or "").strip():
+            db.rollback()
+            detail = "css_selector is required for list_items monitors"
+            if effective_mode == "json_field":
+                detail = (
+                    "css_selector is required for json_field monitors "
+                    "(a JSON path like $.data.price)"
+                )
+            raise HTTPException(status_code=400, detail=detail)
+    if effective_mode == "visual":
+        # Visual monitors always run through the browser worker and always
+        # attach a screenshot to alerts (mirrors MonitorCreate).
+        monitor.js_required = True
+        monitor.screenshots_enabled = True
+    if effective_mode in PLAIN_HTTP_MODES and monitor.js_required:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{effective_mode} monitors fetch over plain HTTP; js_required is not supported"
+            ),
+        )
 
     if bumps_config:
         monitor.config_version += 1
@@ -804,30 +872,6 @@ def update_monitor(
                 mode=monitor.mode,
                 css_selector=monitor.css_selector,
             )
-        )
-
-    # A PATCH can flip js_required without resending mode, so validate the
-    # combined state here as well (the schema validator only sees the payload).
-    if monitor.mode == "site_links" and monitor.js_required:
-        db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "site_links monitors fetch the sitemap over plain HTTP; "
-                "js_required is not supported"
-            ),
-        )
-    if monitor.mode == "rss_feed" and monitor.js_required:
-        db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="rss_feed monitors fetch RSS over plain HTTP; js_required is not supported",
-        )
-    if monitor.mode == "readme" and monitor.js_required:
-        db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="readme monitors fetch the README over plain HTTP; js_required is not supported",
         )
 
     # PATCH re-enabling a paused monitor should schedule next run promptly
@@ -1030,7 +1074,8 @@ def pause_all_monitors(
         .values(enabled=False)
     )
     db.commit()
-    return {"updated": res.rowcount}
+    # rowcount exists on CursorResult; the Result stub omits it.
+    return {"updated": res.rowcount}  # type: ignore[attr-defined]
 
 
 @router.post("/workspaces/{workspace_id}/monitors/resume-all")
@@ -1047,7 +1092,8 @@ def resume_all_monitors(
         .values(enabled=True, next_run_at=now)
     )
     db.commit()
-    return {"updated": res.rowcount}
+    # rowcount exists on CursorResult; the Result stub omits it.
+    return {"updated": res.rowcount}  # type: ignore[attr-defined]
 
 
 @router.post(
@@ -1196,7 +1242,9 @@ def get_run(
             ChangeEvent.run_id == run.id, ChangeEvent.workspace_id == workspace_id
         )
     )
-    return run_log_out(run, monitor, change_id=change_id, changed=change_id is not None)
+    return MonitorRunDetailOut(
+        **run_log_out(run, monitor, change_id=change_id, changed=change_id is not None).model_dump()
+    )
 
 
 @router.get("/workspaces/{workspace_id}/runs", response_model=RunLogPage)
@@ -1296,7 +1344,7 @@ def value_history(
     from app.services.conditional import parse_monitor_value
 
     monitor = _get_monitor(db, workspace_id, monitor_id)
-    if monitor.mode not in ("product_price", "json_field"):
+    if monitor.mode not in VALUE_MODES:
         return ValueHistoryOut(monitor_id=monitor.id, mode=monitor.mode, points=[])
     rows = list(
         db.execute(
@@ -1321,7 +1369,7 @@ UNCATEGORIZED_ACTIVITY = "uncategorized"
 
 
 def _bucket_activity(
-    rows: list[tuple[datetime | None, str | None]],
+    rows: Sequence[tuple[datetime | None, str | None]],
     start_day,
     days: int,
 ) -> tuple[list[int], list[dict[str, int]]]:
@@ -1783,6 +1831,14 @@ def get_snapshot(
         except StorageError:
             raw_url = None
 
+    if not raw_url and snap.raw_object_key:
+        if snap.raw_object_key.startswith("screenshots/"):
+            raw_url = f"/api/v1/public/assets/{snap.raw_object_key}"
+        elif snap.run_id and snap.content_type and "image" in snap.content_type:
+            raw_url = f"/api/v1/public/assets/screenshots/{snap.monitor_id}/{snap.run_id}.png"
+        else:
+            raw_url = f"/api/v1/workspaces/{workspace_id}/snapshots/{snapshot_id}/raw"
+
     full_text = snap.normalized_text or ""
     snap_key = getattr(snap, "text_object_key", None)
     if snap_key:
@@ -1810,6 +1866,33 @@ def get_snapshot(
         normalized_text=full_text or "",
         raw_download_url=raw_url,
         created_at=snap.created_at,
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/snapshots/{snapshot_id}/raw",
+)
+def get_snapshot_raw(
+    workspace_id: UUID,
+    snapshot_id: UUID,
+    db: Db,
+    _workspace: AnyWs,
+) -> Response:
+    snap = db.scalar(
+        select(Snapshot).where(Snapshot.id == snapshot_id, Snapshot.workspace_id == workspace_id)
+    )
+    if snap is None or not snap.raw_object_key:
+        raise HTTPException(status_code=404, detail="Snapshot raw content not found")
+    data = get_bytes(snap.raw_object_key)
+    if not data:
+        if snap.run_id and snap.content_type and "image" in snap.content_type:
+            data = get_bytes(f"screenshots/{snap.monitor_id}/{snap.run_id}.png")
+        if not data:
+            raise HTTPException(status_code=404, detail="Snapshot raw content missing from storage")
+    return Response(
+        content=data,
+        media_type=snap.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="snapshot-{snap.id}"'},
     )
 
 

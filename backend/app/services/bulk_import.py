@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Monitor, MonitorConfigVersion, Workspace
-from app.models.entities import MONITOR_MODES
+from app.models.entities import MONITOR_MODES, PLAIN_HTTP_MODES
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.plans import assert_can_create_monitor, get_plan
 
@@ -95,11 +95,74 @@ def import_monitors(
                 }
             )
             continue
-        try:
-            validate_url_for_fetch(row["url"], resolve_dns=True)
-        except SSRFError as exc:
-            result.errors.append({"row": str(idx), "error": str(exc)})
+
+        # Validate the mode first — it decides how the URL is interpreted
+        # (readme URLs are GitHub repos, not fetchable URLs).
+        #
+        # Validate against the shared MONITOR_MODES constant (single source
+        # of truth on MonitorMode) instead of an inline tuple. An unknown mode
+        # is an error, not a silent downgrade — silently creating a
+        # "page_content" monitor would hide the typo from the user.
+        mode = row["mode"]
+        if mode not in MONITOR_MODES:
+            result.errors.append(
+                {
+                    "row": str(idx),
+                    "error": f"unknown mode '{mode}' (expected one of {', '.join(MONITOR_MODES)})",
+                }
+            )
             continue
+        if mode in ("list_items", "json_field") and not row["css_selector"]:
+            result.errors.append(
+                {
+                    "row": str(idx),
+                    "error": (
+                        f"{mode} mode requires a css_selector"
+                        + (" (a JSON path like $.data.price)" if mode == "json_field" else "")
+                    ),
+                }
+            )
+            continue
+        if mode in PLAIN_HTTP_MODES and row["js_required"]:
+            # These modes fetch over plain HTTP; routing them through the
+            # browser worker would snapshot the rendered page, not the
+            # sitemap / feed / README.
+            result.errors.append(
+                {
+                    "row": str(idx),
+                    "error": f"{mode} mode does not support js_required",
+                }
+            )
+            continue
+        js_required = row["js_required"]
+        if mode == "visual":
+            # Visual monitors always need the browser worker and a screenshot
+            # on alerts (mirrors MonitorCreate).
+            js_required = True
+            screenshots_enabled = True
+        else:
+            screenshots_enabled = False
+
+        if mode == "readme":
+            # Store the canonical GitHub URL so share links and alert emails
+            # never show a bare "owner/repo" shorthand.
+            try:
+                from app.services.readme import normalize_readme_url
+
+                url = normalize_readme_url(row["url"])
+            except Exception as exc:  # noqa: BLE001
+                result.errors.append({"row": str(idx), "error": str(exc)})
+                continue
+            if url in existing_urls:
+                result.skipped.append({"row": str(idx), "reason": "duplicate url", "url": url})
+                continue
+        else:
+            url = row["url"]
+            try:
+                validate_url_for_fetch(url, resolve_dns=True)
+            except SSRFError as exc:
+                result.errors.append({"row": str(idx), "error": str(exc)})
+                continue
 
         try:
             assert_can_create_monitor(db, workspace)
@@ -107,30 +170,10 @@ def import_monitors(
             result.errors.append({"row": str(idx), "error": str(exc)})
             break
 
-        # Validate against the shared MONITOR_MODES constant (single source
-        # of truth on MonitorMode) instead of an inline tuple.
-        mode = row["mode"] if row["mode"] in MONITOR_MODES else "page_content"
-        if mode == "list_items" and not row["css_selector"]:
-            result.errors.append(
-                {"row": str(idx), "error": "list_items mode requires a css_selector"}
-            )
-            continue
-        if mode == "site_links" and row["js_required"]:
-            # Sitemap monitors fetch over plain HTTP; routing them through the
-            # browser worker would snapshot the rendered page, not the sitemap.
-            result.errors.append(
-                {
-                    "row": str(idx),
-                    "error": "site_links mode does not support js_required",
-                }
-            )
-            continue
-        js_required = row["js_required"]
-
         mon = Monitor(
             workspace_id=workspace.id,
             name=row["name"][:255],
-            url=row["url"],
+            url=url,
             mode=mode,
             css_selector=row["css_selector"],
             schedule_interval_minutes=row["schedule_interval_minutes"],
@@ -141,6 +184,7 @@ def import_monitors(
             timeout_seconds=settings.default_timeout_seconds,
             max_response_bytes=settings.default_max_response_bytes,
             js_required=js_required,
+            screenshots_enabled=screenshots_enabled,
             ignore_selectors=row.get("ignore_selectors"),
             ignore_regexes=row.get("ignore_regexes"),
             alert_config=row.get("alert_config"),

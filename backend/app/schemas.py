@@ -34,6 +34,22 @@ def normalize_tags(v: list[str] | None) -> list[str] | None:
     return seen[:10] or None
 
 
+def _assert_readme_url(url: str) -> str:
+    """Validate a readme monitor URL and return its canonical GitHub form.
+
+    Raises ``ValueError`` (so Pydantic turns it into a 422) when the URL is
+    not a GitHub repository. The canonical form (``https://github.com/owner/repo``)
+    is what the router stores, so share links and alert emails never show a
+    bare ``owner/repo`` shorthand.
+    """
+    from app.services.readme import normalize_readme_url
+
+    try:
+        return normalize_readme_url(url)
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(str(exc)) from exc
+
+
 # ---- User-supplied caps (DoS boundaries) ------------------------------------
 # These are enforced at the schema layer so rejected payloads never reach the
 # pipeline; matching runtime guards exist in conditional.py / extract.py.
@@ -252,21 +268,10 @@ class MonitorCreate(BaseModel):
     @model_validator(mode="after")
     def check_readme_url(self) -> MonitorCreate:
         if self.mode == "readme":
-            import re
-
-            s = (self.url or "").strip()
-            # Accept http(s) github/raw URLs or owner/repo shorthand
-            if s.startswith("http://") or s.startswith("https://"):
-                # Must look like a GitHub or raw URL, or at least contain owner/repo somewhere
-                if "github" not in s.lower() and "raw.githubusercontent" not in s.lower():
-                    # Still allow any http(s) — raw fallback will try to parse; be permissive
-                    return self
-                return self
-            if re.match(r"^[\w.\-]+/[\w.\-]+$", s):
-                return self
-            raise ValueError(
-                "readme monitors require a GitHub repo: 'owner/repo' or 'https://github.com/owner/repo'"
-            )
+            # Must be a GitHub repository — the fetch path only ever talks to
+            # api.github.com / raw.githubusercontent.com, so any other host is
+            # guaranteed to fail after burning probes.
+            _assert_readme_url(self.url)
         else:
             # Non-readme modes must be http(s)
             if not (self.url.startswith("http://") or self.url.startswith("https://")):
@@ -369,20 +374,23 @@ class MonitorUpdate(BaseModel):
 
     @model_validator(mode="after")
     def check_list_items_selector(self) -> MonitorUpdate:
-        if self.mode == "list_items" and (
-            self.css_selector is None or not self.css_selector.strip()
-        ):
-            raise ValueError("css_selector is required for list_items monitors")
+        # Only reject when this PATCH explicitly blanks the selector. A PATCH
+        # that merely switches mode without resending the selector is legal —
+        # the router validates the *merged* state, which is the only place
+        # that knows the monitor's existing selector.
+        if self.mode == "list_items" and "css_selector" in self.model_fields_set:
+            if self.css_selector is None or not self.css_selector.strip():
+                raise ValueError("css_selector is required for list_items monitors")
         return self
 
     @model_validator(mode="after")
     def check_json_field_path(self) -> MonitorUpdate:
-        if self.mode == "json_field" and (
-            self.css_selector is None or not self.css_selector.strip()
-        ):
-            raise ValueError(
-                "css_selector is required for json_field monitors (a JSON path like $.data.price)"
-            )
+        if self.mode == "json_field" and "css_selector" in self.model_fields_set:
+            if self.css_selector is None or not self.css_selector.strip():
+                raise ValueError(
+                    "css_selector is required for json_field monitors "
+                    "(a JSON path like $.data.price)"
+                )
         return self
 
     @model_validator(mode="after")
@@ -403,33 +411,31 @@ class MonitorUpdate(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def apply_visual_defaults(self) -> MonitorUpdate:
+        # Visual monitors always need the browser worker and a screenshot on
+        # alerts — mirroring MonitorCreate. Without this, switching an
+        # existing monitor to visual mode would silently lose the screenshot.
+        if self.mode == "visual":
+            self.js_required = True
+            self.screenshots_enabled = True
+        return self
+
+    @model_validator(mode="after")
     def check_readme_url(self) -> MonitorUpdate:
-        # Only validate when url is being changed or mode is readme
-        if self.url is not None or self.mode == "readme":
-            url = self.url or ""
-            mode = self.mode
-            # need full check only if we know mode is readme or url looks like shorthand for non-readme
-            if mode == "readme" and url:
-                import re
-
-                s = url.strip()
-                if not (
-                    s.startswith("http://")
-                    or s.startswith("https://")
-                    or re.match(r"^[\w.\-]+/[\w.\-]+$", s)
-                ):
-                    raise ValueError(
-                        "readme monitors require a GitHub repo: 'owner/repo' or 'https://github.com/owner/repo'"
-                    )
-            elif url and not (url.startswith("http://") or url.startswith("https://")):
-                # For non-readme updates, shorthand is not allowed
-                import re
-
-                if re.match(r"^[\w.\-]+/[\w.\-]+$", url.strip()):
-                    # Could be user trying to set readme shorthand without changing mode — block
-                    raise ValueError(
-                        "url must start with http:// or https:// (owner/repo only for readme mode)"
-                    )
+        # Only validate when this PATCH touches the URL or the mode.
+        if self.url is None:
+            return self
+        if self.mode == "readme":
+            _assert_readme_url(self.url)
+            return self
+        # For non-readme updates the owner/repo shorthand is not allowed.
+        if not (self.url.startswith("http://") or self.url.startswith("https://")):
+            if re.match(r"^[\w.\-]+/[\w.\-]+$", self.url.strip()):
+                # Could be the user trying to set a readme shorthand without
+                # changing the mode — block it.
+                raise ValueError(
+                    "url must start with http:// or https:// (owner/repo only for readme mode)"
+                )
         return self
 
 
