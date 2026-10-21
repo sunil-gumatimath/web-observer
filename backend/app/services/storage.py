@@ -126,7 +126,6 @@ def put_bytes(
 
     from botocore.exceptions import BotoCoreError, ClientError
 
-    settings = get_settings()
     try:
         _client().put_object(
             Bucket=_bucket_for(key),
@@ -154,7 +153,6 @@ def get_bytes(key: str) -> bytes | None:
 
     from botocore.exceptions import BotoCoreError, ClientError
 
-    settings = get_settings()
     try:
         response = _client().get_object(Bucket=_bucket_for(key), Key=key)
         return response["Body"].read()
@@ -177,7 +175,6 @@ def object_exists(key: str) -> bool:
 
     from botocore.exceptions import BotoCoreError, ClientError
 
-    settings = get_settings()
     try:
         _client().head_object(Bucket=_bucket_for(key), Key=key)
         return True
@@ -220,7 +217,6 @@ def presigned_get_url(key: str, *, expires_in: int = 3600) -> str:
 
     from botocore.exceptions import BotoCoreError, ClientError
 
-    settings = get_settings()
     try:
         return _client().generate_presigned_url(
             "get_object",

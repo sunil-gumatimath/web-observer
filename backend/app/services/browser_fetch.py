@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import httpx
 import json
 import logging
 import os
@@ -12,6 +11,8 @@ import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import httpx
 
 from app.config import get_settings
 from app.security.ssrf import SSRFError, validate_url_for_fetch
