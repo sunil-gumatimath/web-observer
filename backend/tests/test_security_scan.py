@@ -7,7 +7,7 @@ from app.config import Settings
 from app.services.fetcher import FetchError
 from app.services.security_scan import scan_digest_text
 
-# A trimmed URL Scanner v2 result payload (see docs/cloudflarefree.md Phase 9).
+# A trimmed URL Scanner v2 result payload.
 _RESULT = {
     "task": {
         "uuid": "scan",

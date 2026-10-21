@@ -7,8 +7,8 @@ security-relevant facts of the scan into a deterministic, line-oriented
 security facts changed (verdict flip, tech-stack drift, certificate change).
 
 Free tier notes (verified 2026-10-21):
-- URL Scanner submissions on the free plan are limited (see
-  docs/cloudflarefree.md Phase 9) — keep the schedule interval >= 1 day.
+- URL Scanner submissions on the free plan are limited —
+  keep the schedule interval >= 1 day.
 - Empty ``CLOUDFLARE_URLSCANNER_TOKEN`` = mode errors cleanly at check time
   (fail open per repo convention: no token, no scan, no crash).
 """

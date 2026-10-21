@@ -25,7 +25,6 @@ Verified end-to-end: backend unit + integration tests pass (see CI), the fronten
 | [docs/auth-modes.md](docs/auth-modes.md) | Auth modes (dev token / Clerk) |
 | [docs/guides/resend-setup.md](docs/guides/resend-setup.md) | Email alerts |
 | [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md) | Cloudflare free tier (R2 snapshots, Web Analytics, Tunnel) |
-| [cloudflarefree.md](cloudflarefree.md) | Cloudflare free-tier phase plan (Access, Cache Rules, Workers/KV, Turnstile, Browser Rendering, Radar — Phases 0–10) |
 | [docs/guides/r2-setup.md](docs/guides/r2-setup.md) | Cloudflare R2 snapshots (optional object storage) |
 | [docs/phases/](docs/phases/) | Historical phase records (discovery → enterprise) |
 | [docs/roadmap.md](docs/roadmap.md) | Feature roadmap (Phases 8–10) |
