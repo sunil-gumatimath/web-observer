@@ -180,6 +180,25 @@ export function brandAssetUrl(path: string | null | undefined): string | null {
   return `${config.apiBaseUrl}/api/v1/public/assets/${encoded}`;
 }
 
+/**
+ * Screenshot object URL. When NEXT_PUBLIC_SCREENSHOT_CDN_URL is set (the R2
+ * custom domain, e.g. https://screenshots.example.com), screenshot blobs load
+ * straight from the CDN instead of proxying bytes through the API — the
+ * screenshots bucket is public-by-key, not public-by-content. Empty or unset
+ * base falls back to the regular public-assets proxy, which works for local
+ * storage and when no dedicated bucket exists.
+ */
+export function screenshotUrl(path: string | null | undefined): string | null {
+  const base = (process.env.NEXT_PUBLIC_SCREENSHOT_CDN_URL || "").replace(/\/+$/, "");
+  if (!base || !path) return brandAssetUrl(path);
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  const encoded = path
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+  return `${base}/${encoded}`;
+}
+
 /** GET helper for endpoints that must NOT attach API auth (public share/invite). */
 async function publicGet<T>(path: string): Promise<T> {
   const controller = new AbortController();

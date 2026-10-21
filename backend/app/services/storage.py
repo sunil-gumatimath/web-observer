@@ -83,6 +83,21 @@ def snapshot_object_key(
     return f"workspaces/{workspace_id}/monitors/{monitor_id}/runs/{run_id}/{uuid.uuid4().hex}.html"
 
 
+def _bucket_for(key: str) -> str:
+    """Object key -> bucket.
+
+    Screenshot objects (``screenshots/...``) go to the dedicated public
+    bucket when ``S3_SCREENSHOT_BUCKET`` is set (R2 custom domain CDN);
+    snapshots, brand assets and everything else stay in the primary bucket.
+    Callers never pass the bucket around — routing is by key prefix, so
+    every read/write of the same key agrees on where it lives.
+    """
+    settings = get_settings()
+    if key.startswith("screenshots/") and settings.s3_screenshot_bucket:
+        return settings.s3_screenshot_bucket
+    return settings.s3_bucket
+
+
 def put_bytes(
     *,
     key: str,
@@ -114,7 +129,7 @@ def put_bytes(
     settings = get_settings()
     try:
         _client().put_object(
-            Bucket=settings.s3_bucket,
+            Bucket=_bucket_for(key),
             Key=key,
             Body=data,
             ContentType=content_type,
@@ -141,7 +156,7 @@ def get_bytes(key: str) -> bytes | None:
 
     settings = get_settings()
     try:
-        response = _client().get_object(Bucket=settings.s3_bucket, Key=key)
+        response = _client().get_object(Bucket=_bucket_for(key), Key=key)
         return response["Body"].read()
     except (BotoCoreError, ClientError) as exc:
         logger.warning("storage_get_failed key=%s error=%s", key, exc)
@@ -164,7 +179,7 @@ def object_exists(key: str) -> bool:
 
     settings = get_settings()
     try:
-        _client().head_object(Bucket=settings.s3_bucket, Key=key)
+        _client().head_object(Bucket=_bucket_for(key), Key=key)
         return True
     except (BotoCoreError, ClientError) as exc:
         logger.debug("storage_head_failed key=%s error=%s", key, exc)
@@ -209,7 +224,7 @@ def presigned_get_url(key: str, *, expires_in: int = 3600) -> str:
     try:
         return _client().generate_presigned_url(
             "get_object",
-            Params={"Bucket": settings.s3_bucket, "Key": key},
+            Params={"Bucket": _bucket_for(key), "Key": key},
             ExpiresIn=expires_in,
         )
     except (BotoCoreError, ClientError) as exc:

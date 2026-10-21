@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Badge, Button, Card, ModeBadge } from "@/components/ui";
 import { ReadableContent } from "@/components/readable-content";
 import { MarkdownContent } from "@/components/markdown-content";
-import { brandAssetUrl } from "@/lib/api";
+import { brandAssetUrl, screenshotUrl } from "@/lib/api";
 import type { Monitor, MonitorRun, SnapshotAccess } from "@/lib/types";
 
 interface CapturedContentPreviewProps {
@@ -73,7 +73,7 @@ export function CapturedContentPreview({
     // Priority 1: presigned/direct raw_download_url
     // Priority 2: public screenshot asset path
     const fallbackAsset = run?.id
-      ? brandAssetUrl(`screenshots/${monitor.id}/${run.id}.png`)
+      ? screenshotUrl(`screenshots/${monitor.id}/${run.id}.png`)
       : null;
     const resolvedUrl = snapshot.raw_download_url
       ? brandAssetUrl(snapshot.raw_download_url)

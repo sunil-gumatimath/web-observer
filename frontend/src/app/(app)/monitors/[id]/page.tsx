@@ -19,7 +19,7 @@ import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
-import { api, ApiError, brandAssetUrl } from "@/lib/api";
+import { api, ApiError, brandAssetUrl, screenshotUrl } from "@/lib/api";
 import { VALUE_HISTORY_MODES } from "@/lib/modes";
 import {
   isActiveRun,
@@ -456,9 +456,9 @@ function MonitorDetailInner() {
 		showFreshBanner || polling || Boolean(latestRun && isActiveRun(latestRun));
 	const brandHero = brandAssetUrl(monitor.brand?.hero_path) || monitor.brand?.hero_url;
 	const screenshotFallback =
-		(latestOkRun && brandAssetUrl(`screenshots/${monitor.id}/${latestOkRun.id}.png`)) ||
-		(changes[0]?.run_id && brandAssetUrl(`screenshots/${monitor.id}/${changes[0].run_id}.png`)) ||
-		(latestTerminal?.id && brandAssetUrl(`screenshots/${monitor.id}/${latestTerminal.id}.png`)) ||
+		(latestOkRun && screenshotUrl(`screenshots/${monitor.id}/${latestOkRun.id}.png`)) ||
+		(changes[0]?.run_id && screenshotUrl(`screenshots/${monitor.id}/${changes[0].run_id}.png`)) ||
+		(latestTerminal?.id && screenshotUrl(`screenshots/${monitor.id}/${latestTerminal.id}.png`)) ||
 		(previewSnapshot?.content_type?.startsWith("image/") && previewSnapshot?.raw_download_url
 			? previewSnapshot.raw_download_url
 			: null);
@@ -1076,10 +1076,10 @@ function MonitorDetailInner() {
 						const afterChange = shotChanges[0] ?? null;
 						const beforeChange = shotChanges[1] ?? null;
 						const after = afterChange
-							? brandAssetUrl(`screenshots/${monitor.id}/${afterChange.run_id}.png`)
+							? screenshotUrl(`screenshots/${monitor.id}/${afterChange.run_id}.png`)
 							: null;
 						const before = beforeChange
-							? brandAssetUrl(`screenshots/${monitor.id}/${beforeChange.run_id}.png`)
+							? screenshotUrl(`screenshots/${monitor.id}/${beforeChange.run_id}.png`)
 							: null;
 						return (
 							<>
