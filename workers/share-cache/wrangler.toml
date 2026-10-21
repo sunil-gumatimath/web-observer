@@ -1,0 +1,12 @@
+name = "share-cache"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Deployed to workers.dev for now (https://share-cache.clevertedz.workers.dev).
+# When the project has a public hostname again, uncomment the routes below and
+# set CACHE_HOST (a secret/plain-text binding) to that hostname:
+#   routes = ["app.example.com/share/*", "app.example.com/_next/static/*"]
+
+[vars]
+# Leave empty on workers.dev; set to the public app hostname when routed.
+CACHE_HOST = ""

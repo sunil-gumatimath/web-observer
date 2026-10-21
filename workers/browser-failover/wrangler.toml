@@ -1,0 +1,14 @@
+name = "browser-failover"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Deployed to https://browser-failover.clevertedz.workers.dev via the API
+# (multipart script upload with the browser binding). Redeploy instead with:
+#   npx wrangler login
+#   npx wrangler secret put SHARED_TOKEN
+#   npx wrangler deploy
+# workers.dev is TCP/SNI-blocked on the local ISP, so the failover is dormant
+# on this machine by design and engages on other networks.
+
+[browser]
+binding = "BROWSER"
