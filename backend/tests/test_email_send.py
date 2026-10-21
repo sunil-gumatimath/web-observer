@@ -15,6 +15,11 @@ def _server_key() -> str | None:
     return get_settings().resend_api_key or None
 
 
+def _settings(resend_api_key: str | None):
+    """Settings stub with a deterministic server-managed Resend key."""
+    return SimpleNamespace(resend_api_key=resend_api_key, email_from="onboarding@resend.dev")
+
+
 class _FakeResend:
     """Stand-in for the resend module's global api_key + Emails.send."""
 
@@ -59,11 +64,15 @@ def test_send_email_sequential_sends_do_not_cross_keys(
 
     fake = _FakeResend()
     monkeypatch.setitem(__import__("sys").modules, "resend", fake)
+    # Pin the server key: without one, send_email short-circuits to the
+    # console and never reaches the SDK, so the test would depend on the
+    # machine's RESEND_API_KEY (absent in CI).
+    monkeypatch.setattr(email_mod, "get_settings", lambda: _settings("re_server_key"))
 
     email_mod.send_email(to="a@example.com", subject="s", text="b", api_key="re_key_a")
     email_mod.send_email(to="b@example.com", subject="s", text="b")  # server key
 
-    assert fake.seen_keys == ["re_key_a", _server_key()]
+    assert fake.seen_keys == ["re_key_a", "re_server_key"]
 
 
 def test_send_email_concurrent_byok_and_server_keys_do_not_cross(
@@ -74,6 +83,7 @@ def test_send_email_concurrent_byok_and_server_keys_do_not_cross(
 
     fake = _FakeResend()
     monkeypatch.setitem(__import__("sys").modules, "resend", fake)
+    monkeypatch.setattr(email_mod, "get_settings", lambda: _settings("re_server_key"))
 
     results: list[str] = []
 
@@ -96,7 +106,7 @@ def test_send_email_concurrent_byok_and_server_keys_do_not_cross(
     assert len(results) == 20
     # Every send wore its own key (BYOK or the configured server key); never
     # a cross-contaminated value while another send was reading it.
-    expected_keys: set[str | None] = {"re_byok", _server_key()}
+    expected_keys: set[str | None] = {"re_byok", "re_server_key"}
     assert set(fake.seen_keys) <= expected_keys
     assert fake.seen_keys.count("re_byok") == 10
     assert fake.api_key is None

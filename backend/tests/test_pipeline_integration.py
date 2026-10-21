@@ -93,6 +93,12 @@ def _make_run(db, mon: Monitor) -> MonitorRun:
     )
     db.add(run)
     db.flush()
+    # Production claims the run as RUNNING with a *committed* UPDATE before
+    # the pipeline runs (app/workers/run_guard.py). The pipeline's
+    # pre-commit fence re-reads the run's status through a fresh session,
+    # which only sees committed state - so the test must commit too, or
+    # every run looks reaped and its results are rolled back.
+    db.commit()
     return run
 
 
