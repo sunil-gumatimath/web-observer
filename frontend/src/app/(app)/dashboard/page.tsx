@@ -179,18 +179,17 @@ export default function DashboardPage() {
             >
               Refresh
             </Button>
-            {monitors.length > 0 && active > 0 ? (
-              <ConfirmButton
-                title="Pause all monitors?"
-                body={`This pauses ${active} active monitor${active === 1 ? "" : "s"}. Scheduled checks stop until you resume them.`}
-                confirmLabel="Pause all"
-                variant="secondary"
-                busy={bulkBusy}
-                onConfirm={handlePauseAll}
-              >
-                Pause all
-              </ConfirmButton>
-            ) : null}
+            <ConfirmButton
+              title="Pause all monitors?"
+              body={`This pauses ${active} active monitor${active === 1 ? "" : "s"}. Scheduled checks stop until you resume them.`}
+              confirmLabel="Pause all"
+              variant="secondary"
+              busy={bulkBusy}
+              disabled={active === 0}
+              onConfirm={handlePauseAll}
+            >
+              Pause all
+            </ConfirmButton>
             {monitors.length > 0 && active < monitors.length ? (
               <Button type="button" variant="secondary" disabled={bulkBusy} onClick={handleResumeAll}>
                 Resume all
