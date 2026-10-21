@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 import json
 import logging
 import os
@@ -305,6 +306,93 @@ def _fetch_url_browser_subprocess(
         )
 
 
+def _fetch_url_cf_browser(
+    url: str,
+    *,
+    timeout_seconds: int,
+    max_response_bytes: int,
+) -> FetchResult:
+    """Fetch rendered HTML through the Cloudflare Browser Rendering Worker.
+
+    The Worker (``workers/browser-failover``) runs headless Chromium on
+    Cloudflare's edge — free tier caps that at ~10 min of browser time per UTC
+    day, so this path is only used as a failover, never as the primary.
+    Raises ``FetchError`` on any failure so the caller can fall back to local
+    Playwright.
+    """
+    settings = get_settings()
+    endpoint = (settings.cloudflare_browser_url or "").strip()
+    token = (settings.cloudflare_browser_token or "").strip()
+    if not endpoint:
+        raise FetchError("internal_error", "Cloudflare browser failover not configured")
+
+    # Same SSRF validation the local path applies: the target must be public.
+    validated = validate_url_for_fetch(url, resolve_dns=True)
+
+    started = time.perf_counter()
+    # Workers free tier browser timeout is 60s; stay below it.
+    cf_timeout_ms = min(timeout_seconds, 55) * 1000
+    try:
+        response = httpx.post(
+            endpoint.rstrip("/") + "/",
+            json={"url": validated.url, "timeout_ms": cf_timeout_ms},
+            headers={"X-CF-Failover-Token": token},
+            timeout=max(30, timeout_seconds + 15),
+        )
+    except Exception as exc:  # noqa: BLE001 - any transport error = failover unavailable
+        raise FetchError(
+            "internal_error", f"Cloudflare browser worker unreachable: {exc}"
+        ) from exc
+
+    if response.status_code != 200:
+        detail = response.text[:200]
+        raise FetchError(
+            "internal_error",
+            f"Cloudflare browser worker returned {response.status_code}: {detail}",
+        )
+
+    try:
+        payload = response.json()
+        html = str(payload["html"])
+        status_code = int(payload.get("status_code") or 200)
+        final_url = str(payload.get("final_url") or url)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise FetchError(
+            "internal_error", f"Invalid Cloudflare browser worker payload: {exc}"
+        ) from exc
+
+    try:
+        validate_url_for_fetch(final_url, resolve_dns=True)
+    except SSRFError as exc:
+        raise FetchError(exc.code, f"Final navigation URL blocked: {exc}") from exc
+
+    content = html.encode("utf-8", errors="replace")
+    if len(content) > max_response_bytes:
+        raise FetchError(
+            "response_too_large",
+            f"Rendered content size {len(content)} exceeds limit {max_response_bytes}",
+            http_status=status_code,
+        )
+
+    challenge = detect_bot_challenge(status_code=status_code, headers={}, text=html)
+    if challenge:
+        raise FetchError(
+            "bot_challenge",
+            f"Blocked while fetching {validated.url} via Cloudflare: {challenge}",
+            http_status=status_code,
+        )
+
+    latency_ms = round((time.perf_counter() - started) * 1000)
+    return FetchResult(
+        final_url=final_url,
+        status_code=status_code,
+        content=content,
+        text=html,
+        content_type="text/html; charset=utf-8",
+        latency_ms=latency_ms,
+    )
+
+
 def fetch_url_browser(
     url: str,
     *,
@@ -316,6 +404,11 @@ def fetch_url_browser(
 
     Defaults to a subprocess so Dramatiq workers do not share Playwright pipes
     (Windows errno 9). Child process / WEB_OBSERVER_PLAYWRIGHT_INLINE runs inline.
+
+    With a failover Worker configured (CLOUDFLARE_BROWSER_URL), a failed local
+    fetch is retried once on Cloudflare's edge before the error is raised —
+    local Playwright stays primary to conserve the worker's free browser-time
+    quota (~10 min/day).
     """
     force_inline = os.environ.get("WEB_OBSERVER_PLAYWRIGHT_INLINE", "").strip() in {
         "1",
@@ -327,16 +420,44 @@ def fetch_url_browser(
         "true",
         "yes",
     }
-    if force_inline or is_child:
-        return _fetch_url_browser_inline(
+    cf_configured = bool((get_settings().cloudflare_browser_url or "").strip())
+    try:
+        if force_inline or is_child:
+            return _fetch_url_browser_inline(
+                url,
+                timeout_seconds=timeout_seconds,
+                max_response_bytes=max_response_bytes,
+                wait_selector=wait_selector,
+            )
+        return _fetch_url_browser_subprocess(
             url,
             timeout_seconds=timeout_seconds,
             max_response_bytes=max_response_bytes,
             wait_selector=wait_selector,
         )
-    return _fetch_url_browser_subprocess(
-        url,
-        timeout_seconds=timeout_seconds,
-        max_response_bytes=max_response_bytes,
-        wait_selector=wait_selector,
-    )
+    except FetchError as local_exc:
+        # Failover ladder (Phase 7): only when locally configured, only on
+        # real fetch failures. A bot challenge is endpoint-independent (both
+        # Chromium builds see the same 403), so don't burn the edge quota.
+        if local_exc.code == "bot_challenge":
+            raise
+        if not cf_configured:
+            raise
+        try:
+            result = _fetch_url_cf_browser(
+                url, timeout_seconds=timeout_seconds, max_response_bytes=max_response_bytes
+            )
+        except FetchError as cf_exc:
+            logger.warning(
+                "cf_browser_fetch_failed code=%s error=%s "
+                "keeping_local_playwright_error url=%s local_error=%s",
+                cf_exc.code,
+                cf_exc,
+                url,
+                local_exc,
+            )
+            raise local_exc from cf_exc
+        logger.info(
+            "cf_browser_failover_success url=%s local_error=%s", url, local_exc
+        )
+        return result
