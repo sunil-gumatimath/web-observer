@@ -46,6 +46,7 @@ logs-*.err
 monitor-the-web-final-roadmap.md
 web-observer-final-roadmap.md
 DESIGN.md
+cloudflarefree.md
 
 # Local Redis persistence
 dump.rdb
