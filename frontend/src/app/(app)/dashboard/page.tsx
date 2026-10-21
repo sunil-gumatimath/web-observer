@@ -263,7 +263,7 @@ export default function DashboardPage() {
       {monitors.length === 0 ? (
         <EmptyState
           title="No monitors yet"
-          body="Create a monitor for a public URL — page content, site links, or product price."
+          body="Create a monitor for a public URL — page content, site links, product price, list items, JSON field, RSS feed, GitHub README, visual diff, or security scan."
           action={
             <Link href="/monitors/new">
               <Button type="button">Create your first monitor</Button>

@@ -4,7 +4,7 @@ import { Logo } from "@/components/logo";
 const features = [
   {
     title: "Precise change detection",
-    body: "Watch page content, sitemap links, product prices, or JSON payloads with zero drift and sub-minute latency.",
+    body: "Nine modes — page content, sitemap links, product prices, JSON payloads, RSS feeds, READMEs, visual diffs and security scans — with zero drift.",
     eyebrow: "Detect",
   },
   {
@@ -14,7 +14,7 @@ const features = [
   },
   {
     title: "Alerts where you work",
-    body: "Email, Slack, Discord, or signed HMAC webhooks when something meaningful changes — not on every cookie banner.",
+    body: "Email, Slack, Discord, plus signed HMAC webhooks for your own automation, when something meaningful changes — not on every cookie banner.",
     eyebrow: "Alert",
   },
 ];
@@ -81,7 +81,7 @@ export default function HomePage() {
               Know the moment pages you care about change.
             </h1>
             <p className="mt-5 max-w-[54ch] text-base leading-[1.5] tracking-[-0.05px] text-[#d0d6e0] sm:text-lg sm:tracking-[-0.1px]" suppressHydrationWarning>
-              Track public URLs or CSS selectors, receive instantaneous notifications, and review clear
+              Track public URLs or CSS selectors, get notified as soon as a change is detected, and review clear
               before-and-after diffs. Built for engineers, analysts, and product teams.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3" suppressHydrationWarning>
@@ -218,7 +218,7 @@ export default function HomePage() {
             Serious infrastructure for web changes.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-[#d0d6e0]">
-            Page content · Site links · Product price · List items · Visual diffs · AI impact triage
+            Page content · Site links · Product price · List items · JSON field · RSS feed · GitHub README · Visual diffs · Security scans · AI impact triage
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
             <Link href="/sign-up" className="btn-linear btn-linear-primary !px-4 !py-2.5">

@@ -116,8 +116,8 @@ export default function DocsPage() {
             <ol className="space-y-4">
               <Step n={1} title="You create a monitor">
                 Pick a URL, a mode (page content, site links, product price, list
-                items, JSON field, RSS feed, GitHub README, or visual diff),
-                and how often to check.
+                items, JSON field, RSS feed, GitHub README, visual diff, or
+                security scan), and how often to check.
               </Step>
               <Step n={2} title="A worker fetches the page">
                 The backend pulls the page (HTTP or Playwright if JavaScript is required) and
@@ -243,14 +243,26 @@ export default function DocsPage() {
                     <td className="px-3 py-3">A page rendered in a real browser, compared by screenshot</td>
                     <td className="px-3 py-3">Visible changes between screenshots</td>
                   </tr>
+                  <tr>
+                    <td className="px-3 py-3 font-medium text-[var(--fg)]">
+                      Security scan
+                    </td>
+                    <td className="px-3 py-3">
+                      A URL scanned on Cloudflare&apos;s edge (needs a URL Scanner
+                      token on the server)
+                    </td>
+                    <td className="px-3 py-3">
+                      Verdict, category, certificate and technology-stack changes
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
             <p>
               <strong className="text-[var(--fg)]">JavaScript rendering</strong> —
               enable Playwright when the page only shows content after client-side render.
-              Site links, RSS feed, and GitHub README always fetch over plain HTTP
-              (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">js_required</code> is rejected for those modes); the other modes can use Playwright when
+              Site links, RSS feed, GitHub README, and security scan always fetch over
+              plain HTTP (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">js_required</code> is rejected for those modes); the other modes can use Playwright when
               <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">js_required</code> is enabled.
             </p>
             <p>
@@ -278,7 +290,10 @@ export default function DocsPage() {
                 <strong className="text-[var(--fg)]">List items / site links / RSS feed</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_min_added</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_min_removed</code> (minimum added/removed items).
               </li>
               <li>
-                <strong className="text-[var(--fg)]">All modes</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">min_diff_chars</code> (minimum changed characters), <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">regex_must_match</code> / <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">regex_must_not_match</code> (new content must / must not match).
+                <strong className="text-[var(--fg)]">Security scan</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_min_added</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_min_removed</code> (minimum changed facts).
+              </li>
+              <li>
+                <strong className="text-[var(--fg)]">All modes</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">min_diff_chars</code> (minimum changed characters), <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">regex_must_match</code> / <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">regex_must_not_match</code> (new content must / must not match), <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">cooldown_minutes</code> (quiet period after an alert), <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">flap_window_minutes</code> + <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">flap_max_alerts</code> (bundle alerts when a monitor flaps).
               </li>
             </ul>
           </DocSection>
@@ -305,7 +320,8 @@ export default function DocsPage() {
               </li>
               <li>
                 <strong className="text-[var(--fg)]">Interval</strong> — minutes
-                between scheduled checks (minimum 15).
+                between scheduled checks (minimum 15, or 5 on business and
+                enterprise plans).
               </li>
               <li>
                 <strong className="text-[var(--fg)]">Alert email</strong> — optional
@@ -351,7 +367,7 @@ export default function DocsPage() {
                 <strong className="text-[var(--fg)]">Visual diffs</strong> — GitHub-style added/removed line views (split + unified) for every content change via <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">GithubDiff</code> + <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">unified_diff</code>.
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Opt-in screenshots</strong> — when <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots_enabled</code> is on, every check captures a fresh Playwright screenshot (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots/{"{monitor_id}/{change.run_id}.png"}</code>) with aHash history — off by default to avoid forcing Playwright on text monitors.
+                <strong className="text-[var(--fg)]">Opt-in screenshots</strong> — when <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots_enabled</code> is on, every check captures a fresh Playwright screenshot (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">screenshots/{"{monitor_id}/{change.run_id}.png"}</code>) compared with a perceptual hash (pHash) — off by default to avoid forcing Playwright on text monitors.
               </li>
               <li>
                 <strong className="text-[var(--fg)]">AI change summaries & impact</strong> — plain-language titles, summaries, impact rating (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">critical</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">high</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">medium</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">low</code>), and model confidence scores stored per change.
@@ -428,7 +444,7 @@ export default function DocsPage() {
                 and AI summaries (heuristic if no LLM key is set; toggle <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">ai_summaries_enabled</code>).
               </li>
               <li>
-                <strong className="text-[var(--fg)]">Managed or self-serve keys</strong> — run managed (server provides <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">LLM_API_*</code>/<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">RESEND_API_KEY</code>) or let each workspace bring its own keys in Settings → Workspace keys (overrides global; supports OpenAI or Vercel AI Gateway).
+                <strong className="text-[var(--fg)]">Managed or self-serve keys</strong> — run managed (the server provides <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">LLM_API_KEY</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">LLM_API_BASE</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">LLM_MODEL</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">GEMINI_API_KEY</code> and <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">RESEND_API_KEY</code>) or let each workspace bring its own keys in Settings → Workspace keys (workspace keys override the global ones). Two OpenAI-compatible providers are supported: <strong className="text-[var(--fg)]">Kilo Gateway</strong> (the default, with free models) and <strong className="text-[var(--fg)]">Google Gemini</strong> (your own key). <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">LLM_API_BASE</code> decides which one is active, and any other OpenAI-compatible base URL works too.
               </li>
               <li>
                 <strong className="text-[var(--fg)]">Teams</strong> — invite members with expiring multi-use links (<code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">/invite/{"{token}"}</code>) and switch between workspaces you belong to.
@@ -478,8 +494,9 @@ Links,https://example.com/blog,list_items,60`}
               <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">readme</code>{" "}
               (a GitHub repository, e.g.{" "}
               <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">owner/repo</code>
-              ), and{" "}
-              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">visual</code>.
+              ),{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">visual</code>, and{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">security_scan</code>.
             </p>
           </DocSection>
 
