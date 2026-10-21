@@ -341,9 +341,7 @@ def _fetch_url_cf_browser(
             timeout=max(30, timeout_seconds + 15),
         )
     except Exception as exc:  # noqa: BLE001 - any transport error = failover unavailable
-        raise FetchError(
-            "internal_error", f"Cloudflare browser worker unreachable: {exc}"
-        ) from exc
+        raise FetchError("internal_error", f"Cloudflare browser worker unreachable: {exc}") from exc
 
     if response.status_code != 200:
         detail = response.text[:200]
@@ -458,7 +456,5 @@ def fetch_url_browser(
                 local_exc,
             )
             raise local_exc from cf_exc
-        logger.info(
-            "cf_browser_failover_success url=%s local_error=%s", url, local_exc
-        )
+        logger.info("cf_browser_failover_success url=%s local_error=%s", url, local_exc)
         return result

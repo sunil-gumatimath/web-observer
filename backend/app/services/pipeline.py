@@ -944,10 +944,21 @@ def _live_run_status(db: Session, run: MonitorRun) -> str | None:
     The read deliberately goes through a *fresh* session: this transaction's
     own flushed-but-uncommitted writes are invisible to other sessions, and
     the fence must never treat this run's staged status as external news.
-    """
-    from app.db import SessionLocal
 
-    with SessionLocal() as probe:
+    The probe is bound to the **caller's** engine, not to the global
+    ``app.db.SessionLocal``. ``SessionLocal`` is bound to the configured
+    ``DATABASE_URL``, which is a different database than the one the caller
+    is using whenever the caller runs against a test database - the probe
+    would then query (or fail to connect to) the wrong Postgres entirely.
+    """
+    from sqlalchemy.orm import Session as _Session
+
+    bind = db.get_bind()
+    # A session bound directly to a Connection would reuse this transaction;
+    # go through the Engine so the probe gets its own connection.
+    engine = getattr(bind, "engine", bind)
+
+    with _Session(bind=engine) as probe:
         return probe.scalar(select(MonitorRun.status).where(MonitorRun.id == run.id))
 
 

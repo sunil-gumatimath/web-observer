@@ -34,7 +34,9 @@ def test_get_snapshot_screenshots_fallback():
     db = MagicMock()
     db.scalar.return_value = mock_snap
 
-    with patch("app.routers.monitors.presigned_get_url", side_effect=StorageError("local", "no s3")):
+    with patch(
+        "app.routers.monitors.presigned_get_url", side_effect=StorageError("local", "no s3")
+    ):
         res = get_snapshot(
             workspace_id=ws_id,
             snapshot_id=snap_id,
@@ -68,7 +70,9 @@ def test_get_snapshot_raw_fallback():
     db = MagicMock()
     db.scalar.return_value = mock_snap
 
-    with patch("app.routers.monitors.presigned_get_url", side_effect=StorageError("local", "no s3")):
+    with patch(
+        "app.routers.monitors.presigned_get_url", side_effect=StorageError("local", "no s3")
+    ):
         res = get_snapshot(
             workspace_id=ws_id,
             snapshot_id=snap_id,

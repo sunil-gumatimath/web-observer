@@ -97,11 +97,7 @@ def test_digest_flips_on_verdict_change() -> None:
         "overall": {"malicious": True, "hasVerdicts": True, "categories": [], "tags": []}
     }
     before = set(scan_digest_text(_RESULT).splitlines())
-    after = {
-        line
-        for line in scan_digest_text(changed).splitlines()
-        if line not in before
-    }
+    after = {line for line in scan_digest_text(changed).splitlines() if line not in before}
     assert "malicious=true" in after
 
 
@@ -116,9 +112,7 @@ def test_digest_drops_volatile_counters() -> None:
 def test_missing_configuration_is_a_clean_fetch_error(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.services.security_scan.get_settings",
-        lambda: Settings(
-            app_env="test", cloudflare_account_id="", cloudflare_urlscanner_token=""
-        ),
+        lambda: Settings(app_env="test", cloudflare_account_id="", cloudflare_urlscanner_token=""),
     )
     with pytest.raises(FetchError) as exc:
         ss.scan_url("https://example.com", timeout_seconds=30, max_response_bytes=10**6)

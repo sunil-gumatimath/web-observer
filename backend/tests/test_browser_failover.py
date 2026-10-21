@@ -52,7 +52,9 @@ def test_not_configured_short_circuits(monkeypatch) -> None:
     monkeypatch.setattr(bf, "_fetch_url_cf_browser", _boom)
     monkeypatch.setattr(bf, "_fetch_url_browser_subprocess", lambda url, **k: _local_result())
 
-    result = bf.fetch_url_browser("https://example.com", timeout_seconds=30, max_response_bytes=1000)
+    result = bf.fetch_url_browser(
+        "https://example.com", timeout_seconds=30, max_response_bytes=1000
+    )
     assert result.text == "<html>from-local</html>"
     assert called == []
 
@@ -69,7 +71,9 @@ def test_success_local_no_cf_call(monkeypatch) -> None:
     monkeypatch.setattr(bf, "_fetch_url_cf_browser", _cf)
     monkeypatch.setattr(bf, "_fetch_url_browser_subprocess", lambda url, **k: _local_result())
 
-    result = bf.fetch_url_browser("https://example.com", timeout_seconds=30, max_response_bytes=1000)
+    result = bf.fetch_url_browser(
+        "https://example.com", timeout_seconds=30, max_response_bytes=1000
+    )
     assert result.text == "<html>from-local</html>"
     assert not cf_calls
 
@@ -84,7 +88,9 @@ def test_local_failure_falls_back_to_cf(monkeypatch) -> None:
     monkeypatch.setattr(bf, "_fetch_url_browser_subprocess", _local_boom)
     monkeypatch.setattr(bf, "_fetch_url_cf_browser", lambda url, **k: _cf_result())
 
-    result = bf.fetch_url_browser("https://example.com", timeout_seconds=30, max_response_bytes=1000)
+    result = bf.fetch_url_browser(
+        "https://example.com", timeout_seconds=30, max_response_bytes=1000
+    )
     assert result.text == "<html>from-cf</html>"
 
 
@@ -139,7 +145,9 @@ def test_cf_fetch_maps_worker_payload(monkeypatch) -> None:
         return type("R", (), {"status_code": 200, "json": lambda self: body, "text": ""})()
 
     monkeypatch.setattr(bf.httpx, "post", _worker_success)
-    result = bf._fetch_url_cf_browser("https://example.com", timeout_seconds=30, max_response_bytes=10**6)
+    result = bf._fetch_url_cf_browser(
+        "https://example.com", timeout_seconds=30, max_response_bytes=10**6
+    )
     assert result.status_code == 200
     assert result.final_url == "https://example.com/redirected"
     assert result.content == b"<html>edge</html>"
@@ -160,7 +168,9 @@ def test_cf_fetch_rejects_private_final_url(monkeypatch) -> None:
     monkeypatch.setattr(bf.httpx, "post", _worker_redirect)
 
     with pytest.raises(FetchError) as exc:
-        bf._fetch_url_cf_browser("https://example.com", timeout_seconds=30, max_response_bytes=10**6)
+        bf._fetch_url_cf_browser(
+            "https://example.com", timeout_seconds=30, max_response_bytes=10**6
+        )
     assert exc.value.code == "blocked_address"
 
 
@@ -174,5 +184,7 @@ def test_cf_fetch_wraps_transport_errors(monkeypatch) -> None:
     monkeypatch.setattr(bf.httpx, "post", _unreachable)
 
     with pytest.raises(FetchError) as exc:
-        bf._fetch_url_cf_browser("https://example.com", timeout_seconds=30, max_response_bytes=10**6)
+        bf._fetch_url_cf_browser(
+            "https://example.com", timeout_seconds=30, max_response_bytes=10**6
+        )
     assert exc.value.code == "internal_error"

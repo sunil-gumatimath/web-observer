@@ -103,6 +103,7 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
 
     # 3. Schema.org JSON-LD product/item images (e-commerce standard: Shopify, Amazon, WooCommerce, etc.)
     import json
+
     for node in scope.css('script[type="application/ld+json"]'):
         try:
             raw = (node.text() or "").strip()
@@ -125,9 +126,17 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
                     for elem in img_val:
                         if isinstance(elem, str):
                             cand_urls.append(elem)
-                        elif isinstance(elem, dict) and "url" in elem and isinstance(elem["url"], str):
+                        elif (
+                            isinstance(elem, dict)
+                            and "url" in elem
+                            and isinstance(elem["url"], str)
+                        ):
                             cand_urls.append(elem["url"])
-                        elif isinstance(elem, dict) and "contentUrl" in elem and isinstance(elem["contentUrl"], str):
+                        elif (
+                            isinstance(elem, dict)
+                            and "contentUrl" in elem
+                            and isinstance(elem["contentUrl"], str)
+                        ):
                             cand_urls.append(elem["contentUrl"])
                 elif isinstance(img_val, dict):
                     if "url" in img_val and isinstance(img_val["url"], str):
@@ -145,10 +154,10 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
     if not hero_candidates:
         for sel in (
             'img[itemprop="image"]',
-            'img#landingImage',
-            'img.product-featured-image',
-            'img.product__image',
-            'img[data-main-image]',
+            "img#landingImage",
+            "img.product-featured-image",
+            "img.product__image",
+            "img[data-main-image]",
         ):
             for node in scope.css(sel):
                 src = (

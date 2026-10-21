@@ -149,13 +149,9 @@ def _poll_result(
             if status == "finished":
                 return result
             if status in ("failed", "aborted", "rejected"):
-                raise UrlScannerError(
-                    "scan_error", f"URL Scanner ended with status {status}"
-                )
+                raise UrlScannerError("scan_error", f"URL Scanner ended with status {status}")
         if time.perf_counter() - started > deadline_seconds:
-            raise UrlScannerError(
-                "read_timeout", "URL Scanner result did not finish in time"
-            )
+            raise UrlScannerError("read_timeout", "URL Scanner result did not finish in time")
         time.sleep(_POLL_INTERVAL_SECONDS)
 
 
@@ -203,9 +199,7 @@ def scan_url(
     except UrlScannerError:
         raise
     except Exception as exc:  # noqa: BLE001 - transport/config failures
-        raise UrlScannerError(
-            "internal_error", f"URL Scanner request failed: {exc}"
-        ) from exc
+        raise UrlScannerError("internal_error", f"URL Scanner request failed: {exc}") from exc
 
     text = scan_digest_text(result)
     content = text.encode("utf-8")

@@ -327,7 +327,17 @@ class Snapshot(Base):
         # use_alter: monitor_runs.snapshot_id already points back at
         # snapshots.id, so the two tables are mutually dependent and the
         # constraint has to be added with ALTER TABLE after both exist.
-        ForeignKey("monitor_runs.id", ondelete="SET NULL", use_alter=True),
+        #
+        # The constraint MUST carry the same name the Alembic migration uses
+        # (010_add_missing_foreign_keys). An unnamed use_alter FK cannot be
+        # dropped, so `Base.metadata.drop_all()` raises "Can't emit DROP
+        # CONSTRAINT ... it has no name" and the test fixtures break.
+        ForeignKey(
+            "monitor_runs.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_snapshots_run_id_monitor_runs",
+        ),
         nullable=True,
     )
     content_hash: Mapped[str] = mapped_column(String(128), nullable=False)

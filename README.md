@@ -18,7 +18,7 @@ Web change-detection and alerting platform.
 
 **Monitoring modes (9):** `page_content`, `site_links`, `product_price`, `list_items`, `json_field`, `rss_feed`, `readme`, `visual`, `security_scan`. Reference: [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md).
 
-Verified end-to-end (last run 2026-10-21): backend `283 passed, 4 skipped` unit tests (`11 deselected` integration tests run separately in CI), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `89 passed` vitest tests across 13 files; `next build` compiles all routes; and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
+Verified end-to-end (last run 2026-10-21): backend `288 passed, 4 skipped` unit tests (`11 deselected` integration tests run separately in CI), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `89 passed` vitest tests across 13 files; `next build` compiles all routes; and the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
 | Doc | Topic |
 | ----- | -------- |
