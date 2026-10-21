@@ -294,6 +294,10 @@ class MonitorCreate(BaseModel):
             raise ValueError(
                 "readme monitors fetch the README over plain HTTP; js_required is not supported"
             )
+        if self.mode == "security_scan" and self.js_required:
+            raise ValueError(
+                "security_scan monitors render on Cloudflare's edge via the URL Scanner; js_required is not supported"
+            )
         return self
 
     @model_validator(mode="after")
@@ -407,6 +411,10 @@ class MonitorUpdate(BaseModel):
         if self.mode == "readme" and self.js_required:
             raise ValueError(
                 "readme monitors fetch the README over plain HTTP; js_required is not supported"
+            )
+        if self.mode == "security_scan" and self.js_required:
+            raise ValueError(
+                "security_scan monitors render on Cloudflare's edge via the URL Scanner; js_required is not supported"
             )
         return self
 

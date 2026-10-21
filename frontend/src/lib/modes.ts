@@ -69,6 +69,12 @@ export const MONITOR_MODE_OPTIONS: MonitorModeOption[] = [
 		optionLabel: "Visual diff (screenshot comparison)",
 		hint: "Visual diff: renders the page in a browser and compares screenshots perceptually. Set an optional CSS selector to compare only part of the page.",
 	},
+	{
+		value: "security_scan",
+		label: "Security scan",
+		optionLabel: "Security scan (Cloudflare URL Scanner)",
+		hint: "Security scan: renders the URL on Cloudflare's edge and reports verdict/category/technology changes. Needs a free Cloudflare token on the server; keep the interval daily or slower.",
+	},
 ];
 
 /** Short human label for a mode (badges, filters, share pages). */
@@ -81,10 +87,10 @@ export function modeLabel(mode: string): string {
  * the wrong content for them, so the JS checkbox is hidden and the backend
  * rejects `js_required` for these modes.
  */
-export const PLAIN_HTTP_MODES: MonitorMode[] = ["site_links", "rss_feed", "readme"];
+export const PLAIN_HTTP_MODES: MonitorMode[] = ["site_links", "rss_feed", "readme", "security_scan"];
 
 /** Modes whose diff is an item list (added / removed) rather than text lines. */
-export const LIST_DIFF_MODES: MonitorMode[] = ["site_links", "list_items", "rss_feed"];
+export const LIST_DIFF_MODES: MonitorMode[] = ["site_links", "list_items", "rss_feed", "security_scan"];
 
 /** Modes that expose a value history chart. */
 export const VALUE_HISTORY_MODES: MonitorMode[] = ["product_price", "json_field"];

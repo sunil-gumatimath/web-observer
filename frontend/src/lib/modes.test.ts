@@ -22,6 +22,7 @@ const ALL_MODES: MonitorMode[] = [
 	"rss_feed",
 	"readme",
 	"visual",
+	"security_scan",
 ];
 
 describe("MONITOR_MODE_OPTIONS", () => {

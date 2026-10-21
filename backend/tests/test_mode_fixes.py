@@ -87,6 +87,7 @@ def test_monitor_modes_derived_from_enum() -> None:
         "rss_feed",
         "readme",
         "visual",
+        "security_scan",
     }
 
 

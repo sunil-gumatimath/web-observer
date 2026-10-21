@@ -41,6 +41,9 @@ class MonitorMode(enum.StrEnum):
     ``RSS_FEED``      RSS/Atom feed item list; diff on GUID/link.
     ``README``        GitHub repo README.md markdown; tracks doc changes.
     ``VISUAL``        full-page screenshot compared by perceptual aHash distance.
+    ``SECURITY_SCAN`` Cloudflare URL Scanner verdict/technology inventory;
+                      diffed like a set of items (malicious flag, categories,
+                      tech stack, certificate facts).
     """
 
     PAGE_CONTENT = "page_content"
@@ -51,6 +54,7 @@ class MonitorMode(enum.StrEnum):
     RSS_FEED = "rss_feed"
     README = "readme"
     VISUAL = "visual"
+    SECURITY_SCAN = "security_scan"
 
 
 # Single source of truth for valid mode strings. API schemas, bulk import,
@@ -64,17 +68,21 @@ LIST_DIFF_MODES: frozenset[str] = frozenset(
         MonitorMode.SITE_LINKS.value,
         MonitorMode.LIST_ITEMS.value,
         MonitorMode.RSS_FEED.value,
+        MonitorMode.SECURITY_SCAN.value,
     )
 )
 
-# Modes that are always fetched over plain HTTP. Playwright would snapshot the
-# wrong content for them, so js_required is rejected at the API layer and the
-# workers bounce them back onto the HTTP queue as defense in depth.
+# Modes that are always fetched over plain HTTP (site over sitemap/feed/API)
+# or that do their rendering on Cloudflare's edge (URL Scanner). Playwright
+# would snapshot the wrong content for them, so js_required is rejected at the
+# API layer and the workers bounce them back onto the HTTP queue as defense
+# in depth.
 PLAIN_HTTP_MODES: frozenset[str] = frozenset(
     (
         MonitorMode.SITE_LINKS.value,
         MonitorMode.RSS_FEED.value,
         MonitorMode.README.value,
+        MonitorMode.SECURITY_SCAN.value,
     )
 )
 

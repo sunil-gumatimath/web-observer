@@ -86,7 +86,7 @@ export default function ImportPage() {
 		<div>
 			<PageHeader
 				title="Bulk import"
-				description="Import monitors from CSV or JSON (name, url, mode, schedule_interval_minutes). Modes: page_content, site_links, product_price, list_items, json_field, rss_feed, readme, visual."
+				description="Import monitors from CSV or JSON (name, url, mode, schedule_interval_minutes). Modes: page_content, site_links, product_price, list_items, json_field, rss_feed, readme, visual, security_scan."
 			/>
 			{error ? <ErrorBox message={error} /> : null}
 			{result ? <SuccessBox message={result} /> : null}

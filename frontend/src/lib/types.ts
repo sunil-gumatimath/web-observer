@@ -6,7 +6,8 @@ export type MonitorMode =
   | "json_field"
   | "rss_feed"
   | "readme"
-  | "visual";
+  | "visual"
+  | "security_scan";
 
 export type Monitor = {
   id: string;

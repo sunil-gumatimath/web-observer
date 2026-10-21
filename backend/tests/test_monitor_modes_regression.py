@@ -105,7 +105,7 @@ def test_rss_feed_is_a_list_diff_mode() -> None:
     assert MonitorMode.RSS_FEED.value in LIST_DIFF_MODES
     # Every list-diff mode must also be a threshold-aware list mode, otherwise
     # the same mode would get item-level thresholds but a text diff.
-    assert LIST_DIFF_MODES <= {"site_links", "list_items", "rss_feed"}
+    assert LIST_DIFF_MODES <= {"site_links", "list_items", "rss_feed", "security_scan"}
 
 
 def test_rss_feed_diff_is_item_level_not_double_prefixed() -> None:
@@ -345,7 +345,7 @@ def test_json_field_value_bounds() -> None:
 
 
 def test_plain_http_modes_cover_every_http_only_mode() -> None:
-    assert PLAIN_HTTP_MODES == {"site_links", "rss_feed", "readme"}
+    assert PLAIN_HTTP_MODES == {"site_links", "rss_feed", "readme", "security_scan"}
 
 
 def test_value_modes_cover_the_chartable_modes() -> None:
@@ -362,4 +362,5 @@ def test_monitor_modes_unchanged() -> None:
         "rss_feed",
         "readme",
         "visual",
+        "security_scan",
     }

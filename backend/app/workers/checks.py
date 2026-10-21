@@ -20,6 +20,7 @@ settings = get_settings()
 
 MODE_SITE_LINKS = "site_links"
 MODE_README = "readme"
+MODE_SECURITY_SCAN = "security_scan"
 
 
 @dramatiq.actor(queue_name="http_checks", max_retries=3, time_limit=120_000)
@@ -93,6 +94,20 @@ def run_http_check(run_id: str) -> None:
                 content_type="text/markdown; charset=utf-8",
                 latency_ms=round((time.perf_counter() - started) * 1000),
             )
+        if monitor.mode == MODE_SECURITY_SCAN:
+            started = time.perf_counter()
+            from app.services.security_scan import scan_url
+
+            try:
+                return scan_url(
+                    monitor.url,
+                    timeout_seconds=monitor.timeout_seconds,
+                    max_response_bytes=monitor.max_response_bytes,
+                )
+            except FetchError:  # noqa: TRY203 - re-raise unchanged, latency fresh
+                started_delta = time.perf_counter() - started
+                logger.debug("security_scan_fetch_failed latency=%.2fs", started_delta)
+                raise
         return fetch_url(
             monitor.url,
             timeout_seconds=monitor.timeout_seconds,
