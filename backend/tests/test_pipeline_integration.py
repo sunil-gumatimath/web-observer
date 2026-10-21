@@ -23,7 +23,7 @@ from app.models import (
 )
 from app.models.entities import RunStatus
 from app.services.fetcher import FetchResult
-from app.services.pipeline import apply_fetch_result
+from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS, apply_fetch_result
 from app.services.retention import purge_expired_snapshots
 from app.services.usage import assert_can_run_check, get_or_create_counter
 
@@ -154,7 +154,7 @@ def test_snapshot_stores_text_object_key_and_truncates_db_preview(db_session, mo
     assert snap.text_object_key is not None
     assert snap.text_object_key.endswith(".norm.txt")
     assert snap.normalized_text is not None
-    assert len(snap.normalized_text) <= 500
+    assert len(snap.normalized_text) <= SNAPSHOT_DB_PREVIEW_CHARS
     assert snap.text_object_key in stored
     # Full normalized text is what we stored (extracted from HTML), not raw body length alone
     assert len(stored[snap.text_object_key]) > 500
@@ -220,7 +220,7 @@ def test_change_creates_single_event_and_outbox(db_session, monkeypatch):
         select(NotificationOutbox).where(NotificationOutbox.change_event_id == changes[0].id)
     ).all()
     assert len(outbox) == 1
-    assert outbox[0].idempotency_key == f"change:{changes[0].id}:channel:{outbox[0].channel_id}"
+    assert outbox[0].idempotency_key == (f"run:{run2.id}:change:channel:{outbox[0].channel_id}")
 
 
 def test_async_ai_enqueues_only_after_change_commit(db_session, monkeypatch):
@@ -357,7 +357,7 @@ def test_outbox_idempotency_key_unique(db_session, monkeypatch):
         channel_id=channel.id,
         payload={},
         status="pending",
-        idempotency_key=f"change:{r2.change_event_id}:channel:{channel.id}",
+        idempotency_key=f"run:{run2.id}:change:channel:{channel.id}",
     )
     db_session.add(dup)
     with pytest.raises(IntegrityError):
@@ -387,12 +387,14 @@ def test_retention_deletes_old_snapshots(db_session, monkeypatch):
 
 
 def test_quota_blocks_when_exceeded(db_session, monkeypatch):
-    from app.config import get_settings
+    from app.services.plans import get_plan
     from app.services.usage import QuotaExceeded, increment_checks
 
     ws, _mon = _seed_monitor(db_session, with_channel=False)
-    settings = get_settings()
-    for _ in range(settings.max_checks_per_day):
+    # The daily check limit comes from the workspace's plan, not from the
+    # global settings default.
+    limit = get_plan(ws).max_checks_per_day
+    for _ in range(limit):
         increment_checks(db_session, ws.id)
     db_session.commit()
 

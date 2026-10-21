@@ -1043,8 +1043,13 @@ def apply_fetch_result(
         run.finished_at = datetime.now(UTC)
         run.error_code = None
         run.error_message = None
+        # Read the flag BEFORE the commit: commit() expires the ORM objects,
+        # so touching monitor.screenshots_enabled afterwards would lazy-load
+        # it and re-open a transaction - and the AI actor must be enqueued
+        # with the session idle and the change already durable.
+        screenshots_enabled = monitor.screenshots_enabled
         db.commit()
-        if monitor.screenshots_enabled:
+        if screenshots_enabled:
             _enqueue_alert_screenshot(change_id, monitor)
         try:
             from app.workers.ai_enrich import enrich_change_event
