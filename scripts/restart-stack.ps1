@@ -401,7 +401,32 @@ try {
 if ($redisTest) {
     Write-Host "Redis preflight: reachable on 127.0.0.1:$RedisPort" -ForegroundColor Green
 } else {
-    Write-Host "Redis preflight: NOT reachable on 127.0.0.1:$RedisPort (start it in WSL2; if Windows->WSL localhost forwarding is down, 'wsl --shutdown' then 'wsl' usually restores it)" -ForegroundColor Yellow
+    # Self-heal: start the Redis systemd service inside WSL2 (password-auth Redis
+    # is fine; the backend carries the password in REDIS_URL). Also keeps a
+    # detached WSL session alive so the VM (and localhost forwarding) does not
+    # idle out while the stack is running.
+    Write-Host "Redis preflight: NOT reachable - attempting auto-start via WSL2..." -ForegroundColor Yellow
+    try {
+        wsl -e bash -lc "sudo -n systemctl start redis-server 2>&1" | Out-Null
+        Start-Sleep -Seconds 2
+        foreach ($i in 1..5) {
+            try {
+                $redisProbe = New-Object System.Net.Sockets.TcpClient
+                $redisProbe.Connect("127.0.0.1", $RedisPort)
+                $redisTest = $redisProbe.Connected
+                $redisProbe.Close()
+                if ($redisTest) { break }
+            } catch { $redisTest = $false }
+            Start-Sleep -Seconds 2
+        }
+    } catch { $redisTest = $false }
+    if ($redisTest) {
+        # Detached hold-open session: parent PowerShell exits, this survives.
+        Start-Process -FilePath "wsl.exe" -ArgumentList '-e','bash','-lc','exec sleep 2147483647' -WindowStyle Hidden | Out-Null
+        Write-Host "Redis preflight: auto-started and reachable on 127.0.0.1:$RedisPort" -ForegroundColor Green
+    } else {
+        Write-Host "Redis preflight: STILL not reachable on 127.0.0.1:$RedisPort (workers/limiter degrade; if Windows->WSL localhost forwarding is down, 'wsl --shutdown' then 'wsl' usually restores it)" -ForegroundColor Yellow
+    }
 }
 
 $CandidateVenvs = @(
