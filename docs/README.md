@@ -18,6 +18,7 @@ project overview and quickstart.
 | [guides/clerk-production.md](./guides/clerk-production.md) | Clerk production hardening |
 | [guides/resend-setup.md](./guides/resend-setup.md) | Email alerts (Resend) |
 | [guides/r2-setup.md](./guides/r2-setup.md) | Cloudflare R2 snapshot storage |
+| [../../cloudflarefree.md](../../cloudflarefree.md) | Cloudflare free-tier phase plan (Phases 0–10, $0/mo) |
 | [integrations/n8n-zapier.md](./integrations/n8n-zapier.md) | n8n / Zapier automation |
 
 ## Reference
