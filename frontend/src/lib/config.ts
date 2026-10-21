@@ -4,6 +4,13 @@ export const config = {
   devWorkspaceId: process.env.NEXT_PUBLIC_DEV_WORKSPACE_ID ?? "",
   clerkPublishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "",
   /**
+   * Cloudflare Web Analytics beacon (free, cookie-less). Empty = the beacon
+   * script is not rendered at all — no network call, no tracking. Set
+   * NEXT_PUBLIC_CF_BEACON_TOKEN from the dashboard
+   * (Web Analytics → your site → Installation → JS snippet token) to enable.
+   */
+  cfBeaconToken: process.env.NEXT_PUBLIC_CF_BEACON_TOKEN ?? "",
+  /**
    * Internal-token (no-Clerk) auth is a development convenience.  It must
    * NEVER be reachable in a production build — otherwise a misconfigured prod
    * (missing publishable key) silently falls back to the shared internal token

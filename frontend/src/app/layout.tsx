@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemedClerkProvider } from "@/components/clerk-theme-provider";
+import { CfWebAnalyticsBeacon } from "@/components/cf-web-analytics-beacon";
 import { Providers } from "@/components/providers";
 import { ThemeProvider } from "@/components/theme-provider";
 import { config } from "@/lib/config";
@@ -85,6 +86,8 @@ export default function RootLayout({
             <Providers>{children}</Providers>
           )}
         </ThemeProvider>
+        {/* Cloudflare Web Analytics (free, cookie-less) — inactive without a token */}
+        <CfWebAnalyticsBeacon token={config.cfBeaconToken} />
       </body>
     </html>
   );
