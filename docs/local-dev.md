@@ -153,6 +153,7 @@ bun run dev --port 3000
 | <http://127.0.0.1:8002/docs> | API docs |
 | <http://127.0.0.1:8002/health> | API process |
 | <http://127.0.0.1:8002/ready> | DB connectivity |
+| <http://127.0.0.1:8002/metrics> | Prometheus metrics |
 
 Tables are auto-created only when APP_ENV is development/test/testing (see app/main.py lifespan); production schema is managed by Alembic migrations. Set APP_ENV=production in prod and run `alembic upgrade head`
 
@@ -169,6 +170,10 @@ NEXT_PUBLIC_INTERNAL_API_TOKEN=dev-internal-token
 # NEXT_PUBLIC_DEV_WORKSPACE_ID=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
+# Optional: Cloudflare Web Analytics beacon (empty = beacon never loads)
+# NEXT_PUBLIC_CF_BEACON_TOKEN=
+# Optional: serve screenshots from a public R2 bucket CDN instead of the API proxy
+# NEXT_PUBLIC_SCREENSHOT_CDN_URL=https://screenshots.example.com
 ```
 
 With Clerk keys set, the app requires **sign-in**; it will not fall back to the internal token for API calls.
@@ -185,19 +190,25 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 | ------------ | ------------------ |
 | Change activity | `GET /api/v1/workspaces/{id}/changes/activity?days=14&include_noise=false` — per-day counts + per-category breakdown for the dashboard card (`days` 1–90, noise excluded by default, 20k-row cap, null category → `uncategorized`) |
 | Run logs | `GET /api/v1/workspaces/{id}/runs` — workspace-wide check history with outcome (`all`/`success`/`failed`/`changed`), monitor and date filters; `backend/app/services/run_logs.py` is the shared filter source of truth |
-| Runs export | `GET /api/v1/workspaces/{id}/export/runs?format=csv|json` — CSV/JSON export honouring the same filters as the logs list (20k-run cap, `runs.exported` audit entry) |
+| Runs export | `GET /api/v1/workspaces/{id}/export/runs?format=csv\|json` — CSV/JSON export honouring the same filters as the logs list (20k-run cap, `runs.exported` audit entry) |
 | Monitor SSE stream | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/events` — run-status/change events; 1-hour lifetime, 15s heartbeat, Redis ORM-wakeup hints from `app/services/live_events.py` (candidates: pipeline, workers, scheduler, reaper). Without Redis the publisher circuit-breaks and the stream falls back to a 1.5s poll tick |
 | Bulk pause / resume | `POST /api/v1/workspaces/{id}/monitors/pause-all`, `.../resume-all` (resume re-schedules `next_run_at`) |
 | Selector preview | `POST /api/v1/workspaces/{id}/monitors/selector-preview` — sanitized HTML for the point-and-click picker |
 | Brand info | `POST /api/v1/workspaces/{id}/monitors/brand-info` — logo/title/description auto-fill |
+| Change Q&A | `POST /api/v1/workspaces/{id}/changes/{change_id}/ask-ai` — ask a question about one change (5/minute) |
+| Status badge | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/badge.svg` — public SVG badge, no auth |
+| Value history | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/value-history` — chartable series for `product_price` / `json_field` |
 | Mark all read | `POST /api/v1/workspaces/{id}/alerts/read-all` |
 | Snapshot download | `GET /api/v1/workspaces/{id}/snapshots/{snapshot_id}` |
+| Prometheus metrics | `GET /metrics` — monitors total, runs/changes in 24h, outbox and webhook backlog (30/minute) |
 
 Fetch behavior worth knowing while debugging:
 
 - The SSRF-pinned fetcher tries **every** validated IP in turn — one dead CDN PoP won't fail a check; only connect-level errors trigger failover (`backend/app/services/fetcher.py:_pinned_get`).
 - `readme` monitors hit the GitHub API first (resolves the default branch in 1 request), then fall back to capped raw probes.
 - LLM summaries fail over across `LLM_FALLBACK_MODELS`; `none` disables failover. The catalog default is the model list of the provider that `LLM_API_BASE` points at (see `backend/app/services/model_catalog.py`).
+- `js_required` monitors fall back to the **Cloudflare Browser Rendering Worker** when the local Playwright fetch fails (`CLOUDFLARE_BROWSER_URL` + `CLOUDFLARE_BROWSER_TOKEN`). Local stays primary so the free ~10 min/day edge-browser quota is preserved. Covered by `backend/tests/test_browser_failover.py`.
+- `security_scan` monitors run on Cloudflare's edge via the URL Scanner (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_URLSCANNER_TOKEN`). With no token the check fails with a clear error instead of silently passing.
 
 Optional env (defaults work locally):
 
@@ -214,7 +225,12 @@ GEMINI_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai
 GEMINI_MODEL=gemini-3.1-flash-lite
 
 STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storage
+
+# Screenshots in their own public bucket (R2 + CDN custom domain)
+S3_SCREENSHOT_BUCKET=
 ```
+
+Every supported variable is listed with its default in [`.env.example`](../.env.example).
 
 ---
 
@@ -246,6 +262,9 @@ STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storag
 | Visual: Bad file descriptor | Browser worker `--threads 1`; restart workers; Playwright install chromium |
 | Visual: Executable doesn't exist | `python -m playwright install chromium` |
 | Snapshot storage errors | `STORAGE_BACKEND=local` |
+| `security_scan` monitor fails immediately | No `CLOUDFLARE_URLSCANNER_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` on the server — the mode errors clearly rather than silently passing. Both are dashboard-only tokens. |
+| Browser check fails but plain HTTP works | The Cloudflare Browser Rendering failover is a *fallback*, not a replacement: it only engages after a local Playwright fetch has already failed. Check `CLOUDFLARE_BROWSER_URL` / `CLOUDFLARE_BROWSER_TOKEN`, and that the edge hostname is reachable (some ISPs block `*.workers.dev`). |
+| Screenshots 404 on the monitor page | The screenshot is still in the browser queue — the image is only stored once the change is captured. The visual diff slider retries with a cache-buster. Also check `S3_SCREENSHOT_BUCKET` vs `NEXT_PUBLIC_SCREENSHOT_CDN_URL` agree. |
 | Frontend CORS | API allows `localhost:3000` and `127.0.0.1:3000` (dev only — prod uses an explicit allow-list via `CORS_ORIGINS`) |
 
 ---
