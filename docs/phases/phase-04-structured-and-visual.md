@@ -6,7 +6,7 @@
 
 ## Modes
 
-Actual shipped modes (`backend/app/schemas.py:10`, `backend/app/models/entities.py:30-34`):
+Actual shipped modes (`backend/app/schemas.py:225-227`, `backend/app/models/entities.py:31`):
 
 | Mode | What it watches | Extract | Worker |
 | ------ | -------- | --------- | -------- |
@@ -17,9 +17,10 @@ Actual shipped modes (`backend/app/schemas.py:10`, `backend/app/models/entities.
 | `json_field` | A single value in a JSON API response | Scalar extracted via a JSONPath-style query (e.g. `$.data.price`) – hash diff of the normalized value | HTTP / browser |
 | `rss_feed` | An RSS/Atom feed | Feed entries joined by newline – added/removed entry diff | HTTP (`js_required` rejected) |
 | `readme` | A GitHub repository README (`owner/repo` or full URL, `/tree | blob/<branch>`,`.git` all accepted) | Normalized markdown – line-level unified diff; fetched via GitHub API first, then capped raw probes | HTTP (`js_required` rejected) |
-| `visual` | A page's rendered appearance | Full-page screenshot perceptual hash (aHash, hamming distance vs `VISUAL_AHASH_THRESHOLD`) – change when distance exceeds threshold | Browser |
+| `visual` | A page's rendered appearance | Full-page screenshot perceptual hash (DCT pHash, hamming distance vs `VISUAL_PHASH_THRESHOLD`; legacy aHash vs `VISUAL_AHASH_THRESHOLD` for snapshots captured before pHash) – change when distance exceeds threshold | Browser |
+| `security_scan` | A URL's security posture on Cloudflare's edge | URL Scanner verdict flattened to one fact per line (`malicious=`, `categories=`, `tags=`, `certificate=`, `server=`, `asn=`, `tech=`) – added/removed fact diff | Cloudflare edge (`js_required` rejected) |
 
-`css_selector` is required for `list_items` (`backend/app/schemas.py:119-121`). For `json_field`, the URL must return JSON and the JSONPath-style query is stored in the `css_selector` field. `site_links` ignores `css_selector` and `js_required`. `js_required` is rejected for `site_links`, `rss_feed`, and `readme` (plain-HTTP fetch); other modes may use the browser queue.
+`css_selector` is required for `list_items` (`backend/app/schemas.py:256-264`). For `json_field`, the URL must return JSON and the JSONPath-style query is stored in the `css_selector` field. `site_links` ignores `css_selector` and `js_required`. `js_required` is rejected for `site_links`, `rss_feed`, `readme`, and `security_scan` (plain-HTTP fetch, or rendering on Cloudflare's edge); other modes may use the browser queue.
 
 ## Structured diffs
 
@@ -31,15 +32,17 @@ Actual shipped modes (`backend/app/schemas.py:10`, `backend/app/models/entities.
 Screenshots are available two ways:
 
 1. **Opt-in per monitor** with `screenshots_enabled` (`monitors.screenshots_enabled`, default off) — works for every mode (see capture rules below).
-2. **First-class `visual` mode** (`MonitorMode.VISUAL`) — the check compares perceptual aHash distance against `VISUAL_AHASH_THRESHOLD` instead of text hashing; routed to the browser queue like `js_required` monitors.
+2. **First-class `visual` mode** (`MonitorMode.VISUAL`) — the check compares perceptual distance (DCT pHash against `VISUAL_PHASH_THRESHOLD`, aHash against `VISUAL_AHASH_THRESHOLD` for pre-pHash snapshots) instead of text hashing; routed to the browser queue like `js_required` monitors.
 
 Capture rules (both paths):
 
 - When enabled, each check best-effort captures a full-page Playwright screenshot via
   `visual.py` + subprocess `playwright_job` (Windows-safe) and attaches it to the run/alert
   (`backend/app/services/pipeline.py`). A missing browser or failed capture never fails the check.
-- Each PNG is stored in object storage; an average hash (aHash, via Pillow) is computed for
-  similarity comparison against `VISUAL_AHASH_THRESHOLD` (default hamming distance 5).
+- Each PNG is stored in object storage; a DCT perceptual hash (pHash, 256-bit, via Pillow) is
+  computed for similarity comparison against `VISUAL_PHASH_THRESHOLD` (default hamming
+  distance 8 of 256 bits). Snapshots captured before the pHash path existed keep the legacy
+  64-bit aHash and `VISUAL_AHASH_THRESHOLD` (default 5).
 - Works for every mode; `js_required` monitors additionally use the same Playwright stack for
   page rendering.
 Current behavior (post-roadmap): captures happen only on non-noise signal changes; needs 2 signal changes for before/after comparison.
@@ -47,6 +50,7 @@ Current behavior (post-roadmap): captures happen only on non-noise signal change
 ## Config
 
 ```env
+VISUAL_PHASH_THRESHOLD=8
 VISUAL_AHASH_THRESHOLD=5
 MAX_BROWSER_CHECKS_PER_DAY=50
 ```

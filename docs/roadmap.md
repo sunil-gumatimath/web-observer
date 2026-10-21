@@ -2,6 +2,28 @@
 
 This document details the strategic product enhancements, technical architecture upgrades, and new feature specifications for **Web Observer**. It builds on the existing foundation (Phases 0–7) to elevate the platform to a commercial-grade web monitoring and intelligence engine.
 
+## Status as of 2026-10-21
+
+Shipped since the last review (2026-09-04), beyond the original scope:
+
+| Shipped | Where |
+| ------- | ----- |
+| `security_scan` monitoring mode (Cloudflare URL Scanner) | `backend/app/services/security_scan.py` |
+| Cloudflare Browser Rendering failover for `js_required` fetches | `backend/app/services/browser_fetch.py`, `workers/browser-failover/` |
+| R2 screenshots in their own public bucket + CDN domain | `backend/app/services/storage.py`, `frontend/src/lib/api.ts` |
+| Cookie-less Cloudflare Web Analytics beacon | `frontend/src/components/cf-web-analytics-beacon.tsx` |
+| Prometheus metrics endpoint (`GET /metrics`) | `backend/app/main.py` |
+| Public per-monitor SVG status badge | `backend/app/routers/monitors.py` |
+| Change Q&A ("ask about this change") | `backend/app/services/ai_summary.py`, `POST /changes/{id}/ask-ai` |
+| Cooldown + flapping guards (partial §3.4) | `backend/app/services/conditional.py:282` |
+| Monitor tags (API + bulk import, no UI — partial §4.4) | migration `013_add_monitor_tags` |
+| DCT pHash visual comparison (replacing aHash) | `backend/app/services/visual.py` |
+| Workspace run logs + audited CSV/JSON export | `backend/app/services/run_logs.py` |
+| Live monitor detail via SSE (1-hour lifetime) | `backend/app/services/live_events.py` |
+| Edge cache Worker for share pages | `workers/share-cache/` |
+
+Still open: Telegram (3.1), Web Push (3.2), PDF/document monitoring (2.4), multi-step user journeys (2.2), bounding-box cropping (2.3), custom headers/cookies (2.5), time-travel scrubbing (4.3), browser extension (6.1), SDKs/CLI (6.2), community nodes (6.3), PDF/CSV reports (6.4), proxy pools (5.1), stealth automation (5.2), warm browser pool (5.3).
+
 ---
 
 ## Table of Contents
@@ -37,7 +59,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 
 * **Problem:** Users currently must inspect browser DevTools, locate DOM classes or IDs, and manually paste CSS selectors or JSONPaths into the form.
 * **Shipped (2026-09):** proxied `POST /monitors/selector-preview` (sanitized HTML) + `SelectorPicker` overlay (`frontend/src/components/selector-picker.tsx`) with resilient selector synthesis (`frontend/src/lib/selector.ts`) on New/Edit monitor.
-* **Remaining:** pre-fill from the browser-extension flow (§6.1), saved-selector confidence scoring.
+* **Remaining:** pre-fill from the browser-extension flow (§6.1), saved-selector confidence scoring, and a tags/folders picker (§4.4).
 * **Proposed Solution (original):**
   * In the **New Monitor** flow, adding a URL loads a proxied interactive preview inside the frontend.
   * Headless Chromium retrieves the page DOM and stylesheet snapshot.
@@ -119,7 +141,15 @@ To expand from developer-centric change detection into an all-in-one web intelli
   * Added AI Executive Digest briefings for daily/weekly digests.
   * Added UI badge display for impact/confidence and semantic trigger input fields in the frontend.
 
-### 3.4 Smart Alert Throttling & Flapping Protection
+### 3.4 Smart Alert Throttling & Flapping Protection `[Status: Partially Implemented]`
+
+* **Problem:** Websites that update frequently or flap between two states (e.g. "In Stock" and "Out of Stock" every 5 minutes) flood channels with noise.
+* **Implemented:**
+  * **Cooldown Window** — `cooldown_minutes` in the per-monitor `alert_config`: after a signal alert, outbound notifications are skipped for that many minutes. The change is still recorded in the inbox; only the send is suppressed (`backend/app/services/conditional.py:282` `check_rate_limits`, called from `backend/app/services/pipeline.py:820-831`).
+  * **Flapping Detection** — `flap_window_minutes` + `flap_max_alerts`: when at least that many signal changes fire inside the window, the monitor is treated as flapping and notifications are bundled until it settles. The suppression reason is logged.
+  * Both guards **fail open** — an error or missing/invalid config allows the alert through. Alerting must never silently die.
+  * Both are exposed in the Threshold Editor on the New/Edit monitor form (`frontend/src/lib/thresholds.ts`).
+* **Remaining:** the **Digest Rollup** option (bundling rapid-fire changes into an hourly summary rather than immediate single-fire messages) is not implemented — the daily/weekly workspace digest (Phase 5) is the closest thing today.
 
 * **Problem:** Websites that update frequently or flap between two states (e.g., "In Stock" and "Out of Stock" every 5 minutes) flood channels with noise.
 * **Proposed Solution:**
@@ -134,6 +164,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 ### 4.1 Interactive Visual Diff Slider (Swipe / Split-Screen View) `[Status: Partially Implemented]`
 
 * **Done (2026-09):** swipe/split slider component (`frontend/src/components/visual-diff.tsx`), screenshot keying to changed runs (not latest runs), slider polish via UI batch.
+* **Done (2026-10):** the visual comparison now uses a **DCT pHash** (256-bit) instead of the legacy 64-bit aHash, with the perceptual distance exposed as the `min_diff_chars` threshold for `visual` monitors.
 * **Remaining:** pixel-difference heatmap overlay (magenta/neon clusters) and flicker/blink mode.
 * **Problem:** Viewing old and new screenshots side-by-side makes subtle layout and typography changes difficult to detect.
 * **Proposed Solution:**
@@ -159,7 +190,8 @@ To expand from developer-centric change detection into an all-in-one web intelli
 ### 4.4 Folders, Tags & Bulk Fleet Management `[Status: Partially Implemented]`
 
 * **Done (2026-09):** bulk pause/resume — `POST /monitors/pause-all` + `POST /monitors/resume-all` (`backend/app/routers/monitors.py`) with dashboard Pause-all/Resume-all controls (confirm dialog, optimistic `enabled` flip).
-* **Remaining:** `tags`/`folder_id` organization, multi-select *Change Check Interval*, *Assign Channel*, *Batch Export*.
+* **Done (2026-10):** `tags` — a JSONB array of up to 10 strings per monitor (migration `013_add_monitor_tags`), settable via `POST/PATCH /monitors` and the bulk-import `tags` column. There is **no UI yet**, so tags are API-only so far.
+* **Remaining:** `folder_id` organization, multi-select *Change Check Interval*, *Assign Channel*, *Batch Export*, and a tags UI.
 * **Problem:** When a workspace tracks 50+ monitors, the flat list becomes disorganized.
 * **Proposed Solution (original):**
   * Add `tags` (array of strings) and `folder_id` (nested categories) to `monitors`.
@@ -201,7 +233,7 @@ Status: Proposed only — see ADR 007; threat model still prohibits until accept
 
 ### 5.4 Real-Time Streaming via Server-Sent Events (SSE)
 
-* **Status: partially shipped.** The stream endpoint
+* **Status: shipped.** The stream endpoint
   (`GET /api/v1/workspaces/{ws}/monitors/{id}/events`) is live and drives the
   monitor detail page. Worker/scheduler/reaper status transitions publish
   instantly via Redis-backed ORM `after_flush` wakeup hints
@@ -308,7 +340,13 @@ gantt
 | **Zapier / n8n Nodes** | Medium-High | Low-Medium (2–3 days) | 11 |
 | **Semantic AI Alert Rules (3.3)** | Done 2026-09 | — | Done, skip |
 | **Swipe Diff Slider base (4.1)** | Done 2026-09 | — | Done, only heatmap/flicker left |
+| **Smart Alert Throttling & Flapping (3.4)** | Partially done 2026-10 (cooldown + flapping guards shipped; digest rollup not started) | — | Partial, see 3.4 |
+| **Monitor Tags (4.4)** | Low | Low (done 2026-10, API only — no UI) | 12 |
+| **`security_scan` mode** | Medium | Done 2026-10 | — | Done, skip |
+| **Browser Rendering failover** | Medium | Done 2026-10 | — | Done, skip |
+| **Public status badge** | Low | Done 2026-10 | — | Done, skip |
+| **Change Q&A** | Medium | Done 2026-10 | — | Done, skip |
 
 ---
 
-*Document created for pair-programming and roadmap tracking. Last reviewed 2026-09-04: marked 3.3 + 4.1-base + bulk pause/resume (4.4) done, 2.1 partially implemented (selector-preview + picker shipped), re-sequenced Phase 8 (Telegram first), deferred paid proxy/extension to Phase 10. Review or update as feature requirements evolve.*
+*Document created for pair-programming and roadmap tracking. Last reviewed 2026-10-21: added a shipped-since table, marked the cooldown/flapping guards as partially implemented (3.4), recorded that monitor tags exist at the API level without a UI (4.4), and noted the pHash visual comparison (4.1). Still open: Telegram (3.1), Web Push (3.2), PDF documents (2.4), user journeys (2.2), bounding-box crop (2.3), custom headers/cookies (2.5), time travel (4.3), extension (6.1), SDKs (6.2), community nodes (6.3), PDF reports (6.4), proxies (5.1), stealth (5.2), warm browser pool (5.3). Review or update as feature requirements evolve.*

@@ -41,6 +41,11 @@ flowchart TB
         CHAT["Slack / Discord webhooks"]
         TARGET["Monitored web pages"]
     end
+    subgraph Edge["Cloudflare edge (optional, $0 tier)"]
+        CFW["Worker: browser-failover\nedge Chromium, failover only\n(~10 min browser time/day)"]
+        CFS["Worker: share-cache\nedge cache for /share/ + /_next/static/"]
+        SCAN["Cloudflare URL Scanner\nsecurity_scan mode verdicts"]
+    end
 
     NEO[("Neon Postgres")]
     REDIS[("Redis\nDramatiq broker · rate limits ·\nSSE wakeup pub/sub (best-effort hints)")]
@@ -48,6 +53,8 @@ flowchart TB
 
     UI -->|"HTTPS + Bearer/JWT"| API
     UI -->|"opens SSE /monitors/{id}/events\n+ receives run-status events"| LIVE
+    UI -->|"public share pages + /_next/static/"| CFS
+    CFS -->|"cached response"| UI
     API --> AUTH
     AUTH --> CLERK
     API --> NEO
@@ -65,6 +72,10 @@ flowchart TB
     LIVE -->|"re-reads authoritative\nrun state every tick"| NEO
     HTTPW -->|"fetch_url"| TARGET
     BROWW -->|"fetch_url_browser / screenshot"| TARGET
+    BROWW -->|"failover: local fetch failed"| CFW
+    CFW --> TARGET
+    BROWW -->|"security_scan mode"| SCAN
+    SCAN --> BROWW
     HTTPW --> NEO
     BROWW --> NEO
     AIEW --> NEO
@@ -140,7 +151,7 @@ classDiagram
         +UUID id
         +UUID workspace_id
         +String url
-        +String mode  page_content|site_links|product_price|list_items|json_field|visual|rss_feed|readme
+        +String mode  page_content|site_links|product_price|list_items|json_field|visual|rss_feed|readme|security_scan
         +String css_selector  (list_items/json_field selector or JSONPath)
         +bool js_required  (true routes to browser_checks queue)
         +bool screenshots_enabled  (capture screenshot on signal)
@@ -148,6 +159,7 @@ classDiagram
         +String semantic_trigger  (plain-English alert rule)
         +JSON alert_config  (conditional thresholds, migration 011)
         +JSON brand  (title/description/logo_url/hero_url)
+        +JSON tags  (up to 10 strings — migration 013; API + bulk import, no UI yet)
         +int schedule_interval_minutes
         +bool enabled
         +int config_version
@@ -311,13 +323,13 @@ sequenceDiagram
     P->>DB: find prev SUCCEEDED run (same config_version)
     alt no prev run
         P-->>W: PipelineResult(is_baseline=true)
-    else content_hash equal, or visual mode aHash within visual_ahash_threshold
+    else content_hash equal, or visual mode pHash within visual_phash_threshold
         P-->>W: PipelineResult(unchanged=true)
     else content differs
-        P->>P: should_alert() (conditional.py:26) over alert_config
+        P->>P: should_alert() (conditional.py:130) over alert_config
         alt threshold not met (conditional suppression)
             P->>DB: insert ChangeEvent (is_noise=true, ai_summary=[Conditional] reason)
-            P-->>W: PipelineResult(noise early-return, pipeline.py:743-744 — no outbox/webhook)
+            P-->>W: PipelineResult(noise early-return, pipeline.py:814-815 — no outbox/webhook)
         else threshold met
             P->>P: enrich_change with watch_note triage + semantic_trigger
             P->>DB: insert ChangeEvent (+ AI summary, title/impact/confidence)
@@ -374,22 +386,24 @@ sequenceDiagram
 flowchart TD
     A[FetchResult] --> B{status >= 400?}
     B -->|yes| F1[Run FAILED\nhttp_client/server_error]
-    B -->|no| C[extract_normalized by mode\npage_content / site_links / product_price / list_items / json_field]
+    B -->|no| C[extract_normalized by mode\npage_content / site_links / product_price /\nlist_items / json_field / rss_feed /\nreadme / visual / security_scan]
     C --> D{extraction OK\nand non-empty?}
     D -->|no| F2[Run FAILED\nextraction_failed]
     D -->|yes| E[content_hash + store raw + Snapshot]
     E --> G{prev SUCCEEDED run\nsame config_version?}
     G -->|none| H[(BASELINE\nset, no alert)]
-    G -->|exists| I{content_hash equal?\nvisual: aHash within visual_ahash_threshold?}
+    G -->|exists| I{content_hash equal?\nvisual: pHash within visual_phash_threshold}
     I -->|yes| J[(UNCHANGED\nno alert)]
     I -->|no| K[compute diff / list diff / value diff]
-    K --> T{should_alert?\nconditional.py:26 over alert_config}
-    T -->|threshold not met| S[(NOISE — ChangeEvent is_noise=true\n[Conditional] reason, no notify\nnoise early-return pipeline.py:743-744)]
+    K --> T{should_alert?\nconditional.py:130 over alert_config}
+    T -->|threshold not met| S[(NOISE — ChangeEvent is_noise=true\nConditional reason, no notify\nnoise early-return pipeline.py:814-815)]
     T -->|met| L[enrich_change — AI summary + title/impact/confidence\nwatch_note triage + semantic_trigger]
     L --> Q{AI-triaged noise?}
     Q -->|yes| S
-    Q -->|no signal| V[capture screenshot when screenshots_enabled\nscreenshots/{monitor_id}/{change.run_id}.png]
-    V --> M[queue NotificationOutbox\nper enabled channel]
+    Q -->|no signal| V[capture screenshot when screenshots_enabled\nscreenshots/<monitor_id>/<run_id>.png]
+    V --> C2{cooldown / flapping guard?\nconditional.py:282}
+    C2 -->|suppressed| S3[(change recorded, notify skipped)]
+    C2 -->|allowed| M[queue NotificationOutbox\nper enabled channel]
     M --> N[enqueue WebhookDelivery\nper enabled endpoint]
     N --> O[(CHANGE DETECTED\nnotify out)]
 ```
@@ -437,7 +451,11 @@ flowchart TB
 * **Rate limiting** (`app/rate_limit.py`): default 60/min per verified principal (or IP), enforced on every route by `SlowAPIMiddleware` (decorated endpoints keep stricter limits). Counters are shared via Redis; when Redis is unreachable the limiter **fails open** to per-process in-memory counters with automatic recovery (`in_memory_fallback_enabled`), so a Redis outage cannot turn unrelated requests into 500s.
 * **Delivery reliability (review follow-ups)**: outbox and webhook sends claim rows atomically (`PENDING→PROCESSING`) with an attempts cap and a reaper that re-enqueues abandoned rows; usage counters use Postgres `ON CONFLICT` upserts + atomic increments; the browser-check daily quota is plan-aware with a once-per-run reservation; the stuck-run reaper uses a fenced conditional `UPDATE...WHERE status`, and `run_guard` refuses to run hooks/claims for runs not in `scheduled`/`queued` — preventing double-sends after retries.
 * **SSRF guard** (`security/ssrf.py`): blocks private/loopback/link-local/metadata IPs and credentialed URLs before any fetch; redirects are re-validated in the fetcher. The pinned fetcher (`services/fetcher.py:_pinned_get`) tries every validated IP in turn, so one dead CDN PoP can't fail a check — only connect-level errors trigger failover. `readme` monitors hit the GitHub API first (default-branch aware), then capped raw probes.
-* **Newer endpoints not in the diagrams above**: `GET .../runs` (workspace run logs, shared filters via `services/run_logs.py`), `GET .../export/runs` (CSV/JSON, 20k-run cap, audited), `GET .../monitors/{id}/events` (SSE live run status), `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`.
+* **Cloudflare Browser Rendering failover** (`services/browser_fetch.py`): local Playwright is always the primary path. Only when a local browser fetch has *actually failed* does the check retry once against the edge Worker (`CLOUDFLARE_BROWSER_URL`, token in `CLOUDFLARE_BROWSER_TOKEN`). The edge is a separate trust boundary: the Worker returns raw HTML, so the backend re-applies SSRF validation to the *final* URL, the size caps, and bot-challenge detection on the way back in. The free tier allows ~10 minutes of browser time per UTC day, which is why local stays primary. Worker source: `workers/browser-failover/`; covered by `backend/tests/test_browser_failover.py`.
+* **`security_scan` mode** (`services/security_scan.py`): the URL is submitted to the Cloudflare URL Scanner and the result is flattened into a deterministic one-fact-per-line digest (`malicious=`, `categories=`, `tags=`, `task.status=`, `task.apexDomain=`, `certificate=`, `server=`, `asn=`, `tech=`). Volatile counters are deliberately excluded so an unchanged page does not alert on noise, and the fact list diffs as an item set. The mode needs `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_URLSCANNER_TOKEN`; without a token the check fails loudly instead of silently passing. It renders on Cloudflare's edge, so `js_required` is rejected.
+* **Screenshot storage** (`services/storage.py`): object keys starting with `screenshots/` route to `S3_SCREENSHOT_BUCKET` when it is set, so screenshots can live in a separate public bucket behind a CDN custom domain (`NEXT_PUBLIC_SCREENSHOT_CDN_URL`) while snapshots and brand assets stay in the primary bucket behind the API's asset proxy. The bucket is chosen per key, not per process.
+* **Observability**: `GET /metrics` serves Prometheus-compatible text (monitors total, runs and changes in the last 24h, outbox and webhook backlog). It is rate limited to 30/minute like every other route.
+* **Newer endpoints not in the diagrams above**: `GET .../runs` (workspace run logs, shared filters via `services/run_logs.py`), `GET .../export/runs` (CSV/JSON, 20k-run cap, audited), `GET .../monitors/{id}/events` (SSE live run status), `GET .../changes/activity` (dashboard card), `POST .../monitors/pause-all` / `resume-all`, `POST .../monitors/selector-preview` + `.../brand-info` (picker + brand auto-fill), `POST .../alerts/read-all`, `GET .../snapshots/{id}`, `POST .../changes/{id}/ask-ai` (change Q&A), `GET .../monitors/{id}/badge.svg` (public status badge), `GET .../monitors/{id}/value-history` (price/JSON series), `GET /metrics` (Prometheus).
 * **Live status streaming** (`services/live_events.py`): an ORM `after_flush` hook installed in `models/__init__.py` publishes best-effort Redis hints on every `MonitorRun.status` write site (pipeline, workers, scheduler, reaper) — one hook instead of ~15 instrumented call sites. The SSE endpoint always re-reads authoritative state from Postgres before emitting, so a lost or spurious hint changes latency only, never correctness. Without Redis the publisher circuit-breaks and the stream falls back to a 1.5s poll tick.
 * **Run-status staging** (`services/pipeline.py`): the terminal `SUCCEEDED` status is staged only on paths that commit immediately, so the pre-commit reaper fence never reads a run's own staged value as external news (a reaper bug once rolled back genuine changes on the *changed* path); the fence probe goes through a fresh session.
 * **Quotas/plans** (`services/usage.py`, `services/plans.py`): daily check/notification/storage counters per workspace, gated by plan.

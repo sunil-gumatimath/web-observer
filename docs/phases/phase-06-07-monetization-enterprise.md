@@ -63,7 +63,7 @@ See `docs/integrations/n8n-zapier.md`.
 
 ## Conditional alerting (migration `011`, post-roadmap)
 
-Per-monitor `alert_config` JSONB — evaluated by `should_alert()` (`backend/app/services/conditional.py:26`) after diff, before notify. Unmet thresholds mark the change `is_noise=true` with a reason (kept in dashboard, excluded from notifications/digests). Empty/missing config = alert on any hash difference. Changing `alert_config` does not bump `config_version` (thresholds don't affect the baseline).
+Per-monitor `alert_config` JSONB — evaluated by `should_alert()` (`backend/app/services/conditional.py:130`) after diff, before notify. Unmet thresholds mark the change `is_noise=true` with a reason (kept in dashboard, excluded from notifications/digests). Empty/missing config = alert on any hash difference. Changing `alert_config` does not bump `config_version` (thresholds don't affect the baseline).
 
 | Key | Applies to | Meaning |
 | ----- | ------------ | --------- |
