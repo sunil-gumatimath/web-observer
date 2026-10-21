@@ -129,6 +129,11 @@ class Settings(BaseSettings):
     # MinIO's documented dev default; override via env in production.
     s3_secret_key: str = Field(default_factory=lambda: "minioadmin")
     s3_bucket: str = "monitor-snapshots"
+    # Optional dedicated bucket for screenshot objects (public CDN via an R2
+    # custom domain — docs/cloudflarefree.md Phase 3.2). None =
+    # screenshots live in the snapshot bucket and are served through the
+    # public assets proxy endpoint.
+    s3_screenshot_bucket: str | None = None
     s3_region: str = "auto"
 
     resend_api_key: str | None = None
@@ -170,6 +175,23 @@ class Settings(BaseSettings):
     # Billing (optional)
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
+
+    # Cloudflare Browser Rendering failover (optional, Phase 7). Local
+    # Playwright stays primary: when a browser fetch fails locally AND a
+    # failover Worker is configured, the check retries once against the
+    # Worker instead of marking the run failed. The Worker URL is the
+    # workers.dev address deployed from `workers/browser-failover/`; the
+    # token is its SHARED_TOKEN secret. Same SSRF validation as the local
+    # path. Empty URL = feature off (fail open, per repo convention).
+    cloudflare_browser_url: str | None = None
+    cloudflare_browser_token: str | None = None
+
+    # Cloudflare URL Scanner / Radar (optional, Phase 9 "security_scan" mode).
+    # A free API token with URL Scanner permissions
+    # (My Profile -> API Tokens) unlocks the mode; empty = mode errors
+    # cleanly at check time instead of failing at import.
+    cloudflare_account_id: str | None = None
+    cloudflare_urlscanner_token: str | None = None
 
     @property
     def is_development(self) -> bool:
