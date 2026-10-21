@@ -18,6 +18,9 @@ project overview and quickstart.
 | [guides/clerk-production.md](./guides/clerk-production.md) | Clerk production hardening |
 | [guides/resend-setup.md](./guides/resend-setup.md) | Email alerts (Resend) |
 | [guides/r2-setup.md](./guides/r2-setup.md) | Cloudflare R2 snapshot storage |
+| [guides/cloudflare-free-features.md](./guides/cloudflare-free-features.md) | Cloudflare free tier end-to-end (R2, screenshots CDN, Tunnel, Browser Rendering failover, URL Scanner, Workers) |
+| [guides/web-analytics.md](./guides/web-analytics.md) | Cookie-less Cloudflare Web Analytics beacon |
+| [guides/monitoring-modes.md](./guides/monitoring-modes.md) | The 9 monitoring modes, their options and their limits |
 | [integrations/n8n-zapier.md](./integrations/n8n-zapier.md) | n8n / Zapier automation |
 
 ## Reference
@@ -27,6 +30,14 @@ project overview and quickstart.
 | [architecture.md](./architecture.md) | Component, module, ERD, and sequence diagrams |
 | [auth-modes.md](./auth-modes.md) | Dev-token vs Clerk authentication |
 | [roadmap.md](./roadmap.md) | Feature roadmap (Phases 8–10) |
+
+## Operations
+
+| Doc | Topic |
+| ----- | ------- |
+| [operations/local-setup-and-ops.md](./operations/local-setup-and-ops.md) | Process topology, secrets, retention, metrics |
+| [../scripts/](../scripts/) | `restart-stack.ps1`, `stop-stack.ps1`, `cloudflare-tunnel.ps1`, `smoke.sh` |
+| [../workers/](../workers/) | Cloudflare Workers: Browser Rendering failover, share-page edge cache |
 
 ## Decisions
 
