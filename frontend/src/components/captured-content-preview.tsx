@@ -30,6 +30,29 @@ export function CapturedContentPreview({
   const [imgError, setImgError] = useState(false);
   const [readmeView, setReadmeView] = useState<"rendered" | "raw">("rendered");
 
+  const rawText = snapshot?.normalized_text || "";
+  const mode = monitor.mode;
+
+  // Hooks must run on every render, before any early return below.
+  const lineItems = useMemo(
+    () =>
+      rawText
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => (l.startsWith("- ") ? l.slice(2).trim() : l)),
+    [rawText],
+  );
+  const urls = useMemo(
+    () => lineItems.filter((l) => /^https?:\/\//i.test(l) || l.startsWith("/")),
+    [lineItems],
+  );
+  const filtered = useMemo(() => {
+    if (!filterQuery) return urls;
+    const q = filterQuery.toLowerCase();
+    return urls.filter((u) => u.toLowerCase().includes(q));
+  }, [urls, filterQuery]);
+
   function copyToClipboard(text: string, label: string = "default") {
     if (!text) return;
     navigator.clipboard?.writeText(text).then(() => {
@@ -58,9 +81,6 @@ export function CapturedContentPreview({
       </Card>
     );
   }
-
-  const rawText = snapshot.normalized_text || "";
-  const mode = monitor.mode;
 
   // ---------------------------------------------------------------------------
   // 1) VISUAL MODE
@@ -340,23 +360,6 @@ export function CapturedContentPreview({
   // 4) SITE LINKS (SITEMAP INVENTORY) MODE
   // ---------------------------------------------------------------------------
   if (mode === "site_links") {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const urls = useMemo(() => {
-      return rawText
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .map((l) => (l.startsWith("- ") ? l.slice(2).trim() : l))
-        .filter((l) => /^https?:\/\//i.test(l) || l.startsWith("/"));
-    }, [rawText]);
-
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const filtered = useMemo(() => {
-      if (!filterQuery) return urls;
-      const q = filterQuery.toLowerCase();
-      return urls.filter((u) => u.toLowerCase().includes(q));
-    }, [urls, filterQuery]);
-
     return (
       <div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)]">
         {/* Header */}
@@ -449,14 +452,7 @@ export function CapturedContentPreview({
   // 5) LIST ITEMS MODE
   // ---------------------------------------------------------------------------
   if (mode === "list_items") {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const rawItems = useMemo(() => {
-      return rawText
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .map((l) => (l.startsWith("- ") ? l.slice(2).trim() : l));
-    }, [rawText]);
+    const rawItems = lineItems;
 
     return (
       <div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)]">
@@ -514,14 +510,7 @@ export function CapturedContentPreview({
   // 6) RSS FEED MODE
   // ---------------------------------------------------------------------------
   if (mode === "rss_feed") {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const feedItems = useMemo(() => {
-      return rawText
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .map((l) => (l.startsWith("- ") ? l.slice(2).trim() : l));
-    }, [rawText]);
+    const feedItems = lineItems;
 
     return (
       <div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)]">
