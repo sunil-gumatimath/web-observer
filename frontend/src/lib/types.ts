@@ -28,6 +28,7 @@ export type Monitor = {
   ignore_regexes?: string[] | null;
   alert_config?: Record<string, unknown> | null;
   consecutive_failures?: number;
+  tags?: string[] | null;
   screenshots_enabled?: boolean;
   brand?: MonitorBrand | null;
   created_at: string;
@@ -212,6 +213,7 @@ export type MonitorCreateInput = {
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
   alert_config?: Record<string, unknown> | null;
+  tags?: string[] | null;
   screenshots_enabled?: boolean;
   run_now?: boolean;
 };
@@ -230,6 +232,7 @@ export type MonitorUpdateInput = {
   ignore_selectors?: string[] | null;
   ignore_regexes?: string[] | null;
   alert_config?: Record<string, unknown> | null;
+  tags?: string[] | null;
   screenshots_enabled?: boolean;
 };
 
