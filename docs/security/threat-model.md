@@ -155,5 +155,3 @@ for the operational limits and retention rules.
 - [docs/architecture.md](../architecture.md) — component map and security notes
 - [docs/local-dev.md](../local-dev.md) — quotas, retention, secrets
 - [docs/adrs/007-stealth-evasion-policy.md](../adrs/007-stealth-evasion-policy.md) — stealth-evasion policy (Proposed)
-- [docs/adrs/003-auth-provider.md](../adrs/003-auth-provider.md) — auth provider
-- [docs/adrs/004-storage-and-email.md](../adrs/004-storage-and-email.md) — snapshot storage and email

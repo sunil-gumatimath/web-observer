@@ -16,7 +16,7 @@ differently.
 
 | Mode | Extracts | Diff shape | Fetch path | `css_selector` | Value chart | Thresholds |
 | ---- | -------- | ---------- | ---------- | -------------- | ----------- | ---------- |
-| `page_content` | Whole page rendered to markdown | Line-by-line unified diff | HTTP or browser | optional | no | `percent_change`, `min_diff_chars`, `regex_must_match`, `regex_must_not_match` |
+| `page_content` | Main content rendered to markdown, falling back to the whole page | Line-by-line unified diff | HTTP or browser | optional | no | `percent_change`, `min_diff_chars`, `regex_must_match`, `regex_must_not_match` |
 | `site_links` | Sitemap URL inventory | Item set (added / removed URLs) | **plain HTTP only** | no | no | `list_min_added`, `list_min_removed` |
 | `product_price` | First price-like token, normalized (e.g. `USD 19.99`) | Value change | HTTP or browser | optional (price scope) | **yes** | `price_below`, `price_above`, `percent_change` |
 | `list_items` | CSS-selector matches as `[text](href)` | Item set (added / removed) | HTTP or browser | **required** | no | `list_min_added`, `list_min_removed` |
@@ -44,29 +44,28 @@ These six keys are accepted on any monitor, on top of the per-mode keys above
 | `cooldown_minutes` | Quiet period after a signal alert — no further notifications for this monitor. |
 | `flap_window_minutes` + `flap_max_alerts` | Flapping guard: when this many signal changes fire inside the window, alerts are bundled. |
 
-Two caveats:
+One caveat:
 
 - The regex filters are **not offered for `visual` mode** in the UI — a
   screenshot's content is a hash, so a content regex can never match it.
-- `security_scan` gets `list_min_added` / `list_min_removed` from the backend
-  (it is in `LIST_DIFF_MODES`), but the Threshold Editor does not surface them
-  for that mode yet. Set them via the API if you need them.
-
 ---
 
 ## The modes in detail
 
 ### `page_content`
 
-The default. Fetches the page, converts the HTML to markdown, drops the noise
-(ignored selectors and ignore regexes configured per monitor), and diffs the
-result line by line.
+The default. Fetches the page, detects and converts its main content to
+markdown, and falls back to the whole body when main content cannot be
+identified. It then drops the noise (ignored selectors and ignore regexes
+configured per monitor) and diffs the result line by line. Changes outside
+detected main content are not watched.
 
 - Use **Ignore selectors** / **Ignore regexes** to hide cookie banners, ad
   slots, and CSRF tokens so they don't fire false alerts.
 - Enable `js_required` for SPAs — the page is then rendered in a real browser
   (Playwright) and the **browser worker** must be running.
-- Thresholds: `percent_change` (share of the page that changed),
+- Thresholds: `percent_change` (edited characters as a share of the longer
+  snapshot; same-length rewrites count),
   `min_diff_chars`, and the two regex filters.
 
 ### `site_links`
