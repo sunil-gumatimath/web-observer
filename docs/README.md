@@ -30,19 +30,16 @@ project overview and quickstart.
 | [architecture.md](./architecture.md) | Component, module, ERD, and sequence diagrams |
 | [auth-modes.md](./auth-modes.md) | Dev-token vs Clerk authentication |
 | [roadmap.md](./roadmap.md) | Feature roadmap (Phases 8–10) |
+| [security/threat-model.md](./security/threat-model.md) | Security policy: SSRF, tenant isolation, out-of-scope rules |
 
 ## Operations
 
 | Doc | Topic |
 | ----- | ------- |
-| [operations/local-setup-and-ops.md](./operations/local-setup-and-ops.md) | Process topology, secrets, retention, metrics |
+| [operations/local-setup-and-ops.md](./operations/local-setup-and-ops.md) | Process topology, secrets, retention, metrics, service targets |
 | [../scripts/](../scripts/) | `restart-stack.ps1`, `stop-stack.ps1`, `cloudflare-tunnel.ps1`, `smoke.sh` |
 | [../workers/](../workers/) | Cloudflare Workers: Browser Rendering failover, share-page edge cache |
 
 ## Decisions
 
 [adrs/](./adrs/) — architecture decision records (ADR 001–007).
-
-## Phase records
-
-[phases/](./phases/) — historical phase docs (Phase 0 discovery through Phase 7).

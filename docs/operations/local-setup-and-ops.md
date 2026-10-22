@@ -44,6 +44,45 @@ Staging/production are not configured (hosting config removed).
   runs and changes in the last 24h, outbox and webhook backlog
 - Worker concurrency via env
 
+## Service targets
+
+The operating targets this service is held to. These are the private-beta
+acceptance thresholds, not aspirations — a regression against any of them is
+a defect.
+
+| Metric | Target |
+| -------- | -------- |
+| Successful eligible checks | ≥ 99% |
+| Lightweight checks within 15s | ≥ 95% |
+| Checks start within 5 min of schedule | ≥ 99% |
+| Duplicate notifications | < 1 / 10,000 deliveries |
+| Alerts rated useful | ≥ 90% |
+| Cross-workspace incidents | 0 |
+| Successful SSRF to blocked targets | 0 |
+| 4-week workspace retention | ≥ 30% |
+
+### Product and cost metrics to track
+
+- Active monitors / workspaces
+- Monitored domains
+- Checks per day
+- Changes detected
+- Alert CTR / diff views
+- Schedule → notification latency
+- Monitors paused/deleted after noise
+- Noise feedback rate
+- WAU/MAU retention
+- Trial → paid (when billing exists)
+- Cost / 1,000 HTTP checks · Cost / 1,000 browser checks · Storage $ / workspace
+  · Notification $ / workspace · AI $ / summary · Infra $ / active monitor
+
+Per-workspace quota **values** (max monitors, checks/day, browser checks/day,
+response size, storage, deliveries/day, per-domain rate and concurrency, API
+rate limit) are not repeated here — they are configuration, and
+[`.env.example`](../../.env.example) is the source of truth for their defaults.
+The security rationale behind the limits lives in the
+[threat model](../security/threat-model.md).
+
 ## Cloudflare Workers
 
 Two Workers live in `workers/` and are deployed separately from the app:
@@ -89,6 +128,17 @@ User delete monitor → delete associated history + enqueue object deletes.
 > summary), while losing a change event loses user-visible history.
 > See `backend/app/services/retention.py` and
 > `backend/tests/test_retention_events.py`.
+
+## Observability correlation IDs
+
+Always log these IDs — and never log page bodies, credentials, or sensitive
+headers:
+
+- `workspace_id`
+- `monitor_id`
+- `run_id`
+- `change_event_id`
+- `delivery_id`
 
 ## Production / hosting
 

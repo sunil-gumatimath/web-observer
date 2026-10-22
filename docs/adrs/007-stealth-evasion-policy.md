@@ -6,7 +6,7 @@ Proposed
 
 ## Context
 
-Threat model (`docs/phases/phase-00-threat-model.md`) states CAPTCHA /
+Threat model (`docs/security/threat-model.md`) states CAPTCHA /
 bot-defense bypass "will not implement", while roadmap §5.2 proposes
 stealth evasion for Cloudflare Turnstile, DataDome, and Akamai. This
 is a direct policy contradiction that must be resolved explicitly.

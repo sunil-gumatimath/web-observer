@@ -1,7 +1,18 @@
+<p align="center">
+  <img src="../../assets/web-observer.svg" alt="Web Observer logo" width="320" />
+</p>
+
 # Threat Model — SSRF & Tenant Isolation
 
-Status: **Approved for Phase 1 implementation**  
-Scope: MVP public monitoring
+Status: **Approved — standing security policy.** The controls below are
+shipped; the checklist at the end records their state.
+
+Scope: public web monitoring.
+
+This document is the authoritative statement of what Web Observer treats as a
+security risk and what it refuses to do. It supersedes the Phase 0 planning
+notes; where a later decision changes a rule, the rule is updated here and the
+decision is recorded as an ADR.
 
 ## Assets
 
@@ -18,7 +29,7 @@ Scope: MVP public monitoring
 1. Browser / Clerk → API  
 2. API → PostgreSQL / Redis / R2  
 3. Workers → **arbitrary public internet** (highest risk)  
-4. Workers → DB / R2 / Resend  
+4. Workers → DB / R2 / Resend
 
 ## STRIDE-style risks (priority)
 
@@ -26,7 +37,7 @@ Scope: MVP public monitoring
 
 **Threat:** Attacker points monitor URL at `169.254.169.254`, localhost, internal VPC, or DNS-rebinding target.
 
-**Mitigations (required Phase 1):**
+**Mitigations (shipped):**
 
 - Allow only `http` / `https`  
 - Reject embedded credentials in URLs  
@@ -110,17 +121,27 @@ Scope: MVP public monitoring
 - Redact page content from default logs  
 - Correlation IDs only (workspace, monitor, run, etc.)  
 
-## Out of scope for MVP (accepted residual risk)
+## Out of scope (accepted residual risk)
 
 - Authenticated page monitoring (deferred with credential encryption design)  
-- CAPTCHA / bot-defense bypass (will not implement)  
-- Full legal clearance for every jurisdiction (document policy; user responsibility for targets)
+- CAPTCHA / bot-defense bypass (**will not implement**)  
+- Full legal clearance for every jurisdiction (document policy; user responsibility for targets)  
 
-Note: roadmap §5.2 proposes revisiting this; see ADR 007 (Proposed) — no implementation until accepted.  
+The stealth-evasion proposal in roadmap §5.2 directly contradicts the
+bot-defense prohibition above. That contradiction is resolved by
+[ADR 007](../adrs/007-stealth-evasion-policy.md) — **Proposed, not
+accepted**: no stealth-evasion implementation until legal review, target-site
+ToS assessment, and abuse controls are approved. Any future stealth work
+requires a new ADR that supersedes it.
 
-## Security requirements checklist (Phase 1 exit)
+## Security requirements checklist
 
-Status: **implemented** — controls shipped (see `docs/phases/phase-03-browser-and-js.md`, `docs/phases/phase-06-07-monetization-enterprise.md`).
+Status: **implemented** — the controls shipped in the core detection, browser,
+and enterprise phases. See [docs/architecture.md](../architecture.md) for where
+each control lives in code (SSRF guard, pinned fetcher, outbox idempotency,
+rate limits, crypto purpose separation) and
+[docs/operations/local-setup-and-ops.md](../operations/local-setup-and-ops.md)
+for the operational limits.
 
 - [x] SSRF suite green  
 - [x] No private/metadata IP access in tests  
@@ -128,3 +149,11 @@ Status: **implemented** — controls shipped (see `docs/phases/phase-03-browser-
 - [x] Diff rendering safe (no raw HTML inject)  
 - [x] Secrets not in logs  
 - [x] Quotas enforced at API and worker edges  
+
+## Related
+
+- [docs/architecture.md](../architecture.md) — component map and security notes
+- [docs/operations/local-setup-and-ops.md](../operations/local-setup-and-ops.md) — quotas, retention, secrets
+- [docs/adrs/007-stealth-evasion-policy.md](../adrs/007-stealth-evasion-policy.md) — stealth-evasion policy (Proposed)
+- [docs/adrs/003-auth-provider.md](../adrs/003-auth-provider.md) — auth provider
+- [docs/adrs/004-storage-and-email.md](../adrs/004-storage-and-email.md) — snapshot storage and email

@@ -32,8 +32,9 @@ Verified end-to-end (last run 2026-10-21): backend `288 passed, 4 skipped` unit 
 | [docs/guides/web-analytics.md](docs/guides/web-analytics.md) | Cookie-less Cloudflare Web Analytics beacon |
 | [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) | The 9 monitoring modes, their options and their limits |
 | [docs/guides/r2-setup.md](docs/guides/r2-setup.md) | Cloudflare R2 snapshots (optional object storage) |
-| [docs/phases/](docs/phases/) | Historical phase records (discovery → enterprise) |
 | [docs/roadmap.md](docs/roadmap.md) | Feature roadmap (Phases 8–10) |
+| [docs/security/threat-model.md](docs/security/threat-model.md) | Security policy: SSRF, tenant isolation, out-of-scope rules |
+| [docs/operations/local-setup-and-ops.md](docs/operations/local-setup-and-ops.md) | Process topology, secrets, retention, metrics, service targets |
 | [docs/adrs/](docs/adrs/) | Architecture decision records |
 | [docs/integrations/n8n-zapier.md](docs/integrations/n8n-zapier.md) | n8n / Zapier automation |
 | [docs/architecture.md](docs/architecture.md) | Architecture diagrams |
