@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Input, Label, SectionTitle } from "@/components/ui";
+import { Input, Label } from "@/components/ui";
 import {
 	applyNumericDraft,
 	applyPatternDraft,
@@ -67,7 +67,7 @@ const FIELD_META: Record<ThresholdKey, FieldMeta> = {
 				? "Only alert when the price moves by at least this percent since the last check."
 				: mode === "json_field"
 					? "Only alert when the watched value moves by at least this percent."
-					: "Only alert when at least this share of the content changed.",
+					: "Only alert when at least this share of the content was edited.",
 		kind: "float",
 		min: "0",
 		step: "any",
@@ -216,7 +216,9 @@ export function ThresholdEditor({
 
 	return (
 		<div>
-			<SectionTitle>Alert thresholds</SectionTitle>
+			<h2 className="mb-3 font-display text-base font-semibold tracking-tight text-[var(--fg)]">
+				Alert thresholds
+			</h2>
 			<p className="mt-1 text-xs text-[var(--ink-subtle)]">
 				Leave all blank to alert on any change.
 			</p>

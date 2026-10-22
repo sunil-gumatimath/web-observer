@@ -45,7 +45,8 @@ export function keysForMode(mode: MonitorMode): ThresholdKey[] {
 	} else if (
 		mode === "list_items" ||
 		mode === "site_links" ||
-		mode === "rss_feed"
+		mode === "rss_feed" ||
+		mode === "security_scan"
 	) {
 		keys.push("list_min_added", "list_min_removed");
 	}

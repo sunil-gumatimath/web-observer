@@ -608,6 +608,13 @@ kbd {
   letter-spacing: 0.02em;
 }
 
+.monitor-create-page form label {
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 /* Respect users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up,

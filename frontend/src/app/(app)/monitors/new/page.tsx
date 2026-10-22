@@ -214,14 +214,14 @@ export default function NewMonitorPage() {
 	}
 
 	return (
-		<div>
+		<div className="monitor-create-page mx-auto w-full max-w-3xl">
 			<PageHeader
 				title="Create monitor"
 				description="Watch page content, a site's sitemap links, or a product's price."
 			/>
 			{error ? <ErrorBox message={error} /> : null}
 
-			<div className="mb-5">
+			<div className="mb-5 flex justify-center">
 				<SegmentedControl
 					ariaLabel="Create mode"
 					value={createMode}
@@ -239,7 +239,7 @@ export default function NewMonitorPage() {
 					onCancel={() => setCreateMode("single")}
 				/>
 			) : (
-				<Card className="max-w-xl">
+				<Card className="mx-auto w-full max-w-3xl">
 					<form onSubmit={onSubmit} className="space-y-5">
 						<div>
 							<Label htmlFor="name">Name</Label>
@@ -333,8 +333,14 @@ export default function NewMonitorPage() {
 								</div>
 							</div>
 						) : null}
-						<div>
-							<Label>Starter templates</Label>
+						<details className="rounded-lg border border-[var(--hairline)] px-3">
+							<summary className="cursor-pointer py-2 text-sm font-medium text-[var(--ink)] marker:text-[var(--ink-muted)]">
+								Use a starter template
+								<span className="ml-2 text-xs font-normal text-[var(--ink-subtle)]">
+									Optional presets for mode and interval
+								</span>
+							</summary>
+							<div className="space-y-2 pb-3">
 							<div className="flex flex-wrap gap-2">
 								{STARTER_TEMPLATES.map((t) => (
 									<button
@@ -352,10 +358,8 @@ export default function NewMonitorPage() {
 									</button>
 								))}
 							</div>
-							<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
-								Pick a preset to pre-fill the mode and interval, then paste your URL.
-							</p>
-						</div>
+							</div>
+						</details>
 						<div>
 							<Label htmlFor="mode">Mode</Label>
 							<Select
@@ -368,7 +372,7 @@ export default function NewMonitorPage() {
 								}}
 							>
 								<option value="page_content">
-									Page content (whole page text)
+									Page content (main page text)
 								</option>
 								<option value="site_links">
 									Site links (sitemap URL changes)
@@ -387,6 +391,9 @@ export default function NewMonitorPage() {
 								</option>
 								<option value="readme">
 									GitHub README (repo documentation)
+								</option>
+								<option value="security_scan">
+									Security scan (Cloudflare URL Scanner)
 								</option>
 								<option value="visual">
 									Visual diff (screenshot comparison)
@@ -420,6 +427,11 @@ export default function NewMonitorPage() {
 								{mode === "product_price" ? (
 								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 								Product price: watches the price on a product page. Set an optional CSS selector below to narrow the price search.
+								</p>
+								) : null}
+								{mode === "security_scan" ? (
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
+								Security scan: checks the Cloudflare URL Scanner verdict and detected technologies. Requires a Cloudflare account ID and URL Scanner token on the server; run daily or less often.
 								</p>
 								) : null}
 						</div>
@@ -462,7 +474,12 @@ export default function NewMonitorPage() {
 									onChange={(e) => setJsRequired(e.target.checked)}
 									className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
 								/>
-								JavaScript rendering required (Playwright)
+								<span>
+									<span>Load page with JavaScript</span>
+									<span className="block text-xs text-[var(--ink-subtle)]">
+										Use for sites that need JavaScript to show their content.
+									</span>
+								</span>
 								{mode === "visual" ? (
 									<span className="text-xs text-[var(--ink-subtle)]">
 										— always on for visual diff
@@ -478,60 +495,68 @@ export default function NewMonitorPage() {
 								Site links mode reads the sitemap over HTTP and watches for
 								added or removed URLs.
 							</p>
-						) : (
+						) : mode === "security_scan" ? null : (
 							<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
 								RSS mode reads the feed over HTTP and watches for added or removed entries.
 							</p>
 						)}
-						<div>
-							<Label htmlFor="watch">Watch note (optional)</Label>
-							<Input
-								id="watch"
-								value={watchNote}
-								onChange={(e) => setWatchNote(e.target.value)}
-								placeholder="e.g. Only care about pricing plan changes"
-							/>
-							<p className="mt-1 text-xs text-[var(--ink-subtle)]">
-								Focuses AI summaries and helps you remember intent.
-							</p>
-						</div>
-						<div>
-							<Label htmlFor="semanticTrigger">Semantic alert condition (optional)</Label>
-							<Input
-								id="semanticTrigger"
-								value={semanticTrigger}
-								onChange={(e) => setSemanticTrigger(e.target.value)}
-								placeholder="e.g. Alert only if pricing increases or a new tier is added"
-							/>
-							<p className="mt-1 text-xs text-[var(--ink-subtle)]">
-								Requires a configured LLM. Non-matching changes are filtered out; if AI evaluation is unavailable or fails, the change is allowed through (fail-open).
-							</p>
-						</div>
-						<ThresholdEditor mode={mode} value={alertConfig} onChange={setAlertConfig} />
-{showsSelector(mode) ? (
-					<div>
-						<Label htmlFor="listSelector">{selectorLabel(mode)}</Label>
-						<Input
-							id="listSelector"
-							required={requiresSelector(mode)}
-							value={cssSelector ?? ""}
-							onChange={(e) => setCssSelector(e.target.value || null)}
-							placeholder={selectorPlaceholder(mode)}
-						/>
-						{mode === "list_items" ? (
-							<button
-								type="button"
-								onClick={() => setPickerOpen(true)}
-								className="mt-1.5 text-xs font-medium text-[var(--primary)] underline-offset-2 hover:underline"
-							>
-								Pick element visually instead
-							</button>
+						{showsSelector(mode) ? (
+							<div>
+								<Label htmlFor="listSelector">{selectorLabel(mode)}</Label>
+								<Input
+									id="listSelector"
+									required={requiresSelector(mode)}
+									value={cssSelector ?? ""}
+									onChange={(e) => setCssSelector(e.target.value || null)}
+									placeholder={selectorPlaceholder(mode)}
+								/>
+								{mode === "list_items" ? (
+									<button
+										type="button"
+										onClick={() => setPickerOpen(true)}
+										className="mt-1.5 text-xs font-medium text-[var(--primary)] underline-offset-2 hover:underline"
+									>
+										Pick element visually instead
+									</button>
+								) : null}
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
+									{selectorHelp(mode)}
+								</p>
+							</div>
 						) : null}
-						<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
-							{selectorHelp(mode)}
-						</p>
-					</div>
-				) : null}
+						<details className="rounded-lg border border-[var(--hairline)] px-3.5">
+							<summary className="cursor-pointer py-3 text-sm font-medium text-[var(--ink)] marker:text-[var(--ink-muted)]">
+								Advanced options
+								<span className="ml-2 text-xs font-normal text-[var(--ink-subtle)]">
+									Alert filters and ignored content
+								</span>
+							</summary>
+							<div className="space-y-5 pb-4">
+								<div>
+									<Label htmlFor="watch">Watch note (optional)</Label>
+									<Input
+										id="watch"
+										value={watchNote}
+										onChange={(e) => setWatchNote(e.target.value)}
+										placeholder="e.g. Only care about pricing plan changes"
+									/>
+									<p className="mt-1 text-xs text-[var(--ink-subtle)]">
+										Focuses AI summaries and helps you remember intent.
+									</p>
+								</div>
+								<div>
+									<Label htmlFor="semanticTrigger">Semantic alert condition (optional)</Label>
+									<Input
+										id="semanticTrigger"
+										value={semanticTrigger}
+										onChange={(e) => setSemanticTrigger(e.target.value)}
+										placeholder="e.g. Alert only if pricing increases or a new tier is added"
+									/>
+									<p className="mt-1 text-xs text-[var(--ink-subtle)]">
+										Requires a configured LLM. Non-matching changes are filtered out; if AI evaluation is unavailable or fails, the change is allowed through (fail-open).
+									</p>
+								</div>
+								<ThresholdEditor mode={mode} value={alertConfig} onChange={setAlertConfig} />
 				{showsIgnore(mode) ? (
 						<>
 							<div>
@@ -586,7 +611,9 @@ export default function NewMonitorPage() {
 									</p>
 								</div>
 							</>
-						) : null}
+								) : null}
+							</div>
+						</details>
 						<label className="flex items-center gap-2 text-sm text-[var(--ink-muted)]">
 							<input
 								type="checkbox"
@@ -734,7 +761,7 @@ function SitemapDiscovery({
 	}
 
 	return (
-		<Card className="max-w-2xl space-y-5">
+		<Card className="mx-auto w-full max-w-2xl space-y-5">
 			{result ? (
 				<div className="space-y-3">
 					<p className="text-sm font-medium text-[var(--semantic-success)]">

@@ -24,8 +24,8 @@ export const MONITOR_MODE_OPTIONS: MonitorModeOption[] = [
 	{
 		value: "page_content",
 		label: "Page content",
-		optionLabel: "Page content (whole page text)",
-		hint: "Page content: watches the whole page as text and reports any change with a line-level diff.",
+		optionLabel: "Page content (main page text)",
+		hint: "Page content: watches the detected main content, falling back to the whole page, and reports line-level changes.",
 	},
 	{
 		value: "site_links",
