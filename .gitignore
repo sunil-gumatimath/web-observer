@@ -44,6 +44,8 @@ logs-*.err
 # keep versions; ignore local ad-hoc
 
 # Local-only planning docs
+/.gitkeep
+/cloudflaremanually.md
 monitor-the-web-final-roadmap.md
 web-observer-final-roadmap.md
 DESIGN.md
@@ -57,3 +59,4 @@ newmodes.md
 
 # Playwright CLI (browser automation snapshots)
 .playwright-cli/
+/.playwright-mcp/
