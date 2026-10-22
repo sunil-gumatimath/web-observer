@@ -197,9 +197,11 @@ def delete_object(key: str) -> None:
 
     from botocore.exceptions import BotoCoreError, ClientError
 
-    settings = get_settings()
+    # Route by key prefix like every other storage call, so a
+    # ``screenshots/...`` key is deleted from the bucket it was written to
+    # (put_bytes/get_bytes/object_exists all use _bucket_for).
     try:
-        _client().delete_object(Bucket=settings.s3_bucket, Key=key)
+        _client().delete_object(Bucket=_bucket_for(key), Key=key)
     except (BotoCoreError, ClientError) as exc:
         logger.warning("storage_delete_failed key=%s error=%s", key, exc)
 
