@@ -15,13 +15,10 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // When routed via a custom domain (see wrangler.toml), only cache the
-    // public, read-only paths of that host. On workers.dev everything is
-    // public, so all paths pass the scope check.
-    const hostOk =
-      url.hostname === env.CACHE_HOST ||
-      url.hostname.includes("workers.dev") ||
-      !env.CACHE_HOST;
+    // Only cache when routed via the configured public hostname. An unset or
+    // empty CACHE_HOST disables caching entirely (fail closed) — never cache
+    // everything on workers.dev just because no host is configured.
+    const hostOk = !!env.CACHE_HOST && url.hostname === env.CACHE_HOST;
     const cacheable =
       hostOk && CACHEABLE_PREFIXES.some((p) => url.pathname.startsWith(p));
     if (!cacheable) return fetch(request);
@@ -32,8 +29,14 @@ export default {
 
     res = await fetch(request); // origin = the tunnel / deployed app
     if (res.status === 200) {
-      const cacheRes = res.clone();
-      cacheRes.headers.append("Cache-Control", "public, max-age=300");
+      // Never cache a response that sets cookies (e.g. the Clerk session
+      // cookie): the edge would hand one visitor's Set-Cookie to everyone.
+      if (res.headers.get("set-cookie")) return res;
+      // Headers on a fetch() response are immutable, so build a mutable copy
+      // for the cache entry. .set() replaces any origin Cache-Control instead
+      // of appending a malformed second value.
+      const cacheRes = new Response(res.clone().body, res);
+      cacheRes.headers.set("Cache-Control", "public, max-age=300");
       ctx.waitUntil(cache.put(request, cacheRes));
     }
     return res;

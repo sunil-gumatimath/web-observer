@@ -8,5 +8,6 @@ compatibility_date = "2026-10-01"
 #   routes = ["app.example.com/share/*", "app.example.com/_next/static/*"]
 
 [vars]
-# Leave empty on workers.dev; set to the public app hostname when routed.
+# Must be set to the public app hostname when routed — empty CACHE_HOST
+# disables caching entirely (fail closed, find #3 in the review).
 CACHE_HOST = ""
