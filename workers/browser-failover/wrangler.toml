@@ -1,12 +1,17 @@
 name = "browser-failover"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
+# @cloudflare/puppeteer needs Node compatibility in the Workers runtime.
+compatibility_flags = ["nodejs_compat"]
 
-# Deployed to https://browser-failover.clevertedz.workers.dev via the API
-# (multipart script upload with the browser binding). Redeploy instead with:
+# Deploy (from this folder):
+#   npm install
 #   npx wrangler login
 #   npx wrangler secret put SHARED_TOKEN
 #   npx wrangler deploy
+# The source fail-closes (503) when SHARED_TOKEN is missing.
+# The previously deployed version used env.BROWSER.launch(), which does not
+# exist on a browser binding — it must be redeployed with this version.
 # workers.dev is TCP/SNI-blocked on the local ISP, so the failover is dormant
 # on this machine by design and engages on other networks.
 

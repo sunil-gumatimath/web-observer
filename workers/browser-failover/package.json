@@ -1,0 +1,14 @@
+{
+  "name": "browser-failover",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.1.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

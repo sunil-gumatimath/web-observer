@@ -14,10 +14,18 @@
  * The caller enforces SSRF validation on `url` and on `final_url`, size caps,
  * and bot-challenge detection after the response arrives.
  */
+import puppeteer from "@cloudflare/puppeteer";
+
 const SECRET_HEADER = "X-CF-Failover-Token";
 
 export default {
   async fetch(request, env) {
+    // Fail closed: without a configured secret the comparison below would
+    // accept every request ("" !== "" is false) and let anyone burn the
+    // ~10 min/day edge-browser quota.
+    if (!env.SHARED_TOKEN) {
+      return Response.json({ error: "worker misconfigured: SHARED_TOKEN missing" }, { status: 503 });
+    }
     if (request.method !== "POST") {
       return Response.json({ error: "method not allowed" }, { status: 405 });
     }
@@ -44,16 +52,18 @@ export default {
     }
     let browser;
     try {
-      browser = await env.BROWSER.launch();
+      // The BROWSER binding is a Fetcher: it must be passed to Puppeteer,
+      // it has no launch() of its own.
+      browser = await puppeteer.launch(env.BROWSER);
       const page = await browser.newPage();
       try {
         const resp = await page.goto(parsed.toString(), {
-          waitUntil: "networkidle",
+          waitUntil: "networkidle2",
           timeout: timeoutMs,
         });
         const html = await page.content();
         return Response.json({
-          status_code: resp ? resp.status : 200,
+          status_code: resp ? resp.status() : 200,
           final_url: page.url(),
           html: html,
         });
