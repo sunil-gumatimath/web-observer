@@ -254,12 +254,11 @@ def should_alert(
     if "percent_change" in cfg and mode == "page_content":
         try:
             pct = float(cfg["percent_change"])
-            # Percentage of content that changed (based on length delta)
+            # Measure edited characters, not just the difference in total lengths.
             max_len = max(len(prev_text), len(new_text), 1)
-            change_pct = abs(len(new_text) - len(prev_text)) / max_len * 100
-            # Rough; if below threshold suppress
+            change_pct = _changed_char_count(prev_text, new_text) / max_len * 100
             if change_pct < pct:
-                return False, f"content change {change_pct:.1f}% < {pct}%"
+                return False, f"edited content {change_pct:.1f}% < {pct}%"
         except (ValueError, TypeError, ZeroDivisionError):
             pass
 
