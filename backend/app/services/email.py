@@ -10,7 +10,6 @@ from __future__ import annotations
 import html
 import logging
 import threading
-from typing import Any
 
 from app.config import get_settings
 
@@ -68,7 +67,7 @@ def send_email(
                 escaped = html.escape(text).replace("\n", "<br>\n")
                 html_body = f"<div style='font-family:sans-serif;font-size:14px'>{escaped}</div>"
 
-            params: dict[str, Any] = {
+            params: resend.Emails.SendParams = {
                 "from": from_addr,
                 "to": to_list,
                 "subject": subject,

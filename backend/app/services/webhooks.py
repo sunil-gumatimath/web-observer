@@ -223,9 +223,10 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
             except (ValueError, AttributeError):
                 retry_after = None
         delivery.status = "pending" if delivery.attempts < 5 else "failed"
-        delivery.last_error = f"HTTP {resp.status_code}: {resp.text[:500]}"
+        error_text = f"HTTP {resp.status_code}: {resp.text[:500]}"
         if retry_after:
-            delivery.last_error += f" (retry_after={retry_after}s)"
+            error_text += f" (retry_after={retry_after}s)"
+        delivery.last_error = error_text
         db.commit()
         if delivery.status == "pending":
             # Exponential backoff before next attempt — raise to trigger dramatiq retry

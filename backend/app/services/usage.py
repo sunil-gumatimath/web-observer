@@ -36,7 +36,7 @@ def get_or_create_counter(
         # unique-constraint IntegrityError mid-pipeline. DO NOTHING without an
         # explicit conflict target covers any unique conflict on the row.
         # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
-        stmt = pg_insert(UsageCounter.__table__).values(
+        stmt = pg_insert(UsageCounter).values(
             workspace_id=workspace_id,
             period_start=start,
             checks_count=0,
@@ -59,12 +59,12 @@ def get_or_create_counter(
             db.flush()
         return counter
     db.flush()
-    return db.scalar(
+    return db.execute(
         select(UsageCounter).where(
             UsageCounter.workspace_id == workspace_id,
             UsageCounter.period_start == start,
         )
-    )
+    ).scalar_one()
 
 
 def _increment(db: Session, counter: UsageCounter, column: str, n: int) -> UsageCounter:

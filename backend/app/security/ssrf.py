@@ -102,7 +102,8 @@ def validate_url_for_fetch(url: str, *, resolve_dns: bool = True) -> ValidatedUR
             raise SSRFError("dns_error", f"DNS resolution failed for {hostname}") from exc
 
         for info in infos:
-            ip_str = info[4][0]
+            # sockaddr[0] is typed str | int; for AF_INET/AF_INET6 it is always str.
+            ip_str = str(info[4][0])
             try:
                 ip = ipaddress.ip_address(ip_str)
             except ValueError as exc:
