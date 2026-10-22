@@ -95,14 +95,6 @@ _KILO_MODELS: list[ModelEntry] = [
         verified_at=200,
     ),
     ModelEntry(
-        value="minimax/minimax-m3.1-flash:free",
-        label="MiniMax M3.1 Flash (free) — MiniMax · Multimodal · 1M ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Complete JSON at the app's 200-token cap.",
-        verified_at=200,
-    ),
-    ModelEntry(
         value="nvidia/nemotron-3-ultra-550b-a55b:free",
         label="Nemotron 3 Ultra (free) — NVIDIA · 550B · 1M ctx",
         provider="kilo",
@@ -117,6 +109,13 @@ _KILO_MODELS: list[ModelEntry] = [
         base=KILO_BASE,
         note="Complete JSON at the app's 200-token cap.",
         verified_at=200,
+    ),
+    ModelEntry(
+        value="recursive/flint-v1.0:free",
+        label="Flint v1.0 (free) — Recursive · 262K ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Newly listed free model; not yet verified with the app's summary prompt.",
     ),
     ModelEntry(
         value="openrouter/free",
@@ -201,13 +200,6 @@ _KILO_MODELS: list[ModelEntry] = [
         provider="kilo",
         base=KILO_BASE,
         note="Rotates across free models; timed out at a 200-token cap.",
-    ),
-    ModelEntry(
-        value="thinkingmachines/inkling-small:free",
-        label="Inkling Small (free) — Thinking Machines · Multimodal · 1M ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning model; hit its daily request limit during the probe.",
     ),
     ModelEntry(
         value="nvidia/nemotron-3.5-content-safety:free",
