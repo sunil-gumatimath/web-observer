@@ -1,4 +1,4 @@
-# Web Observer Stack Launcher (Windows / PowerShell)
+﻿# Web Observer Stack Launcher (Windows / PowerShell)
 # Starts: Frontend (:3000 with Bun), API (:8002), Dramatiq HTTP Worker,
 #         Dramatiq Browser Worker, Scheduler
 #

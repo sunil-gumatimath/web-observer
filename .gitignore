@@ -30,6 +30,7 @@ Thumbs.db
 
 # Node (Phase 2)
 node_modules/
+workers/**/.wrangler/
 frontend/.next/
 frontend/out/
 
