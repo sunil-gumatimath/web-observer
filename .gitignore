@@ -56,7 +56,3 @@ dump.rdb
 
 # Local implementation spec
 newmodes.md
-
-# Playwright CLI (browser automation snapshots)
-.playwright-cli/
-/.playwright-mcp/
