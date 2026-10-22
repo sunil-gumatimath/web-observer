@@ -7,8 +7,9 @@ security-relevant facts of the scan into a deterministic, line-oriented
 security facts changed (verdict flip, tech-stack drift, certificate change).
 
 Free tier notes (verified 2026-10-21):
-- URL Scanner submissions on the free plan are limited —
-  keep the schedule interval >= 1 day.
+- The free URL Scanner plan allows ~8,000 scanned URLs/month at 1 new scan
+  every 10 seconds — the schema-level minimum interval (15 min) is safe for
+  solo use; no extra enforcement here.
 - Empty ``CLOUDFLARE_URLSCANNER_TOKEN`` = mode errors cleanly at check time
   (fail open per repo convention: no token, no scan, no crash).
 """
@@ -31,7 +32,6 @@ CF_API_BASE = "https://api.cloudflare.com/client/v4"
 
 # URL Scanner takes a few seconds to render; poll patiently but bound it.
 _POLL_INTERVAL_SECONDS = 4.0
-_MAX_POLL_SECONDS = 120.0
 _SUBMIT_TIMEOUT_SECONDS = 20.0
 
 
@@ -57,30 +57,41 @@ def scan_digest_text(result: dict[str, Any]) -> str:
     lines.append(f"tags={tags}")
 
     task = result.get("task") or {}
-    lines.append(f"task.status={task.get('status') or 'unknown'}")
+    # Only finished scans are digested, and the API may or may not echo a
+    # status field (and in which case), so don't let it flip the digest.
+    lines.append("task.status=finished")
     lines.append(f"task.apexDomain={task.get('apexDomain') or ''}")
 
     lists = result.get("lists") or {}
-    for cert in sorted((str(c) for c in lists.get("certificates") or []), key=_sort_key):
-        lines.append(f"certificate={cert}")
+    # Certificates are objects ({issuer, subjectName, validFrom, validTo}).
+    # Validity dates are excluded: routine renewals would alert on noise.
+    cert_facts: set[str] = set()
+    for cert in lists.get("certificates") or []:
+        if isinstance(cert, dict):
+            subject = str(cert.get("subjectName") or "").strip()
+            issuer = str(cert.get("issuer") or "").strip()
+            if subject or issuer:
+                # The live API often returns an empty issuer; omit it then.
+                suffix = f" issuer={issuer}" if issuer else ""
+                cert_facts.add(f"certificate={subject}{suffix}")
+        elif cert:
+            cert_facts.add(f"certificate={cert}")
+    lines.extend(sorted(cert_facts, key=_sort_key))
     for server in sorted((str(s) for s in lists.get("servers") or []), key=_sort_key):
         lines.append(f"server={server}")
     for asn in sorted((str(a) for a in lists.get("asns") or []), key=_sort_key):
         lines.append(f"asn={asn}")
 
-    # Technologies ride in meta.processors (wappa). Each processor entry has
-    # `data` rows keyed per request; collapse to unique tech facts.
-    processors = (result.get("meta") or {}).get("processors") or {}
+    # Detected technologies: meta.processors.wappa.data[] rows, one per app
+    # ({app, categories, confidence, confidenceTotal, icon, website}).
+    # Confidence is volatile, so only the app name is a fact.
+    wappa = ((result.get("meta") or {}).get("processors") or {}).get("wappa") or {}
     tech_facts: set[str] = set()
-    for _name, processor in processors.items():
-        for row in processor.get("data") or []:
-            techs = row.get("technologies") if isinstance(row, dict) else None
-            for tech in techs or []:
-                if isinstance(tech, dict):
-                    name = str(tech.get("name") or "").strip()
-                    version = str(tech.get("version") or "").strip()
-                    if name:
-                        tech_facts.add(f"tech={name} {version}".rstrip())
+    for row in wappa.get("data") or []:
+        if isinstance(row, dict):
+            app_name = str(row.get("app") or "").strip()
+            if app_name:
+                tech_facts.add(f"tech={app_name}")
     lines.extend(sorted(tech_facts, key=_sort_key))
 
     return "".join(f"{line}\n" for line in lines)
@@ -144,12 +155,29 @@ def _poll_result(
                 f"URL Scanner result fetch returned {response.status_code}",
             )
         else:
+            # Per Cloudflare's docs the result endpoint answers 404 while the
+            # scan runs and 200 once it is done. A status field is optional,
+            # so only honour it when present, case-insensitively.
             result = response.json()
-            status = str((result.get("task") or {}).get("status") or "")
-            if status == "finished":
-                return result
-            if status in ("failed", "aborted", "rejected"):
+            task = result.get("task") or {}
+            status = str(task.get("status") or "").lower()
+            if status in ("failed", "aborted", "rejected", "error"):
                 raise UrlScannerError("scan_error", f"URL Scanner ended with status {status}")
+            if task.get("success") is False:
+                # Cloudflare explains why in task.errors, e.g. code 5021
+                # "hostname was recently scanned" — surface it.
+                reasons = "; ".join(
+                    str(e.get("message") or e.get("name") or e)
+                    for e in task.get("errors") or []
+                    if isinstance(e, dict)
+                )
+                raise UrlScannerError(
+                    "scan_error",
+                    "URL Scanner reported an unsuccessful scan"
+                    + (f": {reasons}" if reasons else ""),
+                )
+            if status not in ("queued", "inprogress", "in_progress", "pending"):
+                return result
         if time.perf_counter() - started > deadline_seconds:
             raise UrlScannerError("read_timeout", "URL Scanner result did not finish in time")
         time.sleep(_POLL_INTERVAL_SECONDS)
@@ -178,7 +206,7 @@ def scan_url(
             "scan_not_configured",
             "CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_URLSCANNER_TOKEN are not set; "
             "security_scan checks need a free Cloudflare API token "
-            "(My Profile -> API Tokens -> URL Scanner + Radar read).",
+            "(My Profile -> API Tokens -> Account > URL Scanner > Edit).",
         )
     account_id, token = config
 

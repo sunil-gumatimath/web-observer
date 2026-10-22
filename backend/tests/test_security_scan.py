@@ -1,5 +1,6 @@
 """Tests for the Phase 9 security_scan mode (Cloudflare URL Scanner)."""
 
+import httpx
 import pytest
 
 import app.services.security_scan as ss
@@ -26,23 +27,23 @@ _RESULT = {
     "lists": {
         "asns": ["15169"],
         "servers": ["cloudflare"],
-        "certificates": ["CN=example.com"],
+        "certificates": [
+            {
+                "issuer": "Let's Encrypt",
+                "subjectName": "example.com",
+                "validFrom": 1,
+                "validTo": 2,
+            }
+        ],
     },
+    # Shape from Cloudflare's URL Scanner v2 result schema.
     "meta": {
         "processors": {
             "wappa": {
                 "data": [
-                    {
-                        "requestId": "1",
-                        "technologies": [
-                            {"name": "nginx", "version": ""},
-                            {"name": "Python", "version": "3.12"},
-                        ],
-                    },
-                    {
-                        "requestId": "2",
-                        "technologies": [{"name": "nginx", "version": ""}],
-                    },
+                    {"app": "nginx", "confidenceTotal": 100, "categories": []},
+                    {"app": "Python", "confidenceTotal": 50, "categories": []},
+                    {"app": "nginx", "confidenceTotal": 75, "categories": []},
                 ]
             }
         }
@@ -85,9 +86,10 @@ def test_digest_is_deterministic_and_one_fact_per_line() -> None:
     assert "malicious=false" in lines
     assert any(line.startswith("categories=alphabet-category,beta-category") for line in lines)
     assert any(line.startswith("tags=tag1,tag2") for line in lines)
-    assert any(line == "tech=Python 3.12" for line in lines)
+    assert "tech=Python" in lines
     assert lines.count("tech=nginx") == 1  # duplicate technologies collapsed
-    assert "certificate=CN=example.com" in lines
+    assert "certificate=example.com issuer=Let's Encrypt" in lines
+    assert not any("{" in line for line in lines)  # no stringified dicts
     assert "asn=15169" in lines
 
 
@@ -129,3 +131,98 @@ def test_scanner_ok_returns_config(monkeypatch) -> None:
         ),
     )
     assert ss.scanner_ok() == ("acct", "tok")
+
+
+def test_digest_ignores_certificate_validity_and_confidence() -> None:
+    renewed = {
+        **_RESULT,
+        "lists": {
+            **_RESULT["lists"],
+            "certificates": [
+                {
+                    "issuer": "Let's Encrypt",
+                    "subjectName": "example.com",
+                    "validFrom": 99,
+                    "validTo": 100,
+                }
+            ],
+        },
+    }
+    assert scan_digest_text(renewed) == scan_digest_text(_RESULT)
+
+
+def test_poll_waits_through_404_then_accepts_200_without_status(monkeypatch) -> None:
+    monkeypatch.setattr(ss.time, "sleep", lambda _s: None)
+    responses = [
+        httpx.Response(404),
+        httpx.Response(200, json={"verdicts": {}, "task": {"success": True}}),
+    ]
+
+    class FakeClient:
+        def get(self, url: str, **kwargs: object) -> httpx.Response:
+            return responses.pop(0)
+
+    result = ss._poll_result(FakeClient(), "acct", "tok", "scan-id", 30)
+    assert result["task"]["success"] is True
+    assert responses == []
+
+
+def test_poll_accepts_capitalized_status_and_rejects_failed_scan(monkeypatch) -> None:
+    monkeypatch.setattr(ss.time, "sleep", lambda _s: None)
+
+    class Finished:
+        def get(self, url: str, **kwargs: object) -> httpx.Response:
+            return httpx.Response(200, json={"task": {"status": "Finished"}})
+
+    assert ss._poll_result(Finished(), "a", "t", "s", 30)["task"]["status"] == "Finished"
+
+    class Failed:
+        def get(self, url: str, **kwargs: object) -> httpx.Response:
+            return httpx.Response(200, json={"task": {"success": False}})
+
+    class FailedWithReason:
+        def get(self, url: str, **kwargs: object) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "task": {
+                        "success": False,
+                        "errors": [{"message": "hostname was recently scanned", "code": 5021}],
+                    }
+                },
+            )
+
+    with pytest.raises(FetchError):
+        ss._poll_result(Failed(), "a", "t", "s", 30)
+    with pytest.raises(FetchError, match="recently scanned"):
+        ss._poll_result(FailedWithReason(), "a", "t", "s", 30)
+
+
+def test_digest_omits_empty_certificate_issuer() -> None:
+    result = {
+        **_RESULT,
+        "lists": {"certificates": [{"issuer": "", "subjectName": "a.example"}]},
+    }
+    assert "certificate=a.example" in scan_digest_text(result).splitlines()
+
+
+def test_scanner_uses_bearer_token_for_submit_and_poll() -> None:
+    class FakeClient:
+        def __init__(self) -> None:
+            self.authorization_headers: list[str] = []
+
+        def post(self, url: str, *, headers: dict[str, str], **kwargs: object) -> httpx.Response:
+            self.authorization_headers.append(headers["Authorization"])
+            return httpx.Response(200, json={"uuid": "scan-id"})
+
+        def get(self, url: str, *, headers: dict[str, str], **kwargs: object) -> httpx.Response:
+            self.authorization_headers.append(headers["Authorization"])
+            return httpx.Response(200, json={"task": {"status": "finished"}})
+
+    client = FakeClient()
+
+    scan_id = ss._submit_scan(client, "account-id", "secret-token", "https://example.com")
+    result = ss._poll_result(client, "account-id", "secret-token", scan_id, 30)
+
+    assert result == {"task": {"status": "finished"}}
+    assert client.authorization_headers == ["Bearer secret-token", "Bearer secret-token"]
