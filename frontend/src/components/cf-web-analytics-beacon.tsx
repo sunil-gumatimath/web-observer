@@ -4,7 +4,7 @@ import Script from "next/script";
 
 /**
  * Cloudflare Web Analytics beacon — free, cookie-less, no individual-visitor
- * tracking (see docs/guides/web-analytics.md).
+ * tracking (see docs/guides/cloudflare-free-features.md §3).
  *
  * Renders nothing when no beacon token is configured, so the app makes zero
  * analytics calls until the token is set. Loads after interaction to stay out

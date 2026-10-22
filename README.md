@@ -23,18 +23,14 @@ Verified end-to-end (last run 2026-10-21): backend `288 passed, 4 skipped` unit 
 | Doc | Topic |
 | ----- | -------- |
 | [docs/](docs/) | Documentation index |
-| [docs/local-dev.md](docs/local-dev.md) | Run locally (full process list) |
-| [docs/guides/clerk-setup.md](docs/guides/clerk-setup.md) | Clerk auth (dev) |
-| [docs/guides/clerk-production.md](docs/guides/clerk-production.md) | Clerk production hardening |
+| [docs/local-dev.md](docs/local-dev.md) | Run locally + operations reference (processes, secrets, retention) |
+| [docs/guides/clerk.md](docs/guides/clerk.md) | Clerk auth (dev setup + production hardening) |
 | [docs/auth-modes.md](docs/auth-modes.md) | Auth modes (dev token / Clerk) |
 | [docs/guides/resend-setup.md](docs/guides/resend-setup.md) | Email alerts |
 | [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md) | Cloudflare free tier end-to-end (R2 snapshots, R2 screenshot CDN, Web Analytics, Tunnel, Browser Rendering failover, URL Scanner, Workers) |
-| [docs/guides/web-analytics.md](docs/guides/web-analytics.md) | Cookie-less Cloudflare Web Analytics beacon |
 | [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) | The 9 monitoring modes, their options and their limits |
-| [docs/guides/r2-setup.md](docs/guides/r2-setup.md) | Cloudflare R2 snapshots (optional object storage) |
 | [docs/roadmap.md](docs/roadmap.md) | Feature roadmap (Phases 8–10) |
 | [docs/security/threat-model.md](docs/security/threat-model.md) | Security policy: SSRF, tenant isolation, out-of-scope rules |
-| [docs/operations/local-setup-and-ops.md](docs/operations/local-setup-and-ops.md) | Process topology, secrets, retention, metrics, service targets |
 | [docs/adrs/](docs/adrs/) | Architecture decision records |
 | [docs/integrations/n8n-zapier.md](docs/integrations/n8n-zapier.md) | n8n / Zapier automation |
 | [docs/architecture.md](docs/architecture.md) | Architecture diagrams |
@@ -262,7 +258,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | RBAC & audit | Owner / admin / member / viewer roles, member management, audit log |
 | Plans / billing | free / pro / business / enterprise tiers; Stripe or simulated checkout (solo: skip Stripe) |
 | Adaptive scheduling | Interval auto-stretches after quiet runs |
-| Retention | Background `retention_job` purges snapshots (default 30 days) and runs (default 90 days); change events survive run cleanup (migration `015`) — `docs/operations/local-setup-and-ops.md` retention table is the source of truth |
+| Retention | Background `retention_job` purges snapshots (default 30 days) and runs (default 90 days); change events survive run cleanup (migration `015`) — `docs/local-dev.md` §13 retention table is the source of truth |
 | Brand-aware dashboard | Adding a website auto-fills logo/title/description/hero from page `<meta>` (`og:*`, favicon) and re-hosts via `brand-assets/` for dashboard + public share pages (no external Context.dev dependency). Alert inbox items carry `monitor_brand`; `BrandLogo` falls back to the domain favicon before initials, so a real mark shows even before enrichment runs |
 | Design system | Cohere-inspired tokens (`frontend/src/app/globals.css`): 22px cards, pill buttons (dark solid primary, ghost secondary), `#1863dc` hover/focus blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator + page fade on tab switch |
 | Managed or self-serve keys | Server provides global `LLM_API_*`/`RESEND_API_KEY`; or each workspace brings its own keys in Settings → Workspace keys (overrides global) |
@@ -279,7 +275,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | Fetch resilience | SSRF-pinned fetcher tries **every** validated IP in turn (`_pinned_get`), so one dead CDN PoP can't fail a check; only connect-level errors trigger failover. README monitors hit the GitHub API first (1 request, resolves the default branch) with capped raw fallbacks. LLM summaries fail over across `LLM_FALLBACK_MODELS` |
 | Cloudflare Browser Rendering failover | When a local Playwright fetch fails, the check retries once against the edge Worker (`CLOUDFLARE_BROWSER_URL` + `CLOUDFLARE_BROWSER_TOKEN`). Local stays primary to preserve the free ~10 min/day browser quota. Worker source: `workers/browser-failover/`; covered by `backend/tests/test_browser_failover.py` |
 | Observability | Prometheus-compatible metrics at `GET /metrics` (monitors total, runs/changes in 24h, outbox and webhook backlog) |
-| Web Analytics | Optional cookie-less Cloudflare Web Analytics beacon on the UI (`NEXT_PUBLIC_CF_BEACON_TOKEN`); renders nothing when unset — see [docs/guides/web-analytics.md](docs/guides/web-analytics.md) |
+| Web Analytics | Optional cookie-less Cloudflare Web Analytics beacon on the UI (`NEXT_PUBLIC_CF_BEACON_TOKEN`); renders nothing when unset — see [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md) §3 |
 
 The web UI (Next.js) exposes: **Dashboard** (with Change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status-tabs, sorting), **Logs** (workspace-wide run history with outcome/monitor/date filters + CSV export), **Changes** (per-change diff with before/after drag slider), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels with per-channel Send-test, workspace, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K/Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel).
 

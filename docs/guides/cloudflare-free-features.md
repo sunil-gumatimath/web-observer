@@ -6,11 +6,11 @@ by unsetting its env var.
 
 | Feature | What it does here | Needs | Guide |
 | ------- | ----------------- | ----- | ----- |
-| **R2 Object Storage** | Stores raw HTML snapshots, normalized text, brand assets and screenshots (`STORAGE_BACKEND=s3`) — 10 GB free, zero egress | `S3_*` | [r2-setup.md](r2-setup.md) |
+| **R2 Object Storage** | Stores raw HTML snapshots, normalized text, brand assets and screenshots (`STORAGE_BACKEND=s3`) — 10 GB free, zero egress | `S3_*` | §1 below |
 | **R2 screenshot bucket** | Puts screenshots in a *separate* public bucket so they can be served from a CDN domain instead of the API proxy | `S3_SCREENSHOT_BUCKET` + `NEXT_PUBLIC_SCREENSHOT_CDN_URL` | below |
 | **Browser Rendering** | Edge Chromium used **only as a failover** when a local Playwright fetch fails | `CLOUDFLARE_BROWSER_URL` + `CLOUDFLARE_BROWSER_TOKEN` | below |
 | **URL Scanner** | Backs the `security_scan` monitoring mode (verdict / categories / tech stack) | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_URLSCANNER_TOKEN` | below |
-| **Web Analytics** | Cookie-less, no-individual-tracking beacon on the Next.js UI | `NEXT_PUBLIC_CF_BEACON_TOKEN` | [web-analytics.md](web-analytics.md) |
+| **Web Analytics** | Cookie-less, no-individual-tracking beacon on the Next.js UI | `NEXT_PUBLIC_CF_BEACON_TOKEN` | §3 below |
 | **Cloudflare Tunnel** | Exposes the local stack publicly without port-forwarding | connector token | below |
 | **Workers** | `browser-failover` (edge browser) and `share-cache` (edge cache for share pages) | Wrangler deploy | below |
 
@@ -22,14 +22,61 @@ zone you control.
 
 ## 1. R2 snapshots
 
-Bucket `monitor-snapshots` with an Object-Read-&-Write token scoped to it,
-credentials in `backend/.env` (`S3_*`). Details and the ping-test:
-[docs/guides/r2-setup.md](r2-setup.md).
+Raw HTML snapshots live in Cloudflare R2 via boto3 — no code change needed,
+only env + secrets (`backend/app/services/storage.py`,
+`backend/app/config.py`).
+
+### Secrets required (you create these)
+
+From Cloudflare dashboard → R2:
+
+| Secret / var | Where to get it |
+| --- | --- |
+| `S3_ENDPOINT_URL` | `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` — R2 → Overview shows Account ID |
+| `S3_ACCESS_KEY` | R2 → Manage R2 API Tokens → Create token (Object Read & Write, scope to bucket) → Access Key ID |
+| `S3_SECRET_KEY` | Same token → Secret Access Key (shown once, store it) |
+| `S3_BUCKET` | R2 → Create bucket, e.g. `monitor-snapshots` (plain env, not secret, but keep it alongside your other secrets) |
+| `S3_REGION` | `auto` (plain env default, no secret needed) |
+| `STORAGE_BACKEND` | `s3` (plain env) |
+
+### Create bucket + token
+
+1. `dash.cloudflare.com` → R2 → Create bucket `monitor-snapshots` (any region, private).
+2. R2 → Manage R2 API Tokens → Create API token:
+   - Permissions: Object Read & Write
+   - Scope: Apply to `monitor-snapshots` only
+   - TTL: no expiry (or 1 year + rotate)
+3. Copy Account ID, Access Key ID, Secret.
 
 Create the token with a **1-year TTL** and rotate it before it expires — when
 the token dies, snapshot writes start failing with `Unauthorized` and runs are
 marked failed. On auth failure snapshots raise `StorageError` and never fall
 back to local disk silently, so a dead token is loud rather than subtle.
+
+### Configure and ping-test
+
+`backend/.env`:
+
+```env
+STORAGE_BACKEND=s3
+S3_ENDPOINT_URL=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+S3_ACCESS_KEY=<key-id>
+S3_SECRET_KEY=<secret>
+S3_BUCKET=monitor-snapshots
+S3_REGION=auto
+```
+
+```powershell
+cd backend
+.\.venv\Scripts\python -c "from app.services import storage; print(storage.put_bytes(key='workspaces/_ping/test.html', data=b'r2-ok'))"
+.\.venv\Scripts\python -c "from app.services.storage import get_bytes; print(get_bytes('workspaces/_ping/test.html'))"
+```
+
+Delete the `_ping` key in the R2 dashboard after.
+
+### Rollback
+
+Set `STORAGE_BACKEND=local`. Old snapshots stay in R2; new checks write to local disk.
 
 Free quota: 10 GB-month storage, 1M Class-A + 10M Class-B ops/month, zero
 egress.
@@ -62,15 +109,73 @@ unset is a valid configuration — you just pay the API hop.
 
 ## 3. Web Analytics
 
-One env var, no code:
+Cloudflare Web Analytics reports anonymous usage of the UI — free,
+cookie-less, and with no individual-visitor tracking. The feature is **off by
+default**: the beacon component renders `null` when no token is configured, so
+the app makes **zero** analytics network calls until you opt in.
+
+| | |
+| --- | --- |
+| Cookies | **None** |
+| Cross-site tracking | **None** |
+| Fingerprinting | **None** |
+| Personal data | **None** — no IP addresses, no user agents stored |
+| Data retention | 24 hours, aggregated |
+
+It reports aggregate page views, unique visitors, referrers, and Core Web
+Vitals (LCP, CLS, INP) for the hostname the script is served from. Because it
+is aggregate-only, it tells you *how many* people used a page, not *who* they
+are. It never sees monitor URLs, workspace data, or anything the backend
+stores — the beacon only fires on page loads of the frontend.
+
+### Turn it on
+
+Dashboard → **Web Analytics** → **Add a site** → enter the hostname the UI is
+served from (e.g. `app.example.com`, or `localhost` for a local check) → copy
+the **token** from the installation snippet. It is the `token` value inside
+the `data-cf-beacon` JSON, not the whole snippet.
 
 ```env
 # frontend/.env.local
-NEXT_PUBLIC_CF_BEACON_TOKEN=<token>
+NEXT_PUBLIC_CF_BEACON_TOKEN=<token from the dashboard>
 ```
 
-Empty (the default) means the beacon never loads — zero network calls, nothing
-tracked. Full setup and privacy notes: [web-analytics.md](web-analytics.md).
+Then restart the stack and load the UI. Check **Web Analytics → your site** in
+the dashboard after a minute or two. In the browser, the network tab should
+show a request to `static.cloudflareinsights.com/beacon.min.js` and a beacon
+POST — that request is the proof the token took effect.
+
+### Turn it off
+
+Remove the line (or set it to an empty string) and restart. The component
+short-circuits on an empty token, so no script is injected at all.
+
+### How it is wired
+
+| Piece | Where |
+| ----- | ----- |
+| Beacon component | `frontend/src/components/cf-web-analytics-beacon.tsx` |
+| Mounted in the root layout | `frontend/src/app/layout.tsx` |
+| Env read | `frontend/src/lib/config.ts` (`cfBeaconToken`) |
+
+The component uses `next/script` with `strategy="lazyOnload"`, so the beacon
+loads *after* the app is interactive and stays out of the critical rendering
+path — the same defer-first behaviour as Cloudflare's official snippet.
+
+### Notes
+
+- **Local development does not need the token.** It only matters for the
+  tunnel / deployed hostname. If you set it for `localhost`, your local
+  browsing shows up in the same dashboard as production traffic.
+- **The backend is not involved.** There is no server-side analytics code; the
+  only analytics-shaped endpoint in the API is `GET /metrics`, which serves
+  Prometheus-compatible metrics for *your own* monitoring and is unrelated to
+  Web Analytics.
+- **Self-hosting your own analytics** (e.g. Umami, Plausible) works too — the
+  component is the only place a third-party script is injected, so swapping it
+  is a one-file change.
+- The beacon is loaded from `static.cloudflareinsights.com`. If you run the
+  app in an air-gapped or privacy-stripped environment, leave the token unset.
 
 ## 4. Cloudflare Browser Rendering failover
 
@@ -99,9 +204,10 @@ Deploy the Worker from `workers/browser-failover/`:
 
 ```bash
 cd workers/browser-failover
-npx wrangler deploy
-# with the [browser] binding and a SHARED_TOKEN secret
+npm install                       # pulls @cloudflare/puppeteer
+npx wrangler login
 npx wrangler secret put SHARED_TOKEN
+npx wrangler deploy              # [browser] binding + nodejs_compat in wrangler.toml
 ```
 
 Then point the backend at it:
@@ -129,7 +235,7 @@ Notes:
 ```env
 # backend/.env
 CLOUDFLARE_ACCOUNT_ID=<account id>
-CLOUDFLARE_URLSCANNER_TOKEN=<api token with URL Scanner permission>
+CLOUDFLARE_URLSCANNER_TOKEN=<custom token: Account > URL Scanner > Edit>
 ```
 
 Both are dashboard-only credentials (an OAuth session cannot mint them). With
@@ -142,6 +248,10 @@ Without a token the check **fails with a clear error** — it never silently
 passes, so a misconfigured monitor is visible in the Logs page.
 
 Keep the interval daily or slower: each check is a real edge scan.
+Cloudflare may also refuse a scan with error 5021 ("hostname was recently
+scanned or too many scans to hostname"). This happens for very popular
+hostnames such as `example.com`; the run fails with that message in the Logs
+page and the next scheduled run tries again. Use a real site for smoke tests.
 Mode reference: [monitoring-modes.md](monitoring-modes.md).
 
 ## 6. Share-page edge cache Worker
@@ -218,7 +328,5 @@ drop the internal-token mode before sharing links.
 
 ## Related
 
-- [docs/guides/r2-setup.md](r2-setup.md) — R2 bucket + token + ping test
-- [docs/guides/web-analytics.md](web-analytics.md) — Web Analytics beacon
 - [docs/guides/monitoring-modes.md](monitoring-modes.md) — the `security_scan` mode
 - [docs/architecture.md](../architecture.md) — where the edge tier sits in the system

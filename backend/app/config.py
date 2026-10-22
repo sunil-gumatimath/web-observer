@@ -130,8 +130,7 @@ class Settings(BaseSettings):
     s3_secret_key: str = Field(default_factory=lambda: "minioadmin")
     s3_bucket: str = "monitor-snapshots"
     # Optional dedicated bucket for screenshot objects (public CDN via an R2
-    # custom domain — see docs/guides/cloudflare-free-features.md and
-    # docs/guides/r2-setup.md). None =
+    # custom domain — see docs/guides/cloudflare-free-features.md §2). None =
     # screenshots live in the snapshot bucket and are served through the
     # public assets proxy endpoint.
     s3_screenshot_bucket: str | None = None

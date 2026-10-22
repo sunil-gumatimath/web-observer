@@ -140,8 +140,8 @@ Status: **implemented** — the controls shipped in the core detection, browser,
 and enterprise phases. See [docs/architecture.md](../architecture.md) for where
 each control lives in code (SSRF guard, pinned fetcher, outbox idempotency,
 rate limits, crypto purpose separation) and
-[docs/operations/local-setup-and-ops.md](../operations/local-setup-and-ops.md)
-for the operational limits.
+[docs/local-dev.md](../local-dev.md) §§12–13
+for the operational limits and retention rules.
 
 - [x] SSRF suite green  
 - [x] No private/metadata IP access in tests  
@@ -153,7 +153,7 @@ for the operational limits.
 ## Related
 
 - [docs/architecture.md](../architecture.md) — component map and security notes
-- [docs/operations/local-setup-and-ops.md](../operations/local-setup-and-ops.md) — quotas, retention, secrets
+- [docs/local-dev.md](../local-dev.md) — quotas, retention, secrets
 - [docs/adrs/007-stealth-evasion-policy.md](../adrs/007-stealth-evasion-policy.md) — stealth-evasion policy (Proposed)
 - [docs/adrs/003-auth-provider.md](../adrs/003-auth-provider.md) — auth provider
 - [docs/adrs/004-storage-and-email.md](../adrs/004-storage-and-email.md) — snapshot storage and email
