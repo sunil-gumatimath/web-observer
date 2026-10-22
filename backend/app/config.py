@@ -149,7 +149,8 @@ class Settings(BaseSettings):
     ai_summaries_enabled: bool = True
     llm_api_key: str | None = None
     llm_api_base: str = "https://api.kilo.ai/api/gateway"
-    # Verified to return a complete JSON summary inside the 200-token output cap.
+    # Jev-ranked best free Kilo model; verified to return a complete JSON
+    # summary inside the 200-token output cap (see services/model_catalog.py).
     llm_model: str = "poolside/laguna-s-2.1:free"
     # Google Gemini is a second OpenAI-compatible provider. Which provider the
     # server uses is decided by ``llm_api_base``: the key of the matching

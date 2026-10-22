@@ -1,10 +1,10 @@
 """Model catalog for the LLM providers this app supports.
 
 Single source of truth for the model picker in the UI and for the server-side
-defaults. Every entry was verified live against the provider's OpenAI-compatible
-``/chat/completions`` endpoint with the app's real summarisation prompt
-(system prompt + ``<untrusted_*>`` fences + strict JSON output) at the app's
-default 200-output-token cap.
+defaults. Probe status is tracked per entry; a model is marked verified only
+when it produces a complete response to the app's real summarisation prompt
+(system prompt + ``<untrusted_*>`` fences + strict JSON output) within its
+measured output-token budget.
 
 Two things decide whether a model is usable here:
 
@@ -68,14 +68,16 @@ class Provider:
 # ---------------------------------------------------------------------------
 # Kilo Gateway — free models ($0 input/output).
 #
-# Ordering is a Jev (jev-1.13.0) ranking pass over the live free set, scored
-# against this app's job: a short, factual, strictly-JSON diff summary. The
-# ranking was grounded in live probes of every model, not in model descriptions.
+# Set taken from the live ``/api/gateway/models`` payload (``isFree=true``) on
+# 2026-10-23. Ordering is a Jev (jev-1.14.0) ranking pass over that live set,
+# scored against this app's job: a short, factual, strictly-JSON diff summary.
+# The ranking was grounded in clean live probes of every model (no failover, no
+# dedup) with the app's real prompt, not in model descriptions.
 #
-# ``verified_at`` comes from ``scripts/probe_free_models.py``, which runs the
-# real summary prompt through the real request path. 200 = fits the app's
-# default cap; 800 = passes once its own cap is applied; None = no complete
-# reply observed (or the probe was rate-limited and never got a clean run).
+# ``verified_at`` comes from those probes. 200 = fits the app's default cap;
+# 800 = passes once its own cap is applied; None = no complete reply observed
+# (reasoning burned the budget, the model returned non-JSON, timed out, was
+# rate-limited, or was not served).
 # ---------------------------------------------------------------------------
 _KILO_MODELS: list[ModelEntry] = [
     ModelEntry(
@@ -83,46 +85,7 @@ _KILO_MODELS: list[ModelEntry] = [
         label="Laguna S 2.1 (free) — Poolside · Coding · 262K ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Complete JSON at the app's 200-token cap. Best verified free pick.",
-        verified_at=200,
-    ),
-    ModelEntry(
-        value="cohere/north-mini-code:free",
-        label="North Mini Code (free) — Cohere · Coding · 256K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Complete JSON at the app's 200-token cap.",
-        verified_at=200,
-    ),
-    ModelEntry(
-        value="nvidia/nemotron-3-ultra-550b-a55b:free",
-        label="Nemotron 3 Ultra (free) — NVIDIA · 550B · 1M ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Complete JSON at the app's 200-token cap.",
-        verified_at=200,
-    ),
-    ModelEntry(
-        value="xingchen-agi/xing4.0-29b-a4b:free",
-        label="Xing4.0 29B A4B (free) — XingChen · Reasoning · 262K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Complete JSON at the app's 200-token cap.",
-        verified_at=200,
-    ),
-    ModelEntry(
-        value="recursive/flint-v1.0:free",
-        label="Flint v1.0 (free) — Recursive · 262K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Newly listed free model; not yet verified with the app's summary prompt.",
-    ),
-    ModelEntry(
-        value="openrouter/free",
-        label="Free Models Router — OpenRouter · Vision · 200K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Router over free models; completed at 200 tokens but reliability varies.",
+        note="Jev #1. Complete JSON at the 200-token cap in 3/3 clean probes (3-6s).",
         verified_at=200,
     ),
     ModelEntry(
@@ -130,15 +93,23 @@ _KILO_MODELS: list[ModelEntry] = [
         label="Nemotron 3 Nano Omni (free) — NVIDIA · Multimodal · 256K ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Complete JSON at the app's 200-token cap (rate-limited in the 2026-10 re-probe).",
+        note="Jev #2. Complete JSON at the 200-token cap in 3/3 clean probes (2-5s).",
         verified_at=200,
     ),
     ModelEntry(
-        value="poolside/laguna-xs-2.1:free",
-        label="Laguna XS 2.1 (free) — Poolside · Coding · 262K ctx",
+        value="cohere/north-mini-code:free",
+        label="North Mini Code (free) — Cohere · Coding · 256K ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Complete JSON at the app's 200-token cap (rate-limited in the 2026-10 re-probe).",
+        note="Jev #3. Complete JSON at the 200-token cap in 3/3 clean probes (2-6s); one earlier app-path run truncated.",
+        verified_at=200,
+    ),
+    ModelEntry(
+        value="xingchen-agi/xing4.0-29b-a4b:free",
+        label="Xing4.0 29B A4B (free) — XingChen · Reasoning · 262K ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Complete JSON at 200 tokens once, but repeated free-tier HTTP 429s afterwards; treat as rate-limited.",
         verified_at=200,
     ),
     ModelEntry(
@@ -146,7 +117,23 @@ _KILO_MODELS: list[ModelEntry] = [
         label="Nemotron 3.5 Super VL (free) — NVIDIA · Vision · Video · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Reasoning model: complete JSON at an 800-token cap.",
+        note="Reasoning model: complete JSON at an 800-token cap (12.5s).",
+        verified_at=800,
+    ),
+    ModelEntry(
+        value="dots-studio/dots-3-note-preview:free",
+        label="Dots3-Note Preview (free) — Dots Studio · Vision · 512K ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Reasoning model: complete JSON at an 800-token cap (8.7s).",
+        verified_at=800,
+    ),
+    ModelEntry(
+        value="recursive/flint-v1.0:free",
+        label="Flint v1.0 (free) — Recursive · Coding · 262K ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Reasoning model: complete JSON at an 800-token cap (4.9s).",
         verified_at=800,
     ),
     ModelEntry(
@@ -154,15 +141,15 @@ _KILO_MODELS: list[ModelEntry] = [
         label="Beam 1.0 (free) — Reflection · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Reasoning model: complete JSON at an 800-token cap.",
+        note="Reasoning model: complete JSON at an 800-token cap (3.1s).",
         verified_at=800,
     ),
     ModelEntry(
-        value="stealth/glyph-cluster",
-        label="Glyph Cluster (free) — Stealth · 256K ctx",
+        value="nvidia/nemotron-3-ultra-550b-a55b:free",
+        label="Nemotron 3 Ultra (free) — NVIDIA · 550B · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Reasoning model: complete JSON at an 800-token cap, but slow (~20s).",
+        note="Reasoning model: complete JSON at an 800-token cap (9.5s).",
         verified_at=800,
     ),
     ModelEntry(
@@ -170,36 +157,23 @@ _KILO_MODELS: list[ModelEntry] = [
         label="LFM2.5-2.6B (free) — Liquid AI · Lightweight · 65K ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Reasoning is mandatory; complete JSON at an 800-token cap.",
+        note="Reasoning is mandatory; complete JSON at an 800-token cap but ~55s.",
         verified_at=800,
-    ),
-    ModelEntry(
-        value="nvidia/nemotron-3-super-120b-a12b:free",
-        label="Nemotron 3 Super (free) — NVIDIA · 120B · 262K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning model: no complete reply at 200 or 800 tokens.",
-    ),
-    ModelEntry(
-        value="nvidia/nemotron-3.5-lightning:free",
-        label="Nemotron 3.5 Lightning (free) — NVIDIA · Reasoning · 1M ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning model: returned empty content at an 800-token cap.",
-    ),
-    ModelEntry(
-        value="dots-studio/dots-3-note-preview:free",
-        label="Dots3-Note Preview (free) — Dots Studio · Vision · 512K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning model: no complete reply at an 800-token cap.",
     ),
     ModelEntry(
         value="kilo-auto/free",
         label="Auto Free — Kilo · Server default router · 256K ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Rotates across free models; timed out at a 200-token cap.",
+        note="Router over free models; complete JSON at an 800-token cap (2.7s), empty at 200.",
+        verified_at=800,
+    ),
+    ModelEntry(
+        value="nvidia/nemotron-3.5-lightning:free",
+        label="Nemotron 3.5 Lightning (free) — NVIDIA · Reasoning · 1M ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Reasoning model: empty/truncated content at both 200 and 800 tokens.",
     ),
     ModelEntry(
         value="nvidia/nemotron-3.5-content-safety:free",
@@ -207,6 +181,34 @@ _KILO_MODELS: list[ModelEntry] = [
         provider="kilo",
         base=KILO_BASE,
         note="Moderation model, not a summariser.",
+    ),
+    ModelEntry(
+        value="openrouter/free",
+        label="Free Models Router — OpenRouter · Vision · 200K ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Router over random free models; truncated/empty at both 200 and 800 tokens.",
+    ),
+    ModelEntry(
+        value="stealth/glyph-cluster",
+        label="Glyph Cluster (free) — Stealth · 256K ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Reasoning model: timed out (>90s) at both 200 and 800 tokens in the 2026-10 re-probe.",
+    ),
+    ModelEntry(
+        value="poolside/laguna-xs-2.1:free",
+        label="Laguna XS 2.1 (free) — Poolside · Coding · 262K ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Hit the free-tier HTTP 429 limit on every recent probe.",
+    ),
+    ModelEntry(
+        value="nvidia/nemotron-3-super-120b-a12b:free",
+        label="Nemotron 3 Super (free) — NVIDIA · 120B · 262K ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Listed free, but requests returned HTTP 404/502 in the 2026-10 re-probe.",
     ),
 ]
 

@@ -44,6 +44,10 @@ def probe(model: str, cap: int) -> tuple[bool, str]:
     os.environ["LLM_API_BASE"] = KILO_BASE
     os.environ["LLM_MODEL"] = model
     os.environ["AI_MAX_OUTPUT_TOKENS"] = str(cap)
+    # Measure this model alone: a catalog failover would turn another model's
+    # answer into a false PASS, and a dedup hit would skip the request entirely.
+    os.environ["LLM_FALLBACK_MODELS"] = "none"
+    os.environ["AI_DEDUP_TTL_SECONDS"] = "0"
     get_settings.cache_clear()
 
     cfg = _effective_llm(None)

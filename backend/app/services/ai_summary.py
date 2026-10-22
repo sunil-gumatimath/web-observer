@@ -347,6 +347,14 @@ def _dedup_key(
 
 
 def _dedup_get(key: str) -> AIEnrichment | None:
+    # TTL 0 means dedup is disabled entirely. Without this guard a probe (or a
+    # deployment that turned dedup off) would still be served stale Redis hits.
+    try:
+        if int(get_settings().ai_dedup_ttl_seconds or 600) <= 0:
+            return None
+    except Exception:
+        pass
+
     # 1. Check distributed Redis cache
     try:
         r = _redis_client()
