@@ -284,7 +284,7 @@ export default function DocsPage() {
                 <strong className="text-[var(--fg)]">Product price</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">price_below</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">price_above</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">percent_change</code> (minimum % move).
               </li>
               <li>
-                <strong className="text-[var(--fg)]">JSON field / page content</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">percent_change</code> (minimum % move of the numeric value).
+                <strong className="text-[var(--fg)]">JSON field</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">percent_change</code> (minimum % move of the numeric value). <strong className="text-[var(--fg)]">Page content</strong> uses the same key for the minimum share of edited characters in the longer snapshot.
               </li>
               <li>
                 <strong className="text-[var(--fg)]">List items / site links / RSS feed</strong> — <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_min_added</code>, <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 text-xs text-[var(--ink)] border border-[var(--hairline)]">list_min_removed</code> (minimum added/removed items).
