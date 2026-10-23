@@ -18,13 +18,6 @@ EMAIL_FROM=onboarding@resend.dev
 
 Never commit real keys. `.env` is gitignored.
 
-## Test send
-
-```powershell
-cd backend
-.\.venv\Scripts\python scripts\send_test_email.py --to you@example.com
-```
-
 ## How product emails work
 
 1. A change is detected → outbox row created  

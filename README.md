@@ -295,8 +295,3 @@ npm run build
 
 CI (`.github/workflows/ci.yml`) runs the backend unit tests and the Postgres-backed integration tests in separate jobs, plus a Gitleaks secret scan, and the frontend type-check / lint / test / build.
 
-Quick smoke test of a running stack (API + worker must be up):
-
-```sh
-./scripts/smoke.sh
-```

@@ -284,15 +284,7 @@ interceptor needs.
    | `app` | `your-domain.example` | `http://127.0.0.1:3000` |
    | `api` | `your-domain.example` | `http://127.0.0.1:8002` |
 
-4. Then install the service locally:
-
-```powershell
-.\scripts\cloudflare-tunnel.ps1 -Token '<connector-token>'
-# remove later:          .\scripts\cloudflare-tunnel.ps1 -Remove
-# ephemeral one-off URL: .\scripts\cloudflare-tunnel.ps1 -Quick
-```
-
-The token is kept in `data/cloudflared-token.txt` (gitignored under `data/`).
+4. Install and run the `cloudflared` connector using Cloudflare's documented Windows service instructions and the connector token.
 
 ### Wiring the public URL into the stack
 

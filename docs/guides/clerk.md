@@ -76,7 +76,7 @@ npm run dev
 cd frontend
 clerk env pull --app app_3GJz6qgIFDXNyyMSm9ayJgXpZ6q
 cd ..
-node scripts/wire-clerk-backend.mjs
+# Update CLERK_ISSUER and CLERK_JWKS_URL in the root .env to match the frontend Clerk instance.
 ```
 
 ### Dashboard
@@ -126,7 +126,7 @@ Then wire backend JWKS/issuer:
 
 ```powershell
 cd ..
-node scripts\wire-clerk-backend.mjs
+# Update CLERK_ISSUER and CLERK_JWKS_URL in the root .env to match the frontend Clerk instance.
 ```
 
 Restart frontend and API.
