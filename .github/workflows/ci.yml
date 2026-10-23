@@ -44,6 +44,11 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        # gitleaks-action scans the pushed commit range on push events; a
+        # shallow (depth=1) clone cannot resolve that range and the scan
+        # fails with "unknown revision". Fetch the full history instead.
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
