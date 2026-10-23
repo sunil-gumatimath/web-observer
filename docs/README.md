@@ -32,9 +32,9 @@ project overview and quickstart.
 
 | Doc | Topic |
 | ----- | ------- |
-| [../scripts/](../scripts/) | `restart-stack.ps1`, `stop-stack.ps1`, `cloudflare-tunnel.ps1`, `smoke.sh` |
+| [../scripts/](../scripts/) | Stack restart/stop scripts for Windows and Linux/WSL |
 | [../workers/](../workers/) | Cloudflare Workers: Browser Rendering failover, share-page edge cache |
 
 ## Decisions
 
-[adrs/](./adrs/) — architecture decision records (ADR 001–007).
+[adrs/007-stealth-evasion-policy.md](./adrs/007-stealth-evasion-policy.md) — stealth-evasion policy (Proposed; see also [security/threat-model.md](./security/threat-model.md)).
