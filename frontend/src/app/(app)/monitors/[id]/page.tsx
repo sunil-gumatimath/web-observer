@@ -1058,7 +1058,6 @@ function MonitorDetailInner() {
 						snapshot={previewSnapshot}
 						run={latestOkRun}
 						loading={previewLoading}
-						workspaceId={workspaceId}
 						onEnableJs={() => router.push(`/monitors/${monitor.id}/edit`)}
 					/>
 				</section>

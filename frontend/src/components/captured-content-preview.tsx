@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Badge, Button, Card, ModeBadge } from "@/components/ui";
+import { Badge, Button, Card, ModeBadge, SegmentedControl } from "@/components/ui";
 import { ReadableContent } from "@/components/readable-content";
 import { MarkdownContent } from "@/components/markdown-content";
 import { brandAssetUrl, screenshotUrl } from "@/lib/api";
@@ -13,7 +13,6 @@ interface CapturedContentPreviewProps {
   snapshot: SnapshotAccess | null;
   run?: MonitorRun | null;
   loading?: boolean;
-  workspaceId: string | null;
   onEnableJs?: () => void;
 }
 
@@ -22,7 +21,6 @@ export function CapturedContentPreview({
   snapshot,
   run,
   loading,
-  workspaceId: _workspaceId,
   onEnableJs,
 }: CapturedContentPreviewProps) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -565,30 +563,15 @@ export function CapturedContentPreview({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-md border border-[var(--hairline)] bg-[var(--surface-2)] p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setReadmeView("rendered")}
-                className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
-                  readmeView === "rendered"
-                    ? "bg-[var(--surface-1)] text-[var(--ink)] shadow-xs"
-                    : "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
-                }`}
-              >
-                Rendered
-              </button>
-              <button
-                type="button"
-                onClick={() => setReadmeView("raw")}
-                className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
-                  readmeView === "raw"
-                    ? "bg-[var(--surface-1)] text-[var(--ink)] shadow-xs"
-                    : "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
-                }`}
-              >
-                Raw markdown
-              </button>
-            </div>
+            <SegmentedControl<"rendered" | "raw">
+              ariaLabel="README view mode"
+              value={readmeView}
+              onChange={setReadmeView}
+              options={[
+                { value: "rendered", label: "Rendered" },
+                { value: "raw", label: "Raw markdown" },
+              ]}
+            />
             <Button
               size="sm"
               variant="ghost"

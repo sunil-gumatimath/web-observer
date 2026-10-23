@@ -28,17 +28,17 @@ export function Button({
 }) {
 	const styles = {
 		primary:
-			"bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] active:bg-[var(--primary-focus)] border border-transparent",
+			"bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] hover:text-[var(--on-primary)] active:bg-[var(--primary-focus)] active:text-[var(--on-primary)] border border-transparent",
 		secondary:
-			"bg-[var(--surface-1)] text-[var(--ink)] border border-[var(--hairline)] hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)]",
+			"bg-[var(--surface-1)] text-[var(--ink)] border border-[var(--hairline)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)] active:text-[var(--ink)]",
 		tertiary:
-			"bg-[var(--canvas)] text-[var(--ink)] border border-transparent hover:bg-[var(--surface-1)] active:bg-[var(--surface-2)]",
+			"bg-[var(--canvas)] text-[var(--ink)] border border-transparent hover:bg-[var(--surface-1)] hover:text-[var(--ink)] active:bg-[var(--surface-2)] active:text-[var(--ink)]",
 		inverse:
-			"bg-[var(--inverse-canvas)] text-[var(--inverse-ink)] border border-transparent hover:bg-[var(--inverse-surface-1)] active:bg-[var(--inverse-surface-2)]",
+			"bg-[var(--inverse-canvas)] text-[var(--inverse-ink)] border border-transparent hover:bg-[var(--inverse-surface-1)] hover:text-[var(--inverse-ink)] active:bg-[var(--inverse-surface-2)] active:text-[var(--inverse-ink)]",
 		danger:
-			"bg-[var(--danger)] text-white hover:opacity-90 active:opacity-100 border border-transparent",
+			"bg-[var(--danger)] text-white hover:opacity-90 hover:text-white active:opacity-100 active:text-white border border-transparent",
 		ghost:
-			"bg-transparent text-[var(--ink)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] border border-transparent",
+			"bg-transparent text-[var(--ink)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)] active:bg-[var(--surface-3)] active:text-[var(--ink)] border border-transparent",
 	}[variant];
 
 	const sizes = {
@@ -108,14 +108,19 @@ export function Select({
 export function Label({
 	children,
 	htmlFor,
+	className,
 }: {
 	children: ReactNode;
 	htmlFor?: string;
+	className?: string;
 }) {
 	return (
 		<label
 			htmlFor={htmlFor}
-			className="mb-1.5 block text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted)]"
+			className={cn(
+				"mb-1.5 block text-xs font-medium uppercase tracking-[0.05em] text-[var(--muted)]",
+				className,
+			)}
 		>
 			{children}
 		</label>
@@ -373,29 +378,29 @@ export function SectionTitle({
 	);
 }
 
-const segmentedBtn =
-	"rounded-[6px] px-2.5 py-1 text-xs font-medium transition " +
-	"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]";
-
 export function SegmentedControl<T extends string>({
 	options,
 	value,
 	onChange,
 	ariaLabel,
 	className,
+	size = "sm",
 }: {
 	options: ReadonlyArray<{ value: T; label: ReactNode }>;
 	value: T;
 	onChange: (next: T) => void;
 	ariaLabel?: string;
 	className?: string;
+	size?: "sm" | "md";
 }) {
+	const isMd = size === "md";
 	return (
 		<div
 			role="group"
 			aria-label={ariaLabel}
 			className={cn(
-				"inline-flex flex-wrap gap-1 rounded-[8px] border border-[var(--hairline)] bg-[var(--canvas)] p-0.5",
+				"inline-flex flex-wrap items-center gap-1 border border-[var(--hairline)] bg-[var(--canvas)]",
+				isMd ? "p-1 rounded-[10px]" : "p-0.5 rounded-[8px]",
 				className,
 			)}
 		>
@@ -408,7 +413,10 @@ export function SegmentedControl<T extends string>({
 						aria-pressed={active}
 						onClick={() => onChange(opt.value)}
 						className={cn(
-							segmentedBtn,
+							"font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]",
+							isMd
+								? "rounded-[8px] px-3.5 py-1.5 text-sm"
+								: "rounded-[6px] px-2.5 py-1 text-xs",
 							active
 								? "bg-[var(--surface-2)] text-[var(--fg)] border border-[var(--hairline-strong)] shadow-xs"
 								: "border border-transparent text-[var(--muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-1)]",

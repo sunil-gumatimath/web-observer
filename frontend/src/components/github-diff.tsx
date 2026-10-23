@@ -337,43 +337,25 @@ export function GithubDiff({
 			</div>
 
 			<div className="flex flex-wrap items-center gap-2">
-				{/* Scope toggle: Changes only vs Full page */}
-				<div className="flex rounded-md border border-[var(--hairline)] bg-[var(--surface-2)] p-0.5 text-xs">
-					<button
-						type="button"
-						onClick={() => setScope("changes")}
-						className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
-							scope === "changes"
-								? "bg-[var(--surface-1)] text-[var(--ink)] shadow-xs"
-								: "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
-						}`}
-					>
-						Changes only
-					</button>
-					<button
-						type="button"
-						onClick={() => setScope("full")}
-						className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
-							scope === "full"
-								? "bg-[var(--surface-1)] text-[var(--ink)] shadow-xs"
-								: "text-[var(--ink-subtle)] hover:text-[var(--ink)]"
-						}`}
-					>
-						Full page
-					</button>
-				</div>
+				<SegmentedControl<"changes" | "full">
+					ariaLabel="Diff scope"
+					value={scope}
+					onChange={setScope}
+					options={[
+						{ value: "changes", label: "Changes only" },
+						{ value: "full", label: "Full page" },
+					]}
+				/>
 
-				<div className="flex items-center gap-1 rounded-md bg-[var(--surface-2)] p-0.5 border border-[var(--hairline)]">
-					<SegmentedControl
-						ariaLabel="Diff view"
-						value={view}
-						onChange={setView}
-						options={[
-							{ value: "split", label: "Split" },
-							{ value: "unified", label: "Unified" },
-						]}
-					/>
-				</div>
+				<SegmentedControl<"split" | "unified">
+					ariaLabel="Diff view"
+					value={view}
+					onChange={setView}
+					options={[
+						{ value: "split", label: "Split" },
+						{ value: "unified", label: "Unified" },
+					]}
+				/>
 			</div>
 		</div>
 	);

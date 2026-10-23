@@ -326,7 +326,7 @@ a {
   color: var(--fg);
 }
 
-a:hover {
+a:hover:not(.btn-linear):not([class*="btn"]) {
   color: var(--accent-hover);
 }
 
@@ -452,10 +452,12 @@ a:hover {
 
   .btn-linear-primary:hover {
     background: var(--primary-hover);
+    color: var(--on-primary);
   }
 
   .btn-linear-primary:active {
     background: var(--primary-focus);
+    color: var(--on-primary);
   }
 
   .btn-linear-secondary {
@@ -467,10 +469,12 @@ a:hover {
   .btn-linear-secondary:hover {
     background: var(--surface-2);
     border-color: var(--hairline-strong);
+    color: var(--fg);
   }
 
   .btn-linear-secondary:active {
     background: var(--surface-3);
+    color: var(--fg);
   }
 
   .btn-linear-tertiary {
@@ -486,6 +490,7 @@ a:hover {
 
   .btn-linear-tertiary:active {
     background: var(--surface-2);
+    color: var(--ink);
   }
 
   .btn-linear-inverse {
@@ -496,10 +501,12 @@ a:hover {
 
   .btn-linear-inverse:hover {
     background: var(--inverse-surface-1);
+    color: var(--inverse-ink);
   }
 
   .btn-linear-inverse:active {
     background: var(--inverse-surface-2);
+    color: var(--inverse-ink);
   }
 
   .btn-linear-ghost {
@@ -515,6 +522,7 @@ a:hover {
 
   .btn-linear-ghost:active {
     background: var(--surface-3);
+    color: var(--fg);
   }
 
   /* Back-compat aliases */
