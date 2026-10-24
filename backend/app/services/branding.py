@@ -18,6 +18,7 @@ import uuid
 from dataclasses import dataclass, field
 from urllib.parse import urljoin
 
+from app.security.ssrf import SSRFError
 from app.services.fetcher import FetchError, FetchResult, fetch_binary, fetch_url
 from app.services.storage import put_bytes
 
@@ -268,6 +269,12 @@ def _download_image(url: str, *, max_bytes: int = MAX_IMAGE_BYTES) -> bytes | No
         return result.content
     except FetchError as exc:  # noqa: BLE001
         logger.debug("brand_asset_download_failed url=%s error=%s", url, exc)
+        return None
+    except SSRFError as exc:  # noqa: BLE001
+        # Belt-and-braces: an unreachable/blocked provider (e.g. DNS failure for
+        # logo.clearbit.com) means *this candidate* is unavailable — skip it and
+        # try the next one. Must never abort brand enrichment with a 500.
+        logger.debug("brand_asset_download_blocked url=%s error=%s", url, exc)
         return None
 
 

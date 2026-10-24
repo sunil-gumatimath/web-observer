@@ -236,7 +236,13 @@ def fetch_binary(
     against private/internal IPs and each hop's IP is pinned into the transport,
     so a first-hop redirect to ``169.254.169.254`` / ``127.0.0.1`` is blocked.
     """
-    current = validate_url_for_fetch(url, resolve_dns=True).url
+    # Initial validation must go through the same SSRFError -> FetchError
+    # conversion as every other hop: callers (branding) only catch FetchError,
+    # and a raw SSRFError (e.g. first hop DNS failure) used to escape as a 500.
+    try:
+        current = validate_url_for_fetch(url, resolve_dns=True).url
+    except SSRFError as exc:
+        raise FetchError(exc.code, str(exc)) from exc
     timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, timeout_seconds))
     headers = {"User-Agent": get_settings().http_user_agent}
 
@@ -306,7 +312,12 @@ def fetch_url(
 ) -> FetchResult:
     settings = get_settings()
     user_agent = settings.http_user_agent
-    current = validate_url_for_fetch(url, resolve_dns=True).url
+    # Same SSRFError -> FetchError conversion as fetch_binary: the initial hop
+    # below is caller-facing and every caller catches FetchError, not SSRFError.
+    try:
+        current = validate_url_for_fetch(url, resolve_dns=True).url
+    except SSRFError as exc:
+        raise FetchError(exc.code, str(exc)) from exc
 
     timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, timeout_seconds))
     headers = {"User-Agent": user_agent}
