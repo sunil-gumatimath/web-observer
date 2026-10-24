@@ -140,7 +140,7 @@ export function Card({
 		<div
 			className={cn(
 				"glass-card",
-				hover && "transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]/40",
+				hover && "transition hover:border-[var(--hairline-strong)] hover:bg-[color:color-mix(in_srgb,var(--surface-2)_40%,transparent)]",
 				className,
 			)}
 			suppressHydrationWarning
@@ -163,11 +163,11 @@ export function Badge({
 		neutral:
 			"bg-[var(--surface-2)] text-[var(--ink-muted)] border border-[var(--hairline)]",
 		success:
-			"bg-[var(--semantic-success)]/10 text-[var(--semantic-success)] border border-[var(--semantic-success)]/25",
+			"bg-[color:color-mix(in_srgb,var(--semantic-success)_10%,transparent)] text-[var(--semantic-success)] border border-[color:color-mix(in_srgb,var(--semantic-success)_25%,transparent)]",
 		danger:
 			"bg-rose-500/10 text-rose-400 border border-rose-500/20",
 		warn: "bg-amber-500/10 text-amber-300 border border-amber-500/20",
-		info: "bg-[var(--primary)]/10 text-[var(--primary-hover)] border border-[var(--primary)]/25",
+		info: "bg-[color:color-mix(in_srgb,var(--primary)_10%,transparent)] text-[var(--primary-hover)] border border-[color:color-mix(in_srgb,var(--primary)_25%,transparent)]",
 	}[tone];
 	return (
 		<span
@@ -418,7 +418,7 @@ export function SegmentedControl<T extends string>({
 								? "rounded-[8px] px-3.5 py-1.5 text-sm"
 								: "rounded-[6px] px-2.5 py-1 text-xs",
 							active
-								? "bg-[var(--surface-2)] text-[var(--fg)] border border-[var(--hairline-strong)] shadow-xs"
+								? "bg-[var(--surface-2)] text-[var(--fg)] border border-[var(--hairline-strong)] shadow-sm"
 								: "border border-transparent text-[var(--muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-1)]",
 						)}
 					>

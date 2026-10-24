@@ -93,7 +93,6 @@ function MonitorDetailInner() {
 	const [screenshotFailed, setScreenshotFailed] = useState(false);
 
 	const pollStartedAt = useRef<number | null>(null);
-	const latestSnapshotId = useRef<string | null>(null);
 	// Fingerprint of the last observed run list: any new run or status change
 	// counts as progress and restarts the stall budget (see polling effect).
 	const lastRunsSig = useRef<string | null>(null);
@@ -316,42 +315,41 @@ function MonitorDetailInner() {
 	}, [loading, workspaceId, shouldPoll, refresh]);
 
 	// Load snapshot preview for latest successful run.
+	const latestOkSnapId = runs.find(
+		(r) => r.status === "succeeded" && r.snapshot_id,
+	)?.snapshot_id ?? null;
+
 	useEffect(() => {
-		const latestOk = runs.find(
-			(r) => r.status === "succeeded" && r.snapshot_id,
-		);
-		const snapId = latestOk?.snapshot_id ?? null;
-		if (!snapId) {
-			if (latestSnapshotId.current !== null) {
-				latestSnapshotId.current = null;
-				setPreviewSnapshot(null);
-				setPreviewLoading(false);
-			}
+		if (!workspaceId || !latestOkSnapId) {
+			setPreviewSnapshot(null);
+			setPreviewLoading(false);
 			return;
 		}
-		if (!workspaceId || snapId === latestSnapshotId.current) {
-			return;
-		}
-		latestSnapshotId.current = snapId;
-		let cancelled = false;
+
+		let active = true;
 		setPreviewLoading(true);
-		(async () => {
-			try {
-				const snap = await api.getSnapshot(workspaceId, snapId);
-				if (!cancelled) setPreviewSnapshot(snap);
-			} catch {
-				if (!cancelled) {
-					setPreviewSnapshot(null);
-					latestSnapshotId.current = null;
+
+		api.getSnapshot(workspaceId, latestOkSnapId)
+			.then((snap) => {
+				if (active) {
+					setPreviewSnapshot(snap);
 				}
-			} finally {
-				if (!cancelled) setPreviewLoading(false);
-			}
-		})();
+			})
+			.catch(() => {
+				if (active) {
+					setPreviewSnapshot(null);
+				}
+			})
+			.finally(() => {
+				if (active) {
+					setPreviewLoading(false);
+				}
+			});
+
 		return () => {
-			cancelled = true;
+			active = false;
 		};
-	}, [runs, workspaceId]);
+	}, [workspaceId, latestOkSnapId]);
 
 	async function withAction(fn: () => Promise<void>) {
 		if (!workspaceId) return;
@@ -523,7 +521,7 @@ function MonitorDetailInner() {
 								}}
 							/>
 							<div className="relative z-10 flex items-center gap-2.5">
-								<div className="flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] bg-[var(--surface-1)]/90 px-3 py-1.5 shadow-xs backdrop-blur-xs">
+								<div className="flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] bg-[color:color-mix(in_srgb,var(--surface-1)_90%,transparent)] px-3 py-1.5 shadow-sm backdrop-blur-sm">
 									<span
 										className={`size-2 rounded-full ${
 											brandRefreshing ? "bg-[var(--primary)] animate-ping" : "bg-[var(--ink-subtle)]"
@@ -537,7 +535,7 @@ function MonitorDetailInner() {
 									<button
 										type="button"
 										onClick={handleRefreshBrand}
-										className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hairline)] bg-[var(--surface-1)]/80 px-3 py-1.5 text-xs font-medium text-[var(--ink-subtle)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--ink)] hover:bg-[var(--surface-1)] shadow-xs"
+										className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hairline)] bg-[color:color-mix(in_srgb,var(--surface-1)_80%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--ink-subtle)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--ink)] hover:bg-[var(--surface-1)] shadow-sm"
 										title="Re-scrape page for product preview image"
 									>
 										<svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -552,7 +550,7 @@ function MonitorDetailInner() {
 									</button>
 								)}
 							</div>
-							<div className="pointer-events-none select-none text-right font-mono text-2xl font-black tracking-wider text-[var(--ink)]/5 dark:text-white/5 uppercase sm:text-4xl">
+							<div className="pointer-events-none select-none text-right font-mono text-2xl font-black tracking-wider text-[color:color-mix(in_srgb,var(--ink)_5%,transparent)] dark:text-white/5 uppercase sm:text-4xl">
 								{(() => {
 									try {
 										return new URL(monitor.url).hostname.replace(/^www\./, "");
@@ -568,8 +566,8 @@ function MonitorDetailInner() {
 				{/* Floating Header Content */}
 				<div className="relative px-5 pb-5 sm:px-6 sm:pb-6">
 					<div className="-mt-10 flex flex-wrap items-end justify-between gap-4">
-						<div className="flex size-18 sm:size-20 items-center justify-center overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-1.5">
-							<BrandLogo brand={monitor.brand} name={monitor.name} domain={monitor.url} size={64} className="rounded-md border-0" />
+						<div className="flex size-[78px] sm:size-20 items-center justify-center overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-1.5">
+							<BrandLogo brand={monitor.brand} name={monitor.name} domain={monitor.url} size={64} />
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<a
@@ -693,7 +691,7 @@ function MonitorDetailInner() {
 			{error ? <ErrorBox message={error} /> : null}
 
 			{shareUrl ? (
-				<Card className="mb-8 border-[var(--semantic-success)]/30 bg-[var(--semantic-success)]/5">
+				<Card className="mb-8 border-[color:color-mix(in_srgb,var(--semantic-success)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--semantic-success)_5%,transparent)]">
 					<div className="flex flex-wrap items-start justify-between gap-3">
 						<div className="min-w-0 flex-1">
 							<p className="section-label">Public share link</p>
@@ -936,7 +934,7 @@ function MonitorDetailInner() {
 										<Badge tone="success">signal</Badge>
 									)}
 									{isHeuristic ? (
-										<span className="inline-flex items-center gap-1 rounded-full bg-[var(--warn)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--warn)]">
+										<span className="inline-flex items-center gap-1 rounded-full bg-[color:color-mix(in_srgb,var(--warn)_10%,transparent)] px-2 py-0.5 text-[10px] font-medium text-[var(--warn)]">
 											Heuristic preview
 										</span>
 									) : null}
@@ -976,9 +974,9 @@ function MonitorDetailInner() {
 						</div>
 					);
 				})() : hasSuccessfulSnapshot ? (
-					<div className="rounded-lg border border-[var(--semantic-success)]/30 bg-[var(--semantic-success)]/5 p-5">
+					<div className="rounded-lg border border-[color:color-mix(in_srgb,var(--semantic-success)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--semantic-success)_5%,transparent)] p-5">
 						<div className="flex items-start gap-3">
-							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--semantic-success)]/15 text-[var(--semantic-success)]">
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[color:color-mix(in_srgb,var(--semantic-success)_15%,transparent)] text-[var(--semantic-success)]">
 								✓
 							</span>
 							<div className="min-w-0 flex-1">
@@ -1022,10 +1020,10 @@ function MonitorDetailInner() {
 				return (
 					<div
 						role="alert"
-						className="mb-8 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/5 p-5"
+						className="mb-8 rounded-lg border border-[color:color-mix(in_srgb,var(--danger)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--danger)_5%,transparent)] p-5"
 					>
 						<div className="flex items-start gap-3">
-							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--danger)]/15 text-base font-bold text-[var(--danger)]">
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[color:color-mix(in_srgb,var(--danger)_15%,transparent)] text-base font-bold text-[var(--danger)]">
 								!
 							</span>
 							<div className="min-w-0 flex-1">
