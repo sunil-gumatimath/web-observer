@@ -1,8 +1,8 @@
 """Provider routing, catalog and failover tests.
 
 Covers the behaviour that the model catalog introduced: a base URL selects the
-provider (and therefore the key and the default model), failover never crosses
-providers, and the catalog stays internally consistent.
+provider (and therefore the default model), failover never leaves the
+provider, and the catalog stays internally consistent.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import pytest
 from app.config import Settings
 from app.services.ai_summary import _candidate_models, _effective_llm
 from app.services.model_catalog import (
-    GEMINI_BASE,
     KILO_BASE,
     PROVIDERS,
     candidates_for_base,
@@ -26,9 +25,6 @@ def _settings(**overrides: object) -> Settings:
         llm_api_key="kilo-key",
         llm_api_base=KILO_BASE,
         llm_model="poolside/laguna-s-2.1:free",
-        gemini_api_key="gemini-key",
-        gemini_api_base=GEMINI_BASE,
-        gemini_model="gemini-3.1-flash-lite",
         llm_fallback_models="",
         _env_file=None,  # type: ignore[call-arg]
     )
@@ -48,44 +44,32 @@ def test_kilo_base_uses_the_kilo_key_and_model(monkeypatch: pytest.MonkeyPatch) 
     assert cfg["model"] == "poolside/laguna-s-2.1:free"
 
 
-def test_gemini_base_uses_the_gemini_key_and_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _settings(llm_api_base=GEMINI_BASE)
+def test_failover_candidates_stay_on_the_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _settings()
     monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: settings)
 
-    cfg = _effective_llm(None)
+    candidates = _candidate_models("poolside/laguna-s-2.1:free", KILO_BASE)
 
-    assert cfg["api_base"] == GEMINI_BASE
-    assert cfg["api_key"] == "gemini-key"
-    assert cfg["model"] == "gemini-3.1-flash-lite"
-
-
-def test_failover_candidates_never_cross_providers(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _settings(llm_api_base=GEMINI_BASE)
-    monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: settings)
-
-    candidates = _candidate_models("gemini-3.1-flash-lite", GEMINI_BASE)
-
-    assert candidates[0] == "gemini-3.1-flash-lite"
-    assert all(candidate.startswith("gemini-") for candidate in candidates)
+    assert candidates[0] == "poolside/laguna-s-2.1:free"
+    assert all("gemini" not in candidate for candidate in candidates)
 
 
 def test_explicit_fallback_list_drops_other_providers_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = _settings(
-        llm_api_base=GEMINI_BASE,
         llm_fallback_models="gemini-3.5-flash-lite,poolside/laguna-s-2.1:free",
     )
     monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: settings)
 
-    candidates = _candidate_models("gemini-3.1-flash-lite", GEMINI_BASE)
+    candidates = _candidate_models("poolside/laguna-s-2.1:free", KILO_BASE)
 
-    assert "gemini-3.5-flash-lite" in candidates
-    assert "poolside/laguna-s-2.1:free" not in candidates
+    assert "poolside/laguna-s-2.1:free" in candidates
+    assert "gemini-3.5-flash-lite" not in candidates
 
 
 def test_fallback_none_disables_failover(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _settings(llm_api_base=KILO_BASE, llm_fallback_models="none")
+    settings = _settings(llm_fallback_models="none")
     monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: settings)
 
     assert _candidate_models("poolside/laguna-s-2.1:free", KILO_BASE) == [
@@ -119,26 +103,26 @@ def test_catalog_base_lookup_is_normalised() -> None:
 
 def test_candidates_for_base_returns_only_that_providers_models() -> None:
     kilo_models = candidates_for_base(KILO_BASE)
-    gemini_models = candidates_for_base(GEMINI_BASE)
 
-    assert kilo_models and gemini_models
-    assert set(kilo_models).isdisjoint(gemini_models)
+    assert kilo_models
+    assert all("gemini" not in model for model in kilo_models)
+    assert candidates_for_base("https://api.openai.com/v1") == []
 
 
 def test_verified_candidates_exclude_models_that_cannot_finish_the_job() -> None:
     """A failover attempt spends quota, so the default chain is verified-only."""
-    verified = candidates_for_base(GEMINI_BASE, verified_only=True)
-    full = candidates_for_base(GEMINI_BASE)
+    verified = candidates_for_base(KILO_BASE, verified_only=True)
+    full = candidates_for_base(KILO_BASE)
 
     assert verified and set(verified) <= set(full)
-    assert "gemini-3.1-pro-preview" not in verified
-    assert "gemini-3.8-flash" not in verified
-    assert "gemini-3.5-flash-lite" in verified
+    assert "nvidia/nemotron-3.5-lightning:free" not in verified
+    assert "poolside/laguna-xs-2.1:free" not in verified
+    assert "poolside/laguna-s-2.1:free" in verified
 
 
 def test_verified_only_is_off_by_default_so_explicit_lists_keep_full_scope() -> None:
     """A deliberate user choice must not be silently narrowed by the catalog."""
-    assert candidates_for_base(GEMINI_BASE) == candidates_for_base(GEMINI_BASE, verified_only=False)
+    assert candidates_for_base(KILO_BASE) == candidates_for_base(KILO_BASE, verified_only=False)
 
 
 def test_catalog_exposes_at_least_one_model_verified_at_the_output_cap() -> None:

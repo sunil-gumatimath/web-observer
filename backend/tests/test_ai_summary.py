@@ -25,10 +25,7 @@ def test_classify_visual_mode() -> None:
 
 def test_enrich_without_llm_is_heuristic(monkeypatch: pytest.MonkeyPatch) -> None:
     s = Settings()
-    # Clear every provider key, not just Kilo's: which key matters depends on
-    # LLM_API_BASE, and a leftover key would turn this into a live API call.
     s.llm_api_key = ""
-    s.gemini_api_key = ""
     monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: s)
     result = enrich_change(
         workspace_id=uuid.uuid4(),

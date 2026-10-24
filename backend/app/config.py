@@ -16,14 +16,14 @@ _DEV_ENV_NAMES = frozenset({"development", "dev", "local", "test", "testing"})
 
 #: Fields whose value in the OS environment silently wins over ``.env``.
 #: Keys are fingerprinted in the warning; everything else is safe to print.
-_SECRET_FIELDS = frozenset({"GEMINI_API_KEY", "LLM_API_KEY"})
+_SECRET_FIELDS = frozenset({"LLM_API_KEY", "SUBQ_API_KEY"})
 _OVERRIDE_CHECKED_FIELDS = (
-    "GEMINI_API_KEY",
-    "GEMINI_MODEL",
-    "GEMINI_API_BASE",
     "LLM_API_KEY",
     "LLM_MODEL",
     "LLM_API_BASE",
+    "SUBQ_API_KEY",
+    "SUBQ_MODEL",
+    "SUBQ_API_BASE",
 )
 
 
@@ -37,7 +37,7 @@ def _warn_env_overrides(env_file: Path | None = None) -> list[str]:
     """Warn when an OS environment variable shadows a ``.env`` entry.
 
     pydantic-settings resolves constructor kwargs > OS environment > ``.env``,
-    so a leftover ``GEMINI_API_KEY`` set with ``setx`` makes the ``.env`` value
+    so a leftover ``LLM_API_KEY`` set with ``setx`` makes the ``.env`` value
     dead config. Without this warning the only symptom is "I rotated the key
     and nothing changed" — or worse, requests billed to an account you thought
     you had stopped using.
@@ -152,21 +152,21 @@ class Settings(BaseSettings):
     # Jev-ranked best free Kilo model; verified to return a complete JSON
     # summary inside the 200-token output cap (see services/model_catalog.py).
     llm_model: str = "poolside/laguna-s-2.1:free"
-    # Google Gemini is a second OpenAI-compatible provider. Which provider the
-    # server uses is decided by ``llm_api_base``: the key of the matching
-    # provider is selected automatically (Kilo -> llm_api_key, Gemini ->
-    # gemini_api_key), so a model is never sent to a provider without a key.
-    gemini_api_key: str | None = None
-    gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta/openai"
-    gemini_model: str = "gemini-3.1-flash-lite"
     # Comma-separated server-level fallback models tried in order after the
-    # primary. Empty string disables failover (primary only). Entries for
-    # another provider than LLM_API_BASE are skipped automatically.
+    # primary. Empty string asks the catalog for same-provider verified
+    # models; "none" disables failover (primary only).
     llm_fallback_models: str = ""
     ai_max_diff_chars: int = 6000
     ai_max_output_tokens: int = 200
     ai_async_enrichment: bool = False  # if true, LLM runs in background worker
     ai_dedup_ttl_seconds: int = 600
+
+    # SubQ Decisions API (System 1 fast decision model)
+    subq_enabled: bool = False
+    subq_api_key: str | None = None
+    subq_api_base: str = "https://api.subq.ai/v1"
+    subq_model: str = "subq-snap-preview"
+    subq_noise_threshold: float = 0.70
 
     scheduler_poll_seconds: float = 5.0
     scheduler_batch_size: int = 50

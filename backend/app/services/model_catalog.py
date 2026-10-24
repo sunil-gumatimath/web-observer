@@ -22,9 +22,6 @@ from dataclasses import dataclass, field
 # Kilo Gateway: models whose input/output pricing is $0.
 KILO_BASE = "https://api.kilo.ai/api/gateway"
 
-# Google Gemini: OpenAI-compatible endpoint.
-GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
-
 
 @dataclass(frozen=True)
 class ModelEntry:
@@ -212,71 +209,6 @@ _KILO_MODELS: list[ModelEntry] = [
     ),
 ]
 
-# ---------------------------------------------------------------------------
-# Google Gemini — paid tier, used with a workspace's own API key.
-# ---------------------------------------------------------------------------
-_GEMINI_MODELS: list[ModelEntry] = [
-    ModelEntry(
-        value="gemini-3.1-flash-lite",
-        label="Gemini 3.1 Flash-Lite — Google · 1M ctx",
-        provider="gemini",
-        base=GEMINI_BASE,
-        note="Complete JSON at the app's 200-token cap.",
-        verified_at=200,
-    ),
-    ModelEntry(
-        value="gemini-3.5-flash-lite",
-        label="Gemini 3.5 Flash-Lite — Google · 1M ctx",
-        provider="gemini",
-        base=GEMINI_BASE,
-        note="Complete JSON at the app's 200-token cap.",
-        verified_at=200,
-    ),
-    ModelEntry(
-        value="gemini-flash-lite-latest",
-        label="Gemini Flash-Lite Latest — Google · 1M ctx",
-        provider="gemini",
-        base=GEMINI_BASE,
-        note="Complete JSON at the app's 200-token cap.",
-        verified_at=200,
-    ),
-    ModelEntry(
-        value="gemini-3.5-flash",
-        label="Gemini 3.5 Flash — Google · 1M ctx",
-        provider="gemini",
-        base=GEMINI_BASE,
-        note="Reasoning model: needs a larger output cap than 200 tokens.",
-    ),
-    ModelEntry(
-        value="gemini-3.8-flash",
-        label="Gemini 3.8 Flash — Google · 1M ctx",
-        provider="gemini",
-        base=GEMINI_BASE,
-        note="Reasoning model: needs a larger output cap than 200 tokens.",
-    ),
-    ModelEntry(
-        value="gemini-3.6-flash",
-        label="Gemini 3.6 Flash — Google · 1M ctx",
-        provider="gemini",
-        base=GEMINI_BASE,
-        note="Reasoning model: needs a larger output cap than 200 tokens.",
-    ),
-    ModelEntry(
-        value="gemini-3.7-flash",
-        label="Gemini 3.7 Flash — Google · 1M ctx",
-        provider="gemini",
-        base=GEMINI_BASE,
-        note="Reasoning model: needs a larger output cap than 200 tokens.",
-    ),
-    ModelEntry(
-        value="gemini-3.1-pro-preview",
-        label="Gemini 3.1 Pro Preview — Google · 1M ctx",
-        provider="gemini",
-        base=GEMINI_BASE,
-        note="Pro tier: needs a paid quota.",
-    ),
-]
-
 PROVIDERS: list[Provider] = [
     Provider(
         id="kilo",
@@ -284,13 +216,6 @@ PROVIDERS: list[Provider] = [
         base=KILO_BASE,
         models=_KILO_MODELS,
         free=True,
-    ),
-    Provider(
-        id="gemini",
-        label="Google Gemini (your own API key)",
-        base=GEMINI_BASE,
-        models=_GEMINI_MODELS,
-        free=False,
     ),
 ]
 

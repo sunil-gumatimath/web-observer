@@ -28,7 +28,6 @@ from app.security.ssrf import (
 from app.services.model_catalog import (
     candidates_for_base,
     output_cap_for,
-    provider_for_base,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,9 +85,9 @@ def _effective_llm(llm: dict | None) -> dict:
     a workspace API key. This prevents a legacy or malformed override from
     redirecting the server-managed credential to an attacker-controlled host.
 
-    On the server side the provider is decided by the base URL: the key of the
-    matching provider is used, so a Gemini model is never sent to Kilo (or the
-    other way round) with the wrong credential.
+    On the server side the provider is decided by the base URL: the matching
+    settings' key is used so the credential always belongs to the configured
+    provider.
     """
     settings = get_settings()
     workspace_key = (llm or {}).get("api_key")
@@ -104,17 +103,11 @@ def _effective_llm(llm: dict | None) -> dict:
             or settings.ai_max_output_tokens,
             "scope": "workspace",
         }
-    base = settings.llm_api_base
-    provider = provider_for_base(base)
-    if provider is not None and provider.id == "gemini":
-        api_key = settings.gemini_api_key
-        model = settings.gemini_model
-    else:
-        api_key = settings.llm_api_key
-        model = settings.llm_model
+    api_key = settings.llm_api_key
+    model = settings.llm_model
     return {
         "api_key": api_key,
-        "api_base": base,
+        "api_base": settings.llm_api_base,
         "model": model,
         "max_output_tokens": settings.ai_max_output_tokens,
         "scope": "server",
@@ -876,9 +869,9 @@ def _candidate_models(primary: str | None, api_base: str | None) -> list[str]:
     """Ordered model list: primary first, then same-provider fallbacks.
 
     Fallbacks are restricted to models of the provider that ``api_base`` points
-    at — a Kilo model id sent to Google (or vice versa) only 404s and burns the
-    request budget. The primary is always kept even when it is not in the
-    catalog (an explicit user choice).
+    at — a foreign model id only 404s and burns the request budget. The
+    primary is always kept even when it is not in the catalog (an explicit
+    user choice).
 
     An explicit ``LLM_FALLBACK_MODELS`` setting still wins over the catalog
     default, but cross-provider entries in it are skipped. ``none`` disables
@@ -886,15 +879,10 @@ def _candidate_models(primary: str | None, api_base: str | None) -> list[str]:
     """
     settings = get_settings()
     base = (api_base or "").strip().rstrip("/")
-    provider = provider_for_base(base)
-    # The fallback must match the provider: a Kilo model id sent to Google only
-    # 404s. When the base is unknown there is no provider-specific default, so
-    # keep the historical ``llm_model`` behaviour.
-    provider_default = (
-        settings.gemini_model
-        if provider is not None and provider.id == "gemini"
-        else settings.llm_model
-    )
+    # The fallback must match the provider: a foreign model id only 404s. When
+    # the base is unknown there is no provider-specific default, so keep the
+    # historical ``llm_model`` behaviour.
+    provider_default = settings.llm_model
     primary_model = (primary or "").strip() or provider_default
     candidates = [primary_model]
     first_party_openai = "api.openai.com" in base.lower()
@@ -1141,6 +1129,29 @@ def triage_change(
         return False, None
 
     settings = get_settings()
+    subq_key = (llm or {}).get("subq_api_key") or settings.subq_api_key
+    subq_enabled = bool((llm or {}).get("subq_enabled", settings.subq_enabled) and subq_key)
+    if subq_enabled and subq_key:
+        try:
+            from app.services.subq import evaluate_subq_decision
+
+            dec = evaluate_subq_decision(
+                monitor_name=monitor_name,
+                url=url,
+                mode=mode or "unknown",
+                deterministic_summary="",
+                diff_text=_smart_truncate((diff_text or ""), settings.ai_max_diff_chars),
+                watch_note=note,
+                api_key=subq_key,
+                api_base=(llm or {}).get("subq_api_base") or settings.subq_api_base,
+                model=(llm or {}).get("subq_model") or settings.subq_model,
+                noise_threshold=settings.subq_noise_threshold,
+            )
+            if dec is not None:
+                return dec.is_noise, dec.noise_reason
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("subq_triage_failed error=%s", exc)
+
     cfg = _effective_llm(llm)
     if not cfg["api_key"]:
         return False, None
@@ -1229,21 +1240,79 @@ def enrich_change(
 
     capped = _smart_truncate((diff_text or ""), settings.ai_max_diff_chars)
 
-    if not effective_key:
-        return AIEnrichment(
-            summary=_with_watch_note(
-                template_summary(
-                    monitor_name=monitor_name,
-                    category=cat,
-                    deterministic_summary=deterministic_summary,
-                ),
-                watch_note,
+    # SubQ Decision Gatekeeper (Stage 1)
+    subq_key = (llm or {}).get("subq_api_key") or settings.subq_api_key
+    subq_enabled = bool((llm or {}).get("subq_enabled", settings.subq_enabled) and subq_key)
+    subq_decision = None
+    if enabled and subq_enabled and subq_key:
+        try:
+            from app.services.subq import evaluate_subq_decision
+
+            subq_decision = evaluate_subq_decision(
+                monitor_name=monitor_name,
+                url=url,
+                mode=mode or "unknown",
+                deterministic_summary=deterministic_summary,
+                diff_text=capped,
+                watch_note=watch_note,
+                semantic_trigger=semantic_trigger,
+                api_key=subq_key,
+                api_base=(llm or {}).get("subq_api_base") or settings.subq_api_base,
+                model=(llm or {}).get("subq_model") or settings.subq_model,
+                noise_threshold=settings.subq_noise_threshold,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("subq_gate_error error=%s", exc)
+            subq_decision = None
+
+    if subq_decision is not None and subq_decision.is_noise:
+        # Fast exit: noise filtered at Stage 1 before calling heavy LLMs
+        logger.info(
+            "subq_gate_filtered_noise monitor=%s reason=%s prob=%.2f",
+            monitor_name,
+            subq_decision.noise_reason,
+            subq_decision.noise_probability,
+        )
+        noise_summary = format_triage_summary(
+            subq_decision.noise_reason,
+            watch_note=watch_note,
+            detail=template_summary(
+                monitor_name=monitor_name,
+                category=subq_decision.category,
+                deterministic_summary=deterministic_summary,
             ),
-            category=cat,
-            provider="heuristic",
+        )
+        return AIEnrichment(
+            summary=noise_summary,
+            category=subq_decision.category,
+            provider="subq",
+            model=subq_decision.model,
+            is_noise=True,
+            noise_reason=subq_decision.noise_reason,
+            tokens_used=subq_decision.tokens_used,
+            impact=subq_decision.impact,
+            confidence=subq_decision.confidence,
+        )
+
+    if not effective_key:
+        summary_text = _with_watch_note(
+            template_summary(
+                monitor_name=monitor_name,
+                category=subq_decision.category if subq_decision else cat,
+                deterministic_summary=deterministic_summary,
+            ),
+            watch_note,
+        )
+        return AIEnrichment(
+            summary=summary_text,
+            category=subq_decision.category if subq_decision else cat,
+            provider="subq" if subq_decision else "heuristic",
+            model=subq_decision.model if subq_decision else None,
             is_noise=False,
             noise_reason=None,
-            tokens_used=0,
+            tokens_used=subq_decision.tokens_used if subq_decision else 0,
+            impact=subq_decision.impact if subq_decision else None,
+            confidence=subq_decision.confidence if subq_decision else None,
         )
 
     # P1: dedup — identical diffs within TTL reuse previous LLM result
@@ -1291,6 +1360,14 @@ def enrich_change(
         )
         if model_cat in CATEGORIES:
             cat = model_cat
+        if subq_decision is not None:
+            if subq_decision.category in CATEGORIES:
+                cat = subq_decision.category
+            if subq_decision.impact:
+                impact = subq_decision.impact
+            if subq_decision.confidence is not None:
+                confidence = subq_decision.confidence
+            tokens += subq_decision.tokens_used
         # When triaged as noise, prefix summary with reason for inbox visibility,
         # unless model already included it.
         if is_noise and noise_reason:
@@ -1329,16 +1406,19 @@ def enrich_change(
             summary=_with_watch_note(
                 template_summary(
                     monitor_name=monitor_name,
-                    category=cat,
+                    category=subq_decision.category if subq_decision else cat,
                     deterministic_summary=deterministic_summary,
                 ),
                 watch_note,
             ),
-            category=cat,
-            provider="fallback",
+            category=subq_decision.category if subq_decision else cat,
+            provider="subq" if subq_decision else "fallback",
+            model=subq_decision.model if subq_decision else None,
             is_noise=False,
             noise_reason=None,
-            tokens_used=0,
+            tokens_used=subq_decision.tokens_used if subq_decision else 0,
+            impact=subq_decision.impact if subq_decision else None,
+            confidence=subq_decision.confidence if subq_decision else None,
         )
 
 

@@ -57,7 +57,6 @@ def test_summary_keeps_title_and_impact_out_of_the_text(
 
     s = Settings()
     s.llm_api_key = "test-key"
-    s.gemini_api_key = ""
     # The OS environment may point the base at another provider; pin it.
     s.llm_api_base = "https://api.kilo.ai/api/gateway"
     monkeypatch.setattr("app.services.ai_summary.get_settings", lambda: s)
