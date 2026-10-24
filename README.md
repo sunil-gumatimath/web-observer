@@ -20,7 +20,7 @@ Web change-detection and alerting platform.
 
 Cloudflare free tier is wired end-to-end and every piece is optional: raw snapshots in R2, a Browser Rendering **failover** Worker for `js_required` fetches (local Playwright stays primary so the ~10 min/day edge-browser quota is preserved), a `security_scan` monitor mode backed by the URL Scanner, screenshots served from a public R2 bucket over a custom domain, and a cookie-less Web Analytics beacon. Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
 
-Verified end-to-end (last run 2026-10-21): backend `288 passed, 4 skipped` unit tests (`11 deselected` integration tests run separately in CI), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `89 passed` vitest tests across 13 files; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client.
+Verified end-to-end (last run 2026-10-24): backend `322 passed` unit tests (integration tests run separately in CI), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `94 passed` vitest tests across 13 files; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
 ## Documentation
 
@@ -172,9 +172,10 @@ flowchart LR
 - Due-monitor claiming is Postgres-driven (`SELECT ... FOR UPDATE SKIP LOCKED`, 60s lease + jitter: `backend/app/config.py`, `backend/app/scheduler.py`), so multiple schedulers never double-claim. `run_reaper` recovers stuck runs with a fenced conditional update.
 - Snapshots store raw HTML + normalized text with a SHA256 `content_hash`; visual mode compares SHA512-based pHash (256 bits, threshold 8). Change rows carry `is_noise` / `is_read`; webhooks are HMAC-signed (`X-MTW-Signature`) with secrets encrypted at rest.
 - Rate limiting is enforced per verified principal (or IP) via Redis counters; when Redis is down the limiter fails open to in-memory counters, so an outage can't turn unrelated requests into 500s.
-- An external LLM is only called when `LLM_API_KEY` is set; otherwise summaries/triage use fast local heuristics. `GET /api/v1/model-catalog` serves selectable models per provider.
+- An external LLM is only called when `LLM_API_KEY` is set; otherwise summaries/triage use fast local heuristics. Optional SubQ Decisions API (`SUBQ_ENABLED`) acts as a fast System 1 triage gate for probabilistic noise rejection and category/impact scoring before generative LLM summarization. `GET /api/v1/model-catalog` serves selectable models per provider.
+- Browser runs automatically queue advisory hero preview screenshot captures (`screenshots/{monitor_id}/{run_id}.png`) via Dramatiq off the critical path, populating monitor card headers without manual intervention.
 - The API also exposes Prometheus-compatible metrics at `GET /metrics` (rate limited to 30/min).
-- SSRF guard (`backend/app/security/ssrf.py`): private/loopback/link-local/metadata IPs and credentialed URLs are blocked before fetch; redirects are re-validated; the pinned fetcher tries every validated IP in turn so a dead CDN PoP can't fail a check.
+- SSRF guard (`backend/app/security/ssrf.py`): private/loopback/link-local/metadata IPs and credentialed URLs are blocked before fetch; redirects are re-validated; the pinned fetcher tries every validated IP in turn so a dead CDN PoP can't fail a check. SSRF exceptions convert gracefully to fetch errors, ensuring external provider DNS hiccups (e.g. during brand asset extraction) never trigger unhandled 500s.
 - Full diagrams (components, ERD, manual-run + decision sequences): [docs/architecture.md](docs/architecture.md).
 
 </details>
@@ -301,8 +302,14 @@ These are separate processes. Run them on a schedule/cron.
 **Helpers:**
 
 ```powershell
-# Full stack (loads backend\.env, API :8002; processes launch with -WindowStyle Hidden, logs to data\logs)
+# Windows PowerShell: full stack (loads backend\.env, API :8002; launches background jobs, logs to data\logs)
 powershell -File .\scripts\restart-stack.ps1
+
+# WSL2: transient systemd stack (API :8002, workers, scheduler; uses repo in-place)
+wsl -e bash scripts/run-wsl-stack.sh
+
+# WSL2: persistent systemd units (auto-restart on WSL boot)
+wsl -e bash scripts/install-wsl-units.sh
 ```
 
 | URL | What |
@@ -346,7 +353,8 @@ Also on the monitoring side: a **visual element picker** (point-and-click CSS-se
 | ------ | ----------------- |
 | Diffs | GitHub-style added/removed line views for every content change (unified + split), plus readable markdown views for list/price/value modes |
 | AI summaries | Optional plain-language summaries per change — heuristic by default; any OpenAI-compatible gateway via `LLM_API_BASE` (default `api.kilo.ai`), toggled per workspace via `ai_summaries_enabled` |
-| LLM providers & catalog | Two OpenAI-compatible providers: Kilo Gateway (free models, default) and Google Gemini (`GEMINI_API_KEY`) — `LLM_API_BASE` picks the active one; `GET /api/v1/model-catalog` feeds the settings UI and drives server-side failover with per-model probe status |
+| SubQ System 1 triage | Optional fast decision model via SubQ Decisions API (`SUBQ_ENABLED=true`, `subq-snap-preview`) — acts as a fast Stage 1 decision gate: probabilistic noise rejection, calibrated category classification, and impact scoring before LLM summarization |
+| LLM providers & catalog | One OpenAI-compatible provider: Kilo Gateway (free models, default) — any other OpenAI-compatible gateway can be used via `LLM_API_BASE`; `GET /api/v1/model-catalog` feeds the settings UI and drives server-side failover with per-model probe status |
 | AI relevance filter | Optional per-monitor `watch_note` triage: the LLM scores each diff vs. the note; routine noise is marked `is_noise=true`, held (not deleted), and excluded from notifications/digests; fails open on LLM error |
 | Semantic triggers | Plain-English per-monitor trigger rules evaluated alongside thresholds |
 | Conditional alerting | Optional per-monitor `alert_config` JSONB — `price_below`/`price_above` + `percent_change`, `list_min_added`/`list_min_removed`, `min_diff_chars`, `regex_must_match`/`regex_must_not_match`; unmet thresholds mark the change `is_noise=true` with a stored reason; empty config = alert on any hash difference |
@@ -393,20 +401,23 @@ See [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-featur
 
 ### User interface
 
-The web UI (Next.js) exposes: **Dashboard** (with change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status tabs, sorting, bulk pause/resume), **Logs** (workspace-wide run history + CSV export), **Changes** (per-change diff with before/after drag slider for screenshot pairs), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels, workspace keys, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K / Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel). Styled with a Cohere-inspired design system (`frontend/src/app/globals.css`): 22px cards, pill buttons, `#1863dc` interaction blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator.
+The web UI (Next.js) exposes: **Dashboard** (with change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status tabs, sorting, bulk pause/resume, mode-specific snapshot previews including rich Cloudflare URL Scanner verdicts, non-blocking preview loading, and live brand asset re-scraping), **Logs** (workspace-wide run history + CSV export), **Changes** (per-change diff with before/after drag slider for screenshot pairs), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels, workspace keys, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K / Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel). Styled with a Cohere-inspired design system (`frontend/src/app/globals.css`): 22px cards, pill buttons, `#1863dc` interaction blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator.
 
 ## Tests & linting
 
 ```powershell
+# Backend (Python / venv on Windows or WSL2)
 cd backend
 .\.venv\Scripts\ruff check app tests
 .\.venv\Scripts\ruff format --check app tests
 .\.venv\Scripts\python -m pytest tests -q -m "not integration"
+# (or in WSL2: wsl -e bash -c "cd /mnt/c/.../backend && .venv/bin/pytest")
 
+# Frontend (Bun or Node / npm)
 cd ..\frontend
-npm run lint
-npm test
-npm run build
+bun run lint      # or: npm run lint (tsc --noEmit && eslint .)
+bun run test      # or: npm test (vitest run)
+bun run build     # or: npm run build
 ```
 
 CI (`.github/workflows/ci.yml`) runs the backend unit tests and the Postgres-backed integration tests in separate jobs, plus a Gitleaks secret scan, and the frontend type-check / lint / test / build.

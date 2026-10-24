@@ -223,12 +223,6 @@ LLM_API_BASE=https://api.kilo.ai/api/gateway
 LLM_MODEL=poolside/laguna-s-2.1:free
 LLM_FALLBACK_MODELS=    # empty => catalog default for the active provider; "none" => primary only
 
-# Second OpenAI-compatible provider (Google Gemini) — active when
-# LLM_API_BASE points at generativelanguage.googleapis.com
-GEMINI_API_KEY=
-GEMINI_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai
-GEMINI_MODEL=gemini-3.1-flash-lite
-
 STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storage
 
 # Screenshots in their own public bucket (R2 + CDN custom domain)
@@ -347,7 +341,7 @@ unset, the failover is simply off and a failed browser check fails.
 | `RESEND_API_KEY` | notification worker |
 | `SECRET_KEY` | api (encryption key + API-key HMAC — pin in production) |
 | `INTERNAL_API_TOKEN` | admin |
-| `LLM_API_KEY` / `GEMINI_API_KEY` | api + workers (AI summaries, triage) |
+| `LLM_API_KEY` | api + workers (AI summaries, triage) |
 | `CLOUDFLARE_BROWSER_TOKEN` | workers (Browser Rendering failover) |
 | `CLOUDFLARE_URLSCANNER_TOKEN` | workers (`security_scan` mode) |
 
