@@ -58,6 +58,88 @@ describe("Captured content mode-specific handling", () => {
     });
   });
 
+  describe("list_items mode parsing", () => {
+    it("extracts markdown link items and plain text items", () => {
+      const rawText = "- [Changelog 1.0](https://example.com/v1)\n- [Changelog 2.0](https://example.com/v2)\n- Plain announcement item";
+      const items = rawText
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => (l.startsWith("- ") ? l.slice(2).trim() : l));
+
+      expect(items).toHaveLength(3);
+      expect(items[0]).toBe("[Changelog 1.0](https://example.com/v1)");
+      expect(items[2]).toBe("Plain announcement item");
+    });
+  });
+
+  describe("rss_feed mode parsing", () => {
+    it("extracts clean feed entries from normalized list", () => {
+      const rawText = "- [Release v1.2](https://github.com/org/repo/releases/tag/v1.2)\n- [Release v1.1](https://github.com/org/repo/releases/tag/v1.1)";
+      const entries = rawText
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => (l.startsWith("- ") ? l.slice(2).trim() : l));
+
+      expect(entries).toHaveLength(2);
+      expect(entries[0]).toContain("Release v1.2");
+    });
+  });
+
+  describe("readme mode parsing", () => {
+    it("preserves markdown headers and raw content", () => {
+      const rawText = "# Project Documentation\n\n```python\nprint('hello')\n```";
+      expect(rawText.startsWith("# Project Documentation")).toBe(true);
+      expect(rawText).toContain("```python");
+    });
+  });
+
+  describe("security_scan mode parsing", () => {
+    it("parses verdicts, technologies, and certificates from URL Scanner facts", () => {
+      const rawText = "- malicious=false\n- categories=business\n- tags=verified\n- tech=nginx\n- tech=React\n- certificate=example.com issuer=Let's Encrypt\n- asn=13335";
+      const lineItems = rawText
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => (l.startsWith("- ") ? l.slice(2).trim() : l));
+
+      const isMalicious = lineItems.some(
+        (l) => l.toLowerCase() === "malicious=true" || l.toLowerCase() === "malicious: true",
+      );
+      const techStack = lineItems
+        .filter((l) => l.startsWith("tech="))
+        .map((l) => l.slice(5).trim());
+      const certs = lineItems
+        .filter((l) => l.startsWith("certificate="))
+        .map((l) => l.slice(12).trim());
+      const asns = lineItems
+        .filter((l) => l.startsWith("asn="))
+        .map((l) => l.slice(4).trim());
+
+      expect(isMalicious).toBe(false);
+      expect(techStack).toEqual(["nginx", "React"]);
+      expect(certs[0]).toBe("example.com issuer=Let's Encrypt");
+      expect(asns[0]).toBe("13335");
+    });
+  });
+
+  describe("preview loading condition", () => {
+    it("does not block rendering when a snapshot is already available in memory", () => {
+      function shouldShowBlockingSpinner(loading: boolean, hasSnapshot: boolean): boolean {
+        return loading && !hasSnapshot;
+      }
+
+      // Initial load with no snapshot in memory: show spinner
+      expect(shouldShowBlockingSpinner(true, false)).toBe(true);
+      // Background re-fetch with snapshot already in memory: DO NOT block
+      expect(shouldShowBlockingSpinner(true, true)).toBe(false);
+      // Settled load: no spinner
+      expect(shouldShowBlockingSpinner(false, true)).toBe(false);
+      expect(shouldShowBlockingSpinner(false, false)).toBe(false);
+    });
+  });
+
   describe("JavaScript rendering warning condition", () => {
     it("only applies to page_content mode when text is short or has JS keywords", () => {
       function shouldShowJsWarning(mode: string, jsRequired: boolean, text: string) {
@@ -76,6 +158,7 @@ describe("Captured content mode-specific handling", () => {
       expect(shouldShowJsWarning("site_links", false, "https://ex.co/")).toBe(false);
       expect(shouldShowJsWarning("rss_feed", false, "- [Hi](url)")).toBe(false);
       expect(shouldShowJsWarning("readme", false, "# Hi")).toBe(false);
+      expect(shouldShowJsWarning("security_scan", false, "malicious=false")).toBe(false);
 
       // page_content without JS and suspiciously short or with JS markers SHOULD trigger
       expect(shouldShowJsWarning("page_content", false, "Please enable javascript to run this app.")).toBe(true);

@@ -59,7 +59,7 @@ export function CapturedContentPreview({
     });
   }
 
-  if (loading) {
+  if (loading && !snapshot) {
     return (
       <div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-6">
         <div className="flex items-center gap-3">
@@ -597,9 +597,129 @@ export function CapturedContentPreview({
   }
 
   // ---------------------------------------------------------------------------
-  // 8) PAGE CONTENT (DEFAULT)
+  // 8) SECURITY SCAN (CLOUDFLARE URL SCANNER)
+  // ---------------------------------------------------------------------------
+  if (mode === "security_scan") {
+    const isMalicious = lineItems.some(
+      (l) => l.toLowerCase() === "malicious=true" || l.toLowerCase() === "malicious: true",
+    );
+    const techStack = lineItems
+      .filter((l) => l.startsWith("tech="))
+      .map((l) => l.slice(5).trim())
+      .filter(Boolean);
+    const certs = lineItems
+      .filter((l) => l.startsWith("certificate="))
+      .map((l) => l.slice(12).trim())
+      .filter(Boolean);
+    const asns = lineItems
+      .filter((l) => l.startsWith("asn="))
+      .map((l) => l.slice(4).trim())
+      .filter(Boolean);
+    const categories = lineItems
+      .find((l) => l.startsWith("categories="))
+      ?.slice(11)
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    return (
+      <div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)]">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--hairline)] bg-[var(--surface-1)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ink)]">
+              <svg className="size-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              Cloudflare Security Scan
+            </span>
+            <ModeBadge mode="security_scan" />
+            <Badge tone={isMalicious ? "danger" : "success"}>
+              {isMalicious ? "Malicious Detected" : "Clean Verdict"}
+            </Badge>
+          </div>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => copyToClipboard(rawText, "security_scan")}
+            className="text-xs"
+          >
+            {copied === "security_scan" ? "✓ Copied" : "Copy scan facts"}
+          </Button>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-5 space-y-4">
+          {/* Tech Stack */}
+          {techStack.length > 0 ? (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-[var(--ink-subtle)] mb-2">
+                Detected Technologies ({techStack.length})
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {techStack.map((tech, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center rounded-md border border-[var(--hairline)] bg-[var(--surface-2)] px-2.5 py-1 font-mono text-xs text-[var(--ink)]"
+                  >
+                    {tech}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Certificates */}
+          {certs.length > 0 ? (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-[var(--ink-subtle)] mb-2">
+                SSL / TLS Certificates
+              </p>
+              <div className="space-y-1.5">
+                {certs.map((cert, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-md border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-1.5 font-mono text-xs text-[var(--ink)]"
+                  >
+                    🔒 {cert}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Network ASNs & Categories */}
+          <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--ink-muted)]">
+            {asns.length > 0 ? (
+              <span>ASN: <span className="font-mono text-[var(--fg)]">{asns.join(", ")}</span></span>
+            ) : null}
+            {categories && categories.length > 0 ? (
+              <span>Categories: <span className="text-[var(--fg)]">{categories.join(", ")}</span></span>
+            ) : null}
+          </div>
+
+          {/* Raw Facts Fallback/Detail */}
+          <div className="pt-2 border-t border-[var(--hairline)]">
+            <details className="text-xs group">
+              <summary className="cursor-pointer font-medium text-[var(--ink-subtle)] hover:text-[var(--ink)] select-none">
+                Raw Scan Facts ({lineItems.length} lines)
+              </summary>
+              <pre className="mt-2 max-h-60 overflow-auto rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] p-3 font-mono text-xs leading-relaxed text-[var(--ink-muted)]">
+                {rawText}
+              </pre>
+            </details>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 9) PAGE CONTENT (DEFAULT)
   // ---------------------------------------------------------------------------
   const showJsWarning =
+    mode === "page_content" &&
     !monitor.js_required &&
     (rawText.length < 80 ||
       /loading\b|enable javascript|requires javascript|please wait/i.test(rawText));

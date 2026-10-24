@@ -364,3 +364,72 @@ def test_monitor_modes_unchanged() -> None:
         "visual",
         "security_scan",
     }
+
+
+def test_extract_normalized_covers_all_nine_modes() -> None:
+    # 1. page_content
+    res, _ = extract_normalized(
+        _monitor("page_content"),
+        _fetch("<main><p>Page article text</p></main>", "text/html"),
+    )
+    assert "Page article text" in res
+
+    # 2. site_links
+    res, items = extract_normalized(
+        _monitor("site_links"),
+        _fetch("https://example.com/\nhttps://example.com/about", "text/plain"),
+    )
+    assert items == ["https://example.com/", "https://example.com/about"]
+    assert "- https://example.com/" in res
+
+    # 3. product_price
+    res, _ = extract_normalized(
+        _monitor("product_price", css_selector=".price"),
+        _fetch("<div class='price'>$29.99</div>", "text/html"),
+    )
+    assert res == "USD 29.99"
+
+    # 4. list_items
+    res, items = extract_normalized(
+        _monitor("list_items", css_selector="li"),
+        _fetch(
+            "<ul><li><a href='/p1'>Item 1</a></li><li><a href='/p2'>Item 2</a></li></ul>",
+            "text/html",
+        ),
+    )
+    assert items == ["[Item 1](/p1)", "[Item 2](/p2)"]
+    assert "- [Item 1](/p1)" in res
+
+    # 5. json_field
+    res, _ = extract_normalized(
+        _monitor("json_field", css_selector="$.data.rate"),
+        _fetch('{"data": {"rate": 99.5}}', "application/json"),
+    )
+    assert res == "99.5"
+
+    # 6. rss_feed
+    res, items = extract_normalized(_monitor("rss_feed"), _fetch(RSS_XML))
+    assert items is not None and len(items) == 2
+    assert any("First post" in item for item in items)
+
+    # 7. readme
+    res, _ = extract_normalized(
+        _monitor("readme"),
+        _fetch("# Project Title\n\n- Feature 1\n- Feature 2", "text/markdown"),
+    )
+    assert "# Project Title" in res
+
+    # 8. visual
+    res, _ = extract_normalized(
+        _monitor("visual"),
+        _fetch("ahash:0123456789abcdef\nsha256:abc\nsize:1920x1080", "text/plain"),
+    )
+    assert "ahash:0123456789abcdef" in res
+
+    # 9. security_scan
+    res, items = extract_normalized(
+        _monitor("security_scan"),
+        _fetch("malicious=false\ncategories=\ntags=\ntech=nginx", "text/plain"),
+    )
+    assert items == ["malicious=false", "categories=", "tags=", "tech=nginx"]
+    assert "- malicious=false" in res

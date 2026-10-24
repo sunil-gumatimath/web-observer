@@ -146,6 +146,10 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
     if mode == "visual":
         return (result.text or "").strip(), None
 
+    if mode == "security_scan":
+        facts = [line.strip() for line in (result.text or "").splitlines() if line.strip()]
+        return list_to_normalized(facts), facts
+
     # page_content (default): main content as markdown when detectable
     # (webdog `useMainContentOnly` parity — strips nav/boilerplate), falling
     # back to whole-body markdown for pages where detection fails.
