@@ -147,6 +147,14 @@ def run_browser_check(run_id: str) -> None:
         worker_label="browser_check",
     )
 
+    # Best-effort preview screenshot for the finished run (see
+    # capture_run_screenshot). No-ops for visual mode (the check stored
+    # its own capture), failed runs, and monitors with screenshots off.
+    try:
+        capture_run_screenshot.send(run_id)
+    except Exception as e_exc:  # noqa: BLE001 - hero preview is advisory
+        logger.debug("run_screenshot_enqueue_failed run_id=%s error=%s", run_id, e_exc)
+
 
 def _attach_screenshot_to_pending(db, change: ChangeEvent, screenshot_path: str) -> int:
     """Point still-pending outbox payloads at a screenshot. Returns rows updated."""
@@ -245,3 +253,69 @@ def capture_alert_screenshot(change_event_id: str) -> None:
             change_event_id,
             updated,
         )
+
+
+@dramatiq.actor(queue_name="browser_checks", max_retries=2, time_limit=120_000)
+def capture_run_screenshot(run_id: str) -> None:
+    """Store a hero-preview screenshot for a finished non-visual browser run.
+
+    The monitor page header shows ``screenshots/{monitor_id}/{run_id}.png``
+    for the latest successful run when no brand hero exists — but nothing
+    stored a run-keyed screenshot for ``page_content`` monitors (only visual
+    runs and change-alert captures did). Enqueued after a browser-fetched run
+    completes; runs off the critical path like :func:`capture_alert_screenshot`
+    and is best-effort: failures are logged, never raised.
+    """
+    from uuid import UUID
+
+    from app.models import MonitorRun
+    from app.services.storage import object_exists, put_bytes
+
+    try:
+        run_uuid = UUID(str(run_id))
+    except ValueError:
+        logger.warning("screenshot_bad_run_id run_id=%s", run_id)
+        return
+
+    with SessionLocal() as db:
+        run = db.get(MonitorRun, run_uuid)
+        if run is None:
+            logger.warning("screenshot_run_missing run_id=%s", run_id)
+            return
+        if run.status != RunStatus.SUCCEEDED.value:
+            return
+        monitor = db.get(Monitor, run.monitor_id)
+        if monitor is None:
+            logger.warning("screenshot_monitor_missing run_id=%s", run_id)
+            return
+        if not monitor.screenshots_enabled:
+            return
+        screenshot_path = f"screenshots/{monitor.id}/{run.id}.png"
+        if object_exists(screenshot_path):
+            return
+        try:
+            from app.services.visual import capture_screenshot
+
+            cap = capture_screenshot(
+                monitor.url,
+                timeout_seconds=30,
+                full_page=True,
+                clip_selector=None,
+            )
+            put_bytes(
+                key=screenshot_path,
+                data=cap.png_bytes,
+                content_type="image/png",
+            )
+            logger.info(
+                "run_screenshot_captured monitor_id=%s run_id=%s",
+                monitor.id,
+                run.id,
+            )
+        except Exception as exc:  # noqa: BLE001 - screenshot is advisory
+            logger.warning(
+                "run_screenshot_capture_failed monitor_id=%s run_id=%s error=%s",
+                monitor.id,
+                run.id,
+                exc,
+            )
