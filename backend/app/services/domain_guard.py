@@ -60,7 +60,8 @@ def assert_domain_allowed(url: str) -> str:
     if open_until and _to_int(open_until) > now:
         raise DomainBlocked(domain, f"circuit open until {open_until}")
 
-    # Sliding window rate (simple fixed window per minute)
+    # Fixed-window rate limit per minute (reset each minute bucket; a burst
+    # of up to 2x the limit is possible across a bucket boundary)
     minute_key = f"rate:{domain}:{now // 60}"
     count = _to_int(r.incr(minute_key))
     if count == 1:

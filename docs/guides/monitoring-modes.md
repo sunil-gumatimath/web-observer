@@ -22,7 +22,7 @@ differently.
 | `list_items` | CSS-selector matches as `[text](href)` | Item set (added / removed) | HTTP or browser | **required** | no | `list_min_added`, `list_min_removed` |
 | `json_field` | One value at a JSONPath-style path | Value change | HTTP or browser | **required** (JSON path) | **yes** | `value_below`, `value_above`, `percent_change` |
 | `rss_feed` | RSS/Atom item list, matched on GUID/link | Item set (added / removed entries) | **plain HTTP only** | no | no | `list_min_added`, `list_min_removed` |
-| `readme` | `README.md` of a GitHub repo, default branch | Line-by-line markdown diff | **plain HTTP only** | no | no | common only |
+| `readme` | `README.md` of a GitHub repo (default branch or `/tree/<branch>`) | Line-by-line markdown diff | **plain HTTP only** | no | no | common only |
 | `visual` | Full-page screenshot, perceptual hash | Screenshot similarity (pHash) | **browser only** | optional (clip region) | no | common only (no regex filters) |
 | `security_scan` | Cloudflare URL Scanner verdict + technology inventory | Item set (added / removed facts) | **Cloudflare edge only** | no | no | common + `list_min_added`, `list_min_removed` |
 
@@ -118,13 +118,16 @@ entries is not a change.
 
 ### `readme`
 
-Watches the `README.md` of a GitHub repository on its default branch.
+Watches the `README.md` of a GitHub repository — on the default branch, or
+pinned to a specific one via `/tree/<branch>` / `/blob/<branch>/...` URLs.
 
 - Accepts the `owner/repo` shorthand (`vercel/next.js`) or a full GitHub URL.
 - Diffs render as GitHub-style markdown, so code fences and nested lists stay
   intact.
-- The fetcher hits the GitHub API first (1 request, resolves the default
-  branch) and falls back to capped raw probes.
+- The fetcher hits the GitHub API first (1 request, `ref`-pinned to the
+  parsed branch hint when there is one, else the repo's default branch) and
+  falls back to raw probes bounded by a wall-clock budget so a dead CDN can
+  never push the fetch past the worker's time limit.
 - `js_required` is rejected.
 
 ### `visual`

@@ -20,7 +20,7 @@ Web change-detection and alerting platform.
 
 Cloudflare free tier is wired end-to-end and every piece is optional: raw snapshots in R2, a Browser Rendering **failover** Worker for `js_required` fetches (local Playwright stays primary so the ~10 min/day edge-browser quota is preserved), a `security_scan` monitor mode backed by the URL Scanner, screenshots served from a public R2 bucket over a custom domain, and a cookie-less Web Analytics beacon. Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
 
-Verified end-to-end (last run 2026-10-24): backend `322 passed` unit tests (integration tests run separately in CI), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `94 passed` vitest tests across 13 files; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client.
+Verified end-to-end (last run 2026-10-26): backend `335 passed` unit tests (integration tests run separately in CI), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `94 passed` vitest tests across 13 files; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
 ## Documentation
 
@@ -169,7 +169,7 @@ flowchart LR
 <summary><strong>Under the hood (for contributors)</strong></summary>
 
 - Workers are Python `dramatiq` (`backend/app/workers/checks.py`, `browser_checks.py`) on three queues — `http_checks`, `browser_checks`, `notifications` — via `RedisBroker` (`backend/app/workers/broker.py`). Alerts fan out from `NotificationOutbox` / `WebhookDelivery` rows, so detection is decoupled from delivery with at-least-once sends (`max_retries=5`).
-- Due-monitor claiming is Postgres-driven (`SELECT ... FOR UPDATE SKIP LOCKED`, 60s lease + jitter: `backend/app/config.py`, `backend/app/scheduler.py`), so multiple schedulers never double-claim. `run_reaper` recovers stuck runs with a fenced conditional update.
+- Due-monitor claiming is Postgres-driven (`SELECT ... FOR UPDATE SKIP LOCKED`, 60s lease + jitter: `backend/app/config.py`, `backend/app/scheduler.py`), so multiple schedulers never double-claim. `run_reaper` recovers stuck runs with a fenced conditional update, and the worker-side terminal writes are fenced too: the pipeline's SUCCEEDED commit and `fail_run` are both conditional `UPDATE ... WHERE status = 'running'`, so a reaper (or a late exception) can never overwrite a run's committed terminal state — no zombie SUCCEEDED-over-FAILED (or FAILED-over-SUCCEEDED) downgrade race.
 - Snapshots store raw HTML + normalized text with a SHA256 `content_hash`; visual mode compares SHA512-based pHash (256 bits, threshold 8). Change rows carry `is_noise` / `is_read`; webhooks are HMAC-signed (`X-MTW-Signature`) with secrets encrypted at rest.
 - Rate limiting is enforced per verified principal (or IP) via Redis counters; when Redis is down the limiter fails open to in-memory counters, so an outage can't turn unrelated requests into 500s.
 - An external LLM is only called when `LLM_API_KEY` is set; otherwise summaries/triage use fast local heuristics. Optional SubQ Decisions API (`SUBQ_ENABLED`) acts as a fast System 1 triage gate for probabilistic noise rejection and category/impact scoring before generative LLM summarization. `GET /api/v1/model-catalog` serves selectable models per provider.
@@ -338,7 +338,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | `page_content` | Detected main content (falls back to whole-page text); `js_required` for SPAs |
 | `site_links` | Sitemap URL-set changes (plain HTTP only) |
 | `rss_feed` | RSS/Atom feed entries (plain HTTP only) |
-| `readme` | GitHub repository README changes via `owner/repo` or full URL — GitHub-style markdown diffs; hits the GitHub API first (1 request, resolves the default branch) with capped raw fallbacks |
+| `readme` | GitHub repository README changes via `owner/repo` or full URL — GitHub-style markdown diffs; hits the GitHub API first (1 request, `ref`-pinned to the `/tree/<branch>` branch when one is parsed, else the repo's default branch), then a bounded raw fallbacks fan-out capped by a wall-clock budget | |
 | `product_price` | Price + currency (defaults to a daily schedule) |
 | `list_items` | Link list under a CSS selector |
 | `json_field` | A single value via a JSONPath-style query, e.g. `$.data.price` |
@@ -393,7 +393,7 @@ Also on the monitoring side: a **visual element picker** (point-and-click CSS-se
 | Public share pages | Opaque-token read-only page per monitor (`/share/{token}` — unguessable, hashed at rest, expiring, no login), edge-cached by the `share-cache` Worker |
 | Brand-aware dashboard | Adding a website auto-fills logo/title/description/hero from page meta and re-hosts via `brand-assets/`; inbox items carry `monitor_brand` with favicon fallback |
 | Retention | Background `retention_job` purges snapshots (default 30 days) and runs (default 90 days); change events survive run cleanup (migration `015`) — `docs/local-dev.md` §13 is the source of truth |
-| Security | SSRF-pinned fetcher with redirect re-validation and domain guard, ReDoS/size-capped regex + CSS selectors, HKDF-purposed crypto (share tokens / API keys / Fernet keys), Gitleaks + a full threat model in [docs/security/threat-model.md](docs/security/threat-model.md) |
+| Security | SSRF-pinned fetcher with redirect re-validation and domain guard, ReDoS/size-capped regexes, CSS selectors (300 chars) and URLs (2048 chars) at the schema + bulk-import layer, HKDF-purposed crypto (share tokens / API keys / Fernet keys), Gitleaks + a full threat model in [docs/security/threat-model.md](docs/security/threat-model.md) |
 
 ### Cloudflare free tier (optional, every piece optional, all $0)
 

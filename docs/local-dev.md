@@ -210,7 +210,7 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 Fetch behavior worth knowing while debugging:
 
 - The SSRF-pinned fetcher tries **every** validated IP in turn — one dead CDN PoP won't fail a check; only connect-level errors trigger failover (`backend/app/services/fetcher.py:_pinned_get`).
-- `readme` monitors hit the GitHub API first (resolves the default branch in 1 request), then fall back to capped raw probes.
+- `readme` monitors hit the GitHub API first (`ref`-pinned to the parsed `/tree/<branch>` branch when there is one, default branch otherwise), then fall back to raw probes bounded by a wall-clock budget (fits inside the worker's 120s time limit).
 - LLM summaries fail over across `LLM_FALLBACK_MODELS`; `none` disables failover. The catalog default is the model list of the provider that `LLM_API_BASE` points at (see `backend/app/services/model_catalog.py`).
 - `js_required` monitors fall back to the **Cloudflare Browser Rendering Worker** when the local Playwright fetch fails (`CLOUDFLARE_BROWSER_URL` + `CLOUDFLARE_BROWSER_TOKEN`). Local stays primary so the free ~10 min/day edge-browser quota is preserved. Covered by `backend/tests/test_browser_failover.py`.
 - `security_scan` monitors run on Cloudflare's edge via the URL Scanner (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_URLSCANNER_TOKEN`). With no token the check fails with a clear error instead of silently passing.
