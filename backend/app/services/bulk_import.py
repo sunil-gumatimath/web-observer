@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Monitor, MonitorConfigVersion, Workspace
 from app.models.entities import MONITOR_MODES, PLAIN_HTTP_MODES
+from app.schemas import MAX_SELECTOR_LEN, MAX_URL_LEN
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.plans import assert_can_create_monitor, get_plan
 
@@ -84,6 +85,17 @@ def import_monitors(
             continue
         if row["url"] in existing_urls:
             result.skipped.append({"row": str(idx), "reason": "duplicate url", "url": row["url"]})
+            continue
+        # Same DoS-boundary caps MonitorCreate/MonitorUpdate enforce at the
+        # schema layer; the ORM path here bypasses Pydantic, so re-check.
+        if len(row["url"]) > MAX_URL_LEN:
+            result.errors.append({"row": str(idx), "error": f"url longer than {MAX_URL_LEN}"})
+            continue
+        css_sel = row.get("css_selector")
+        if css_sel and len(css_sel) > MAX_SELECTOR_LEN:
+            result.errors.append(
+                {"row": str(idx), "error": f"css_selector longer than {MAX_SELECTOR_LEN}"}
+            )
             continue
         if row["schedule_interval_minutes"] < plan.min_interval_minutes:
             result.errors.append(

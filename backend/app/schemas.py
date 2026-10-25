@@ -51,12 +51,14 @@ def _assert_readme_url(url: str) -> str:
 
 
 # ---- User-supplied caps (DoS boundaries) ------------------------------------
-# These are enforced at the schema layer so rejected payloads never reach the
-# pipeline; matching runtime guards exist in conditional.py / extract.py.
 _MAX_IGNORE_REGEX_PATTERNS = 20
 _MAX_REGEX_PATTERN_LEN = 256
 _MAX_IGNORE_SELECTORS = 20
-_MAX_SELECTOR_LEN = 300
+# Public: shared with bulk import. Enforced at the schema layer so rejected
+# payloads never reach the pipeline; matching runtime guards exist in
+# conditional.py / extract.py.
+MAX_SELECTOR_LEN = 300
+MAX_URL_LEN = 2048
 _REGEX_ALERT_KEYS = ("regex_must_match", "regex_must_not_match")
 
 
@@ -91,8 +93,8 @@ def _validate_selector_list(selectors: list[str] | None) -> list[str] | None:
         sel = str(raw or "").strip()
         if not sel:
             continue
-        if len(sel) > _MAX_SELECTOR_LEN:
-            raise ValueError(f"selector longer than {_MAX_SELECTOR_LEN} characters")
+        if len(sel) > MAX_SELECTOR_LEN:
+            raise ValueError(f"selector longer than {MAX_SELECTOR_LEN} characters")
         cleaned.append(sel)
     return cleaned or None
 
@@ -185,9 +187,9 @@ class LatestChangeOut(BaseModel):
 
 class MonitorCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    url: str
+    url: str = Field(max_length=MAX_URL_LEN)
     mode: str = "page_content"
-    css_selector: str | None = None
+    css_selector: str | None = Field(default=None, max_length=MAX_SELECTOR_LEN)
     schedule_interval_minutes: int | None = Field(default=None, ge=1)
     timezone: str = "UTC"
     timeout_seconds: int = Field(default=30, ge=5, le=120)
@@ -313,9 +315,9 @@ class MonitorCreate(BaseModel):
 
 class MonitorUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    url: str | None = None
+    url: str | None = Field(default=None, max_length=MAX_URL_LEN)
     mode: str | None = None
-    css_selector: str | None = None
+    css_selector: str | None = Field(default=None, max_length=MAX_SELECTOR_LEN)
     schedule_interval_minutes: int | None = Field(default=None, ge=1)
     timezone: str | None = None
     timeout_seconds: int | None = Field(default=None, ge=5, le=120)
