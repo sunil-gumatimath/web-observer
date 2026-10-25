@@ -53,14 +53,49 @@ def fail_run(
     *,
     http_status: int | None = None,
 ) -> None:
-    """Mark a run as FAILED and persist immediately."""
+    """Mark a run as FAILED and persist immediately.
+
+    The write is a fenced conditional UPDATE (``WHERE status = 'running'``),
+    mirroring the claim fence and the reaper's transitions:
+
+    * a run still RUNNING is transitioned to FAILED and the in-memory object
+      is synced for callers that read ``run.*`` afterwards;
+    * a run whose terminal state was already committed (e.g. the pipeline
+      committed SUCCEEDED and ``record_run_outcome`` then raised) is **not**
+      downgraded — a blind ``run.status = FAILED`` here would overwrite the
+      committed result while its change event / outbox rows stay live.
+
+    Any pending uncommitted state from the failing path is rolled back first,
+    so the fence reads truth and nothing half-applied is flushed alongside.
+    """
+    db.rollback()
+    now = datetime.now(UTC)
+    values: dict = {"error_code": code, "error_message": message, "finished_at": now}
+    if http_status is not None:
+        values["http_status"] = http_status
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+    fenced = db.execute(
+        sa_update(MonitorRun)
+        .where(
+            MonitorRun.id == run.id,
+            MonitorRun.status == RunStatus.RUNNING.value,
+        )
+        .values(status=RunStatus.FAILED.value, **values)
+    )
+    db.commit()
+    # rowcount exists on CursorResult; the Result stub omits it.
+    if fenced.rowcount != 1:  # type: ignore[attr-defined]
+        logger.info(
+            "fail_run_fenced_off run_id=%s (terminal state already committed; not downgraded)",
+            run.id,
+        )
+        return
     run.status = RunStatus.FAILED.value
     run.error_code = code
     run.error_message = message
     if http_status is not None:
         run.http_status = http_status
-    run.finished_at = datetime.now(UTC)
-    db.commit()
+    run.finished_at = now
 
 
 def enqueue_outbox(outbox_ids) -> None:

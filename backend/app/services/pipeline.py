@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -966,6 +967,50 @@ def _live_run_status(db: Session, run: MonitorRun) -> str | None:
         return probe.scalar(select(MonitorRun.status).where(MonitorRun.id == run.id))
 
 
+def _commit_terminal_success(db: Session, run: MonitorRun) -> bool:
+    """Fenced terminal SUCCEEDED commit for the current worker's run.
+
+    The terminal write is a conditional UPDATE (``WHERE status = 'running'``),
+    mirroring the claim fence in run_guard.py and the reaper's transitions:
+    a reaper that wins the RUNNING -> FAILED transition inside the tiny window
+    between the pre-commit fence read and this commit is no longer overwritten
+    last-write-wins. Returns True when the fence fired (this worker still owns
+    the run); False means the run's terminal state was set externally and the
+    caller must roll back and report ``run_reaped``.
+    """
+    now = datetime.now(UTC)
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+    terminal = db.execute(
+        sa_update(MonitorRun)
+        .where(
+            MonitorRun.id == run.id,
+            MonitorRun.status == RunStatus.RUNNING.value,
+        )
+        .values(
+            status=RunStatus.SUCCEEDED.value,
+            finished_at=now,
+            error_code=None,
+            error_message=None,
+        )
+    )
+    db.commit()
+    # rowcount exists on CursorResult; the Result stub omits it.
+    if terminal.rowcount != 1:  # type: ignore[attr-defined]
+        logger.warning(
+            "terminal_write_fenced_off run_id=%s — run no longer RUNNING (reaped?); "
+            "results rolled back",
+            run.id,
+        )
+        return False
+    # Keep the ORM object consistent with the committed row for the rest of
+    # the request (PipelineResult reads run.status after commit expiry).
+    run.status = RunStatus.SUCCEEDED.value
+    run.finished_at = now
+    run.error_code = None
+    run.error_message = None
+    return True
+
+
 def _enqueue_alert_screenshot(change_id: object, monitor: Monitor) -> None:
     """Hand a screenshot capture to the browser_checks queue (never raises).
 
@@ -1041,18 +1086,19 @@ def apply_fetch_result(
     if enrichment is not None and getattr(enrichment, "provider", None) == "heuristic_pending":
         change_id = change.id
         diff_text = ctx.diff_text
-        # Terminal status is staged here, immediately before the commit, so
-        # the pre-commit fence below can never see this run's own state.
-        run.status = RunStatus.SUCCEEDED.value
-        run.finished_at = datetime.now(UTC)
-        run.error_code = None
-        run.error_message = None
         # Read the flag BEFORE the commit: commit() expires the ORM objects,
         # so touching monitor.screenshots_enabled afterwards would lazy-load
         # it and re-open a transaction - and the AI actor must be enqueued
         # with the session idle and the change already durable.
         screenshots_enabled = monitor.screenshots_enabled
-        db.commit()
+        # Fenced terminal write: only lands while the run is still RUNNING.
+        if not _commit_terminal_success(db, run):
+            db.rollback()
+            return PipelineResult(
+                status=RunStatus.FAILED.value,
+                error_code="run_reaped",
+                error_message="Run was reaped or superseded before results could commit.",
+            )
         if screenshots_enabled:
             _enqueue_alert_screenshot(change_id, monitor)
         try:
@@ -1086,12 +1132,16 @@ def apply_fetch_result(
             error_code="run_reaped",
             error_message="Run was reaped or superseded before results could commit.",
         )
-    # Fence passed: this is the one true terminal commit for the run.
-    run.status = RunStatus.SUCCEEDED.value
-    run.finished_at = datetime.now(UTC)
-    run.error_code = None
-    run.error_message = None
-    db.commit()
+    # Fence passed: this is the one true terminal commit for the run — a
+    # fenced conditional UPDATE so a reaper that wins the transition inside
+    # the read-to-commit window cannot be overwritten last-write-wins.
+    if not _commit_terminal_success(db, run):
+        db.rollback()
+        return PipelineResult(
+            status=_live_run_status(db, run) or RunStatus.FAILED.value,
+            error_code="run_reaped",
+            error_message="Run was reaped or superseded before results could commit.",
+        )
 
     if monitor.screenshots_enabled:
         _enqueue_alert_screenshot(change.id, monitor)

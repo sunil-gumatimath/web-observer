@@ -4,7 +4,9 @@ If a Dramatiq worker crashes mid-run, the MonitorRun stays in RUNNING/QUEUED
 status forever. The scheduler skips monitors with active runs, so a stuck run
 permanently blocks that monitor. This reaper detects and recovers from that.
 
-Notifications are intentionally not sent for reaped runs (minimal recovery).
+Reaped runs are counted as check failures (consecutive_failures), so a
+monitor that keeps getting reaped will eventually fire the standard
+failure-threshold notifications; no change-based notifications are produced.
 """
 
 from __future__ import annotations

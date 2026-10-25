@@ -42,11 +42,16 @@ class _Cursor:
         self.rowcount = rowcount
 
 
-def _make_db(*, run=None, monitor=None):
-    """Minimal Session-like object with get/commit/execute used by run_guard.
+def _make_db(*, run=None, monitor=None, allow_fail_fence=True):
+    """Minimal Session-like object with get/commit/execute/rollback used by run_guard.
 
-    ``execute`` models the atomic claim: a QUEUED/SCHEDULED run is transitioned
-    to RUNNING (rowcount 1); anything else is unclaimable (rowcount 0).
+    ``execute`` models the fences:
+    - the atomic claim: a QUEUED/SCHEDULED run is transitioned to RUNNING
+      (rowcount 1); anything else is unclaimable (rowcount 0);
+    - the fenced failure write: a RUNNING run accepts the conditional
+      FAILED transition (rowcount 1) while ``allow_fail_fence`` is true;
+      an already-terminal run is unclaimable (rowcount 0), which is how the
+      real fenced UPDATE refuses to downgrade committed terminal state.
     """
     store = {}
     if run is not None:
@@ -66,14 +71,19 @@ def _make_db(*, run=None, monitor=None):
         def commit(self):
             return None
 
+        def rollback(self):
+            return None
+
         def execute(self, *_a, **_k):
             run = next((v for k, v in store.items() if k[0] == "run"), None)
-            if run is not None and getattr(run, "status", None) in (
-                RunStatus.QUEUED.value,
-                RunStatus.SCHEDULED.value,
-            ):
+            status = getattr(run, "status", None) if run is not None else None
+            if status in (RunStatus.QUEUED.value, RunStatus.SCHEDULED.value):
                 run.status = RunStatus.RUNNING.value
                 run.started_at = datetime.now(UTC)
+                return _Cursor(1)
+            if status == RunStatus.RUNNING.value and allow_fail_fence:
+                # Model the fenced RUNNING -> FAILED transition (fail_run):
+                # the in-memory flip stands in for the conditional UPDATE.
                 return _Cursor(1)
             return _Cursor(0)
 
@@ -205,3 +215,53 @@ def test_success_path_releases_domain_slot(monkeypatch):
     assert released == ["example.com"]
     assert run.status == RunStatus.RUNNING.value
     assert run.started_at is not None
+
+
+# --- fenced fail_run -----------------------------------------------------------
+
+
+def test_fail_run_transitions_running_run(monkeypatch):
+    """A RUNNING run is fenced-flipped to FAILED and error fields are stored."""
+    run_id = uuid4()
+    run = SimpleNamespace(
+        id=run_id,
+        status=RunStatus.RUNNING.value,
+        started_at=datetime.now(UTC),
+        finished_at=None,
+        error_code=None,
+        error_message=None,
+        http_status=None,
+    )
+    db = _make_db(run=run)
+    monkeypatch.setattr(run_guard, "SessionLocal", lambda: _SessionCtx(db))
+
+    run_guard.fail_run(db, run, "http_error", "boom", http_status=503)
+
+    assert run.status == RunStatus.FAILED.value
+    assert run.error_code == "http_error"
+    assert run.error_message == "boom"
+    assert run.http_status == 503
+    assert run.finished_at is not None
+
+
+def test_fail_run_refuses_to_downgrade_committed_terminal_state():
+    """Regression: an exception after the pipeline committed SUCCEEDED (e.g. a
+    DB error inside record_run_outcome) used to blind-write FAILED over the
+    committed result, leaving run FAILED while its change event / outbox rows
+    stayed live. The fenced UPDATE must rowcount-0 and leave terminal state."""
+    run_id = uuid4()
+    run = SimpleNamespace(
+        id=run_id,
+        status=RunStatus.SUCCEEDED.value,  # already committed by the pipeline
+        started_at=None,
+        finished_at=datetime.now(UTC),
+        error_code=None,
+        error_message=None,
+        http_status=None,
+    )
+    db = _make_db(run=run, allow_fail_fence=False)
+
+    run_guard.fail_run(db, run, "internal_error", "late exception")
+
+    assert run.status == RunStatus.SUCCEEDED.value
+    assert run.error_code is None
