@@ -151,6 +151,7 @@ class Settings(BaseSettings):
     llm_api_base: str = "https://api.kilo.ai/api/gateway"
     # Jev-ranked best free Kilo model; verified to return a complete JSON
     # summary inside the 200-token output cap (see services/model_catalog.py).
+    # Re-probed 2026-10-28: still the only model clean at the default cap.
     llm_model: str = "poolside/laguna-s-2.1:free"
     # Comma-separated server-level fallback models tried in order after the
     # primary. Empty string asks the catalog for same-provider verified
