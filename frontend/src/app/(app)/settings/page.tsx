@@ -11,13 +11,13 @@ import {
   Badge,
   Button,
   Card,
+  CopyButton,
   ErrorBox,
   Input,
   Label,
   PageHeader,
   SectionTitle,
   Select,
-  SuccessBox,
 } from "@/components/ui";
 import { api, type MeResponse } from "@/lib/api";
 import { useToast } from "@/components/toasts";
@@ -26,20 +26,32 @@ import { config } from "@/lib/config";
 import { ensureWorkspace, setStoredWorkspaceId } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 
+/** "14:00 UTC" rendered in the visitor's timezone, e.g. "9:00 AM". */
+function localHourLabel(hourUtc: number): string {
+  try {
+    const d = new Date();
+    d.setUTCHours(hourUtc, 0, 0, 0);
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return `${String(hourUtc).padStart(2, "0")}:00`;
+  }
+}
+
 export default function SettingsPage() {
   usePageTitle("Settings");
 
   const toast = useToast();
   const [workspaceId, setWorkspaceId] = useState("");
   const [me, setMe] = useState<MeResponse | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<string>("…");
   const [digestCadence, setDigestCadence] = useState("none");
   const [digestHour, setDigestHour] = useState(14);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [savingPrefs, setSavingPrefs] = useState(false);
-  const [prefsSaved, setPrefsSaved] = useState(false);
   const [keySettings, setKeySettings] = useState<WorkspaceSettings | null>(null);
   useEffect(() => {
     api
@@ -75,12 +87,11 @@ export default function SettingsPage() {
 
   async function seed() {
     setError(null);
-    setMessage(null);
     try {
       const s = await api.seed();
       setStoredWorkspaceId(s.workspace_id);
       setWorkspaceId(s.workspace_id);
-      setMessage(`Seeded workspace ${s.workspace_id} for ${s.email}`);
+      toast.success("Workspace seeded", `${s.workspace_id} for ${s.email}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Seed failed");
     }
@@ -89,12 +100,11 @@ export default function SettingsPage() {
   function saveWorkspace() {
     if (!workspaceId.trim()) return;
     setStoredWorkspaceId(workspaceId.trim());
-    setMessage("Workspace ID saved in this browser.");
+    toast.success("Workspace ID saved in this browser.");
   }
   async function savePrefs() {
     if (!workspaceId) return;
     setSavingPrefs(true);
-    setPrefsSaved(false);
     setError(null);
     try {
       await api.updateWorkspace(workspaceId, {
@@ -102,20 +112,17 @@ export default function SettingsPage() {
         digest_hour_utc: digestHour,
         ai_summaries_enabled: aiEnabled,
       });
-      setMessage("Workspace preferences saved.");
-      setPrefsSaved(true);
       toast.success("Preferences saved");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save preferences";
       setError(msg);
-      toast.error("Failed to save preferences", msg);
     } finally {
       setSavingPrefs(false);
     }
   }
 
   return (
-    <div>
+    <div className="mx-auto max-w-4xl">
       <PageHeader
         title="Settings"
         description={
@@ -125,16 +132,13 @@ export default function SettingsPage() {
         }
       />
       {error ? <ErrorBox message={error} /> : null}
-      {message ? <SuccessBox message={message} /> : null}
 
-      <div className="mb-6 space-y-6">
+      <div className="space-y-4">
         <WorkspaceKeys workspaceId={workspaceId} />
         <TeamInvites workspaceId={workspaceId} />
-      </div>
 
-      <div className="grid max-w-2xl gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Card className="!p-4">
+          <Card>
             <p className="section-label">API</p>
             <p className="mt-2 truncate text-sm font-medium text-[var(--fg)]">{config.apiBaseUrl}</p>
             <p className="mt-1 text-xs text-[var(--ink-subtle)]">
@@ -153,7 +157,7 @@ export default function SettingsPage() {
             </p>
           </Card>
 
-          <Card className="!p-4">
+          <Card>
             <p className="section-label">Auth mode</p>
             <p className="mt-2 text-sm font-medium text-[var(--fg)]">
               {config.clerkEnabled ? "Clerk (Bearer JWT)" : "Internal token (dev)"}
@@ -170,44 +174,54 @@ export default function SettingsPage() {
           </Card>
         </div>
 
-        <Card className="space-y-3">
-          <div>
-            <Label htmlFor="ws">Active workspace ID</Label>
-            <Input
-              id="ws"
-              value={workspaceId}
-              onChange={(e) => setWorkspaceId(e.target.value)}
-              placeholder="UUID"
-              className="font-mono text-xs"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={saveWorkspace}>
-              Save workspace
-            </Button>
-            {!config.clerkEnabled ? (
-              <Button type="button" variant="secondary" onClick={seed}>
-                Seed dev workspace
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={async () => {
-                try {
-                  const id = await ensureWorkspace();
-                  setWorkspaceId(id);
-                  setMessage(`Using workspace ${id}`);
-                  const m = await api.me();
-                  setMe(m);
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : "Failed");
-                }
-              }}
-            >
-              Ensure workspace
-            </Button>
-          </div>
+        <Card>
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <span className="section-label">Advanced — workspace</span>
+              <span className="text-xs text-[var(--ink-subtle)] transition group-open:hidden">
+                Developer tooling — click to expand
+              </span>
+            </summary>
+            <div className="mt-3 space-y-3">
+              <div>
+                <Label htmlFor="ws">Active workspace ID</Label>
+                <Input
+                  id="ws"
+                  value={workspaceId}
+                  onChange={(e) => setWorkspaceId(e.target.value)}
+                  placeholder="UUID"
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={saveWorkspace}>
+                  Save workspace
+                </Button>
+                {!config.clerkEnabled ? (
+                  <Button type="button" variant="secondary" onClick={seed}>
+                    Seed dev workspace
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      const id = await ensureWorkspace();
+                      setWorkspaceId(id);
+                      toast.success("Workspace resolved", `Using workspace ${id}`);
+                      const m = await api.me();
+                      setMe(m);
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Failed");
+                    }
+                  }}
+                >
+                  Ensure workspace
+                </Button>
+              </div>
+            </div>
+          </details>
         </Card>
 
         {workspaceId ? (
@@ -219,16 +233,16 @@ export default function SettingsPage() {
                 id="digest"
                 value={digestCadence}
                 disabled={savingPrefs}
+                aria-describedby="digest-hint"
                 onChange={(e) => {
                   setDigestCadence(e.target.value);
-                  setPrefsSaved(false);
                 }}
               >
                 <option value="none">Off</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly (Mondays)</option>
               </Select>
-              <p className="mt-1 text-xs text-[var(--ink-subtle)]">
+              <p id="digest-hint" className="mt-1 text-xs text-[var(--ink-subtle)]">
                 {keySettings?.as_resend_api_key
                   ? "Digest emails send from your workspace sender (Bring-your-own keys above)."
                   : "Digest emails send from the global default sender — set a workspace Resend key above to use your own domain."}
@@ -236,39 +250,49 @@ export default function SettingsPage() {
             </div>
             <div>
               <Label htmlFor="hour">Digest hour (UTC)</Label>
-              <Input
+              <Select
                 id="hour"
-                type="number"
-                min={0}
-                max={23}
                 value={digestHour}
                 disabled={savingPrefs}
+                aria-describedby="hour-hint"
                 onChange={(e) => {
                   setDigestHour(Number(e.target.value));
-                  setPrefsSaved(false);
                 }}
-              />
+              >
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {`${String(h).padStart(2, "0")}:00`}
+                  </option>
+                ))}
+              </Select>
+              <p id="hour-hint" className="mt-1 text-xs text-[var(--ink-subtle)]" suppressHydrationWarning>
+                Sent at {String(digestHour).padStart(2, "0")}:00 UTC ({localHourLabel(digestHour)} your time).
+              </p>
             </div>
-            <label className="flex cursor-pointer items-center gap-2.5 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--ink)] transition hover:border-[var(--hairline-strong)]">
+            <label
+              htmlFor="ai"
+              className="flex cursor-pointer items-center gap-2.5 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--ink)] transition hover:border-[var(--hairline-strong)]"
+            >
               <input
+                id="ai"
                 type="checkbox"
                 checked={aiEnabled}
                 disabled={savingPrefs}
+                aria-describedby="ai-hint"
                 onChange={(e) => {
                   setAiEnabled(e.target.checked);
-                  setPrefsSaved(false);
                 }}
                 className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
               />
-              AI summaries & categories (optional LLM; heuristic if no key)
+              AI summaries &amp; categories
             </label>
-            <p className="text-xs text-[var(--ink-subtle)]">
+            <p id="ai-hint" className="text-xs text-[var(--ink-subtle)]">
               {keySettings?.as_llm_api_key
                 ? `AI summaries use your workspace key (${keySettings.llm_model || "custom model"} via Bring-your-own keys above).`
-                : "AI summaries use the global workspace key — set your own LLM key above to override it."}
+                : "AI summaries use the global workspace key — set your own LLM key above to override it. Optional LLM; heuristic if no key."}
             </p>
             <Button type="button" disabled={savingPrefs} onClick={savePrefs}>
-              {savingPrefs ? "Saving…" : prefsSaved ? "Saved ✓" : "Save preferences"}
+              {savingPrefs ? "Saving…" : "Save preferences"}
             </Button>
           </Card>
         ) : null}
@@ -290,8 +314,13 @@ export default function SettingsPage() {
   );
 }
 
+/** Shared style for inline "loading…" / empty placeholders. */
+const EMPTY_PLACEHOLDER =
+  "rounded-[8px] border border-dashed border-[var(--hairline-strong)] px-3 py-6 text-center text-xs text-[var(--ink-subtle)]";
+
 /** Optional tools for solo use — billing/plan upgrades are skipped. */
 function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
+  const toast = useToast();
   const [apiKeyName, setApiKeyName] = useState("default");
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<ApiKeyRow[]>([]);
@@ -302,7 +331,6 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
   const [webhooks, setWebhooks] = useState<WebhookOut[]>([]);
   const [webhooksLoading, setWebhooksLoading] = useState(false);
 
-  const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [creatingKey, setCreatingKey] = useState(false);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
@@ -325,11 +353,10 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
   async function deleteApiKey(keyId: string) {
     setErr(null);
-    setMsg(null);
     try {
       await api.deleteApiKey(workspaceId, keyId);
       setApiKeys((prev) => prev.filter((k) => k.id !== keyId));
-      setMsg("API key revoked.");
+      toast.success("API key revoked");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to revoke API key");
     }
@@ -349,11 +376,10 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
   async function deleteWebhook(endpointId: string) {
     setErr(null);
-    setMsg(null);
     try {
       await api.deleteWebhook(workspaceId, endpointId);
       setWebhooks((prev) => prev.filter((w) => w.id !== endpointId));
-      setMsg("Webhook deleted.");
+      toast.success("Webhook deleted");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to delete webhook");
     }
@@ -384,7 +410,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     setErr(null);
     try {
       await api.retryWebhookDelivery(workspaceId, deliveryId);
-      setMsg("Webhook delivery re-enqueued.");
+      toast.success("Webhook delivery re-enqueued");
       await loadDeliveries();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Retry failed");
@@ -395,12 +421,11 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div className="space-y-4">
-      <SectionTitle>Optional: API keys & webhooks</SectionTitle>
+      <SectionTitle>Optional: API keys &amp; webhooks</SectionTitle>
       <p className="text-xs text-[var(--ink-subtle)]">
         API access tokens and outbound signed webhooks (HMAC-SHA256).
       </p>
       {err ? <ErrorBox message={err} /> : null}
-      {msg ? <SuccessBox message={msg} /> : null}
 
       {/* API Keys Panel */}
       <Card className="space-y-4">
@@ -430,7 +455,10 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
               try {
                 const r = await api.createApiKey(workspaceId, apiKeyName.trim());
                 setApiKey(r.raw_key);
-                setMsg("API key created — copy it now; it will not be shown again.");
+                toast.success(
+                  "API key created",
+                  "Copy it now — it will not be shown again.",
+                );
                 await loadApiKeys();
               } catch (e) {
                 setErr(e instanceof Error ? e.message : "API key failed");
@@ -445,9 +473,12 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
         {apiKey ? (
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
-              Save your secret key now. It will never be shown again:
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                Save your secret key now. It will never be shown again:
+              </p>
+              <CopyButton text={apiKey} />
+            </div>
             <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
               {apiKey}
             </p>
@@ -456,8 +487,8 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
         <div className="space-y-2">
           {apiKeys.length === 0 ? (
-            <p className="rounded-[8px] border border-dashed border-[var(--hairline-strong)] px-3 py-4 text-center text-xs text-[var(--ink-subtle)]">
-              No API keys created yet.
+            <p className={EMPTY_PLACEHOLDER}>
+              {apiKeysLoading ? "Loading…" : "No API keys created yet."}
             </p>
           ) : (
             apiKeys.map((k) => (
@@ -494,7 +525,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
       {/* Webhooks Panel */}
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="section-label">Outbound Webhooks</p>
+          <p className="section-label">Outbound webhooks</p>
           <Button type="button" variant="secondary" size="sm" disabled={webhooksLoading} onClick={loadWebhooks}>
             {webhooksLoading ? "Loading…" : "Refresh"}
           </Button>
@@ -507,18 +538,19 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
               id="wh"
               placeholder="https://example.com/webhooks/monitor-the-web"
               value={webhookUrl}
+              aria-describedby="wh-hint"
               onChange={(e) => setWebhookUrl(e.target.value)}
             />
             <Button
               type="button"
-              disabled={creatingWebhook || !webhookUrl.trim()}
+              disabled={creatingWebhook || !webhookUrl.trim().startsWith("https://")}
               onClick={async () => {
                 setErr(null);
                 setCreatingWebhook(true);
                 try {
                   const r = await api.createWebhook(workspaceId, webhookUrl.trim());
                   setWebhookSecret(r.secret);
-                  setMsg("Webhook created — store the signing secret securely.");
+                  toast.success("Webhook created", "Store the signing secret securely.");
                   setWebhookUrl("");
                   await loadWebhooks();
                 } catch (e) {
@@ -531,13 +563,21 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
               {creatingWebhook ? "Adding…" : "Add webhook"}
             </Button>
           </div>
+          {!webhookUrl.trim().startsWith("https://") ? (
+            <p id="wh-hint" className="mt-1 text-xs text-[var(--ink-subtle)]">
+              Must start with https:// to be enabled.
+            </p>
+          ) : null}
         </div>
 
         {webhookSecret ? (
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
-              Webhook signing secret (used for X-MTW-Signature HMAC):
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                Webhook signing secret (used for X-MTW-Signature HMAC):
+              </p>
+              <CopyButton text={webhookSecret} />
+            </div>
             <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/15 p-3 font-mono text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
               {webhookSecret}
             </p>
@@ -546,8 +586,8 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
         <div className="space-y-2">
           {webhooks.length === 0 ? (
-            <p className="rounded-[8px] border border-dashed border-[var(--hairline-strong)] px-3 py-4 text-center text-xs text-[var(--ink-subtle)]">
-              No webhooks registered yet.
+            <p className={EMPTY_PLACEHOLDER}>
+              {webhooksLoading ? "Loading…" : "No webhooks registered yet."}
             </p>
           ) : (
             webhooks.map((w) => (
@@ -593,13 +633,16 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
         </p>
         <div className="space-y-2">
           {deliveries.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-6 text-center text-sm text-[var(--ink-subtle)]">
-              No deliveries yet. Click Refresh after change events fire.
+            <p className={EMPTY_PLACEHOLDER}>
+              {deliveriesLoading
+                ? "Loading…"
+                : "No deliveries yet. Click Refresh after change events fire."}
             </p>
           ) : (
             deliveries.map((d) => (
               <div
                 key={d.id}
+                title={`Delivery ${d.id}`}
                 className="flex flex-wrap items-start justify-between gap-3 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-2)] px-3.5 py-3"
               >
                 <div className="min-w-0 flex-1">
@@ -609,12 +652,11 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
                     </Badge>
                     <span className="text-sm font-medium text-[var(--fg)]">{d.event_type}</span>
                   </div>
-                  <p className="mt-1 truncate font-mono text-xs text-[var(--ink-subtle)]">{d.id}</p>
                   {d.last_error ? (
                     <p className="mt-1 line-clamp-2 text-xs text-rose-600 dark:text-rose-400">{d.last_error}</p>
                   ) : null}
                   <p className="mt-1 text-xs text-[var(--ink-subtle)]">
-                    attempts: {d.attempts}
+                    Attempts: {d.attempts}
                     {d.response_code != null ? ` · HTTP ${d.response_code}` : ""} ·{" "}
                     {new Date(d.created_at).toLocaleString()}
                   </p>

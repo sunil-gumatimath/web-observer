@@ -83,14 +83,14 @@ export default function ImportPage() {
 	}
 
 	return (
-		<div>
+		<div className="mx-auto max-w-4xl">
 			<PageHeader
 				title="Bulk import"
 				description="Import monitors from CSV or JSON (name, url, mode, schedule_interval_minutes). Modes: page_content, site_links, product_price, list_items, json_field, rss_feed, readme, visual, security_scan."
 			/>
 			{error ? <ErrorBox message={error} /> : null}
 			{result ? <SuccessBox message={result} /> : null}
-			<Card className="max-w-3xl">
+			<Card>
 				<form onSubmit={onSubmit} className="space-y-4">
 					<SegmentedControl
 						ariaLabel="Import format"

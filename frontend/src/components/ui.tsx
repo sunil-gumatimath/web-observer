@@ -165,8 +165,8 @@ export function Badge({
 		success:
 			"bg-[color:color-mix(in_srgb,var(--semantic-success)_10%,transparent)] text-[var(--semantic-success)] border border-[color:color-mix(in_srgb,var(--semantic-success)_25%,transparent)]",
 		danger:
-			"bg-rose-500/10 text-rose-400 border border-rose-500/20",
-		warn: "bg-amber-500/10 text-amber-300 border border-amber-500/20",
+			"bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20",
+		warn: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20",
 		info: "bg-[color:color-mix(in_srgb,var(--primary)_10%,transparent)] text-[var(--primary-hover)] border border-[color:color-mix(in_srgb,var(--primary)_25%,transparent)]",
 	}[tone];
 	return (
@@ -179,6 +179,40 @@ export function Badge({
 		>
 			{children}
 		</span>
+	);
+}
+
+export function CopyButton({
+	text,
+	label = "Copy",
+	className,
+}: {
+	text: string;
+	label?: string;
+	className?: string;
+}) {
+	const [copied, setCopied] = useState(false);
+
+	async function copy() {
+		try {
+			await navigator.clipboard.writeText(text);
+			setCopied(true);
+			window.setTimeout(() => setCopied(false), 1500);
+		} catch {
+			/* clipboard unavailable — text stays selectable */
+		}
+	}
+
+	return (
+		<Button
+			type="button"
+			variant="secondary"
+			size="sm"
+			onClick={copy}
+			className={className}
+		>
+			{copied ? "Copied ✓" : label}
+		</Button>
 	);
 }
 
@@ -251,9 +285,12 @@ export function EmptyState({
 
 export function ErrorBox({ message }: { message: string }) {
 	return (
-		<div className="mb-4 flex items-start gap-2.5 rounded-[8px] border border-rose-500/25 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-300">
+		<div
+			role="alert"
+			className="mb-4 flex items-start gap-2.5 rounded-[8px] border border-rose-500/25 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-700 dark:text-rose-300"
+		>
 			<svg
-				className="mt-0.5 h-4 w-4 shrink-0 text-rose-400"
+				className="mt-0.5 h-4 w-4 shrink-0 text-rose-500 dark:text-rose-400"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -272,9 +309,12 @@ export function ErrorBox({ message }: { message: string }) {
 
 export function SuccessBox({ message }: { message: string }) {
 	return (
-		<div className="mb-4 flex items-start gap-2.5 rounded-[8px] border border-emerald-500/25 bg-emerald-500/10 px-3 py-2.5 text-xs text-emerald-300">
+		<div
+			role="status"
+			className="mb-4 flex items-start gap-2.5 rounded-[8px] border border-emerald-500/25 bg-emerald-500/10 px-3 py-2.5 text-xs text-emerald-700 dark:text-emerald-300"
+		>
 			<svg
-				className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
+				className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
