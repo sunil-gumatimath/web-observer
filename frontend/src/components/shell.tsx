@@ -7,7 +7,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Logo } from "@/components/logo";
 import { cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { CommandPalette } from "@/components/command-palette";
+import { NavClock } from "@/components/nav-clock";
 import { api } from "@/lib/api";
 import { config } from "@/lib/config";
 import { invalidateWorkspace, setStoredWorkspaceId } from "@/lib/workspace";
@@ -164,19 +164,7 @@ function ClerkWorkspaceSwitcher() {
 export function AppShell({ children }: { children: ReactNode }) {
 	const pathname = usePathname() || "";
 	const [open, setOpen] = useState(false);
-	const [paletteOpen, setPaletteOpen] = useState(false);
 
-	// Global ⌘K / Ctrl-K for the command palette.
-	useEffect(() => {
-		function onKey(e: KeyboardEvent) {
-			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-				e.preventDefault();
-				setPaletteOpen((v) => !v);
-			}
-		}
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, []);
 
 	// Close the mobile menu on route change and on Escape.
 	useEffect(() => {
@@ -218,25 +206,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 					</div>
 
 					<div className="flex items-center gap-2 sm:gap-2.5" suppressHydrationWarning>
-						<button
-							type="button"
-							onClick={() => setPaletteOpen(true)}
-							className="hidden h-8 items-center gap-2 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 text-xs text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] sm:inline-flex"
-							aria-label="Open command palette"
-						>
-							<span aria-hidden>⌕</span>
-							<span>Search…</span>
-							<kbd className="rounded border border-[var(--hairline)] px-1 py-0.2 text-[10px]">⌘K</kbd>
-						</button>
-						<button
-							type="button"
-							onClick={() => setPaletteOpen(true)}
-							className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--muted)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)] active:bg-[var(--surface-3)] sm:hidden"
-							aria-label="Open search"
-						>
-							<span aria-hidden className="text-sm leading-none">⌕</span>
-						</button>
 						<WorkspaceSwitcher />
+						<NavClock className="hidden md:inline-flex px-1" />
 						<ThemeToggle />
 						<div className="hidden items-center border-l border-[var(--hairline)] pl-2.5 sm:flex" suppressHydrationWarning>
 							<ClerkAuthControls />
@@ -320,7 +291,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 			>
 				{children}
 			</main>
-			<CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 		</div>
 	);
 }

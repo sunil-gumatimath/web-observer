@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
-
+import { NavClock } from "@/components/nav-clock";
 const features = [
   {
     title: "Precise change detection",
@@ -51,6 +51,7 @@ export default function HomePage() {
             >
               Docs
             </Link>
+            <NavClock className="px-1.5 text-[#8a8f98]" />
             <Link
               href="/sign-in"
               className="btn-linear btn-linear-secondary !px-2.5 !py-1 !text-xs"
