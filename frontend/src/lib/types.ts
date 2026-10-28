@@ -169,6 +169,7 @@ export type ChangeEventDetail = ChangeEvent & {
   previous_text: string | null;
   new_text: string | null;
   mode: string | null;
+  previous_run_id?: string | null;
 };
 
 export type ValuePoint = {
@@ -247,9 +248,10 @@ export type NotificationChannel = {
 
 export type SnapshotAccess = {
   id: string;
+  run_id?: string | null;
   content_hash: string;
-  content_type: string | null;
-  byte_size: number | null;
+  content_type?: string | null;
+  byte_size?: number | null;
   normalized_text: string;
   raw_download_url?: string | null;
   created_at: string;

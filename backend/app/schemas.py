@@ -550,6 +550,7 @@ class ChangeEventDetail(ChangeEventOut):
     previous_text: str | None = None
     new_text: str | None = None
     mode: str | None = None
+    previous_run_id: uuid.UUID | None = None
 
 
 class AlertInboxItem(ChangeEventOut):
@@ -603,6 +604,7 @@ class ReadStateIn(BaseModel):
 
 class SnapshotAccessOut(BaseModel):
     id: uuid.UUID
+    run_id: uuid.UUID | None = None
     content_hash: str
     content_type: str | None
     byte_size: int | None

@@ -458,7 +458,7 @@ function MonitorDetailInner() {
 		(changes[0]?.run_id && screenshotUrl(`screenshots/${monitor.id}/${changes[0].run_id}.png`)) ||
 		(latestTerminal?.id && screenshotUrl(`screenshots/${monitor.id}/${latestTerminal.id}.png`)) ||
 		(previewSnapshot?.content_type?.startsWith("image/") && previewSnapshot?.raw_download_url
-			? previewSnapshot.raw_download_url
+			? brandAssetUrl(previewSnapshot.raw_download_url)
 			: null);
 
 	const activeHero = !heroImgFailed && brandHero
@@ -1072,29 +1072,48 @@ function MonitorDetailInner() {
 						const shotChanges = changes.filter((c) => !c.is_noise).slice(0, 2);
 						const afterChange = shotChanges[0] ?? null;
 						const beforeChange = shotChanges[1] ?? null;
-						const after = afterChange
-							? screenshotUrl(`screenshots/${monitor.id}/${afterChange.run_id}.png`)
+
+						// For visual monitors, baseline runs also capture a screenshot.
+						// If there is only 1 change, compare against the preceding succeeded run.
+						const afterRunId = afterChange?.run_id;
+						const afterRunIdx = runs.findIndex((r) => r.id === afterRunId);
+						const priorRun =
+							afterRunIdx >= 0
+								? runs.slice(afterRunIdx + 1).find((r) => r.status === "succeeded")
+								: null;
+						const beforeRunId =
+							beforeChange?.run_id || (monitor.mode === "visual" ? priorRun?.id : null);
+
+						const after = afterRunId
+							? screenshotUrl(`screenshots/${monitor.id}/${afterRunId}.png`)
 							: null;
-						const before = beforeChange
-							? screenshotUrl(`screenshots/${monitor.id}/${beforeChange.run_id}.png`)
+						const before = beforeRunId
+							? screenshotUrl(`screenshots/${monitor.id}/${beforeRunId}.png`)
 							: null;
+
+						const beforeCaption = beforeChange
+							? new Date(beforeChange.created_at).toLocaleString()
+							: priorRun?.finished_at
+							? new Date(priorRun.finished_at).toLocaleString()
+							: null;
+						const afterCaption = afterChange
+							? new Date(afterChange.created_at).toLocaleString()
+							: null;
+						const hasComparison = Boolean(before && after);
+
 						return (
 							<>
 								<VisualDiff
 									before={before}
 									after={after}
-									beforeCaption={
-										beforeChange ? new Date(beforeChange.created_at).toLocaleString() : null
-									}
-									afterCaption={
-										afterChange ? new Date(afterChange.created_at).toLocaleString() : null
-									}
+									beforeCaption={beforeCaption}
+									afterCaption={afterCaption}
 								/>
-								{shotChanges.length < 2 ? (
+								{!hasComparison ? (
 									<p className="mt-2 text-xs text-[var(--ink-subtle)]">
 										{shotChanges.length === 0
-											? "Screenshots attach to detected changes — none recorded yet. They appear here after the first two signal changes."
-											: "One change captured so far — the comparison appears after the next signal change."}
+											? "Screenshots attach to detected changes — none recorded yet. The visual comparison will appear here once a change is detected."
+											: "One change captured so far — the prior state screenshot is unavailable."}
 									</p>
 								) : null}
 							</>

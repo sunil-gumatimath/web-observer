@@ -15,8 +15,9 @@ import {
 } from "@/components/ui";
 import { BrandLogo } from "@/components/brand-logo";
 import { GithubDiff } from "@/components/github-diff";
+import { VisualDiff } from "@/components/visual-diff";
 import { DiffAiAssistant } from "@/components/diff-ai-assistant";
-import { api } from "@/lib/api";
+import { api, brandAssetUrl, screenshotUrl } from "@/lib/api";
 import type {
 	ChangeEventDetail,
 	Monitor,
@@ -291,7 +292,47 @@ export default function ChangeDetailPage() {
 				</div>
 			) : null}
 
-			{(change.previous_text || change.new_text) && (
+			{monitor?.mode === "visual" || change.mode === "visual" ? (
+				<div className="mb-6 space-y-4">
+					<SectionTitle>Visual comparison</SectionTitle>
+					<VisualDiff
+						before={
+							(change.previous_run_id || prevSnap?.run_id)
+								? screenshotUrl(`screenshots/${change.monitor_id}/${change.previous_run_id || prevSnap?.run_id}.png`)
+								: prevSnap?.raw_download_url
+								? brandAssetUrl(prevSnap.raw_download_url)
+								: null
+						}
+						after={
+							change.run_id
+								? screenshotUrl(`screenshots/${change.monitor_id}/${change.run_id}.png`)
+								: newSnap?.raw_download_url
+								? brandAssetUrl(newSnap.raw_download_url)
+								: null
+						}
+						beforeCaption={
+							prevSnap?.created_at
+								? new Date(prevSnap.created_at).toLocaleString()
+								: null
+						}
+						afterCaption={
+							newSnap?.created_at
+								? new Date(newSnap.created_at).toLocaleString()
+								: null
+						}
+					/>
+					{change.diff ? (
+						<details className="rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] p-3 text-xs">
+							<summary className="cursor-pointer font-medium text-[var(--ink-subtle)] hover:text-[var(--fg)]">
+								Perceptual hash details
+							</summary>
+							<pre className="mt-2 font-mono text-[11px] text-[var(--ink)] whitespace-pre-wrap">
+								{change.diff}
+							</pre>
+						</details>
+					) : null}
+				</div>
+			) : (change.previous_text || change.new_text) ? (
 				<div className="mb-6">
 					<SectionTitle>Before / After</SectionTitle>
 					<GithubDiff
@@ -301,7 +342,7 @@ export default function ChangeDetailPage() {
 						baseUrl={monitor?.url}
 					/>
 				</div>
-			)}
+			) : null}
 		</div>
 	);
 }

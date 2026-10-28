@@ -1479,9 +1479,11 @@ def get_change(
     new_truncated = False
     prev_text = None
     new_text = None
+    prev_run_id = None
     if change.previous_snapshot_id:
         prev = db.get(Snapshot, change.previous_snapshot_id)
         if prev and prev.workspace_id == workspace_id:
+            prev_run_id = prev.run_id
             prev_key = getattr(prev, "text_object_key", None)
             if prev_key:
                 b = get_bytes(prev_key)
@@ -1531,7 +1533,12 @@ def get_change(
     mode = monitor.mode if monitor is not None else None
 
     diff = None
-    if mode in LIST_DIFF_MODES and prev_text is not None and new_text is not None:
+    if mode == "visual" and prev_text is not None and new_text is not None:
+        from app.services.visual import visual_diff_summary
+
+        _v_summary, v_diff = visual_diff_summary(prev_text, new_text)
+        diff = v_diff
+    elif mode in LIST_DIFF_MODES and prev_text is not None and new_text is not None:
         if prev_truncated:
             # Degraded: previous full list unavailable, avoid fabricating item-level diff
             diff = "(item-level diff skipped: previous text truncated)"
@@ -1558,6 +1565,7 @@ def get_change(
         workspace_id=change.workspace_id,
         monitor_id=change.monitor_id,
         run_id=change.run_id,
+        previous_run_id=prev_run_id,
         previous_snapshot_id=change.previous_snapshot_id,
         new_snapshot_id=change.new_snapshot_id,
         previous_hash=change.previous_hash,
@@ -1860,6 +1868,7 @@ def get_snapshot(
 
     return SnapshotAccessOut(
         id=snap.id,
+        run_id=snap.run_id,
         content_hash=snap.content_hash,
         content_type=snap.content_type,
         byte_size=snap.byte_size,

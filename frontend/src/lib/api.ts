@@ -192,6 +192,7 @@ export function screenshotUrl(path: string | null | undefined): string | null {
   const base = (process.env.NEXT_PUBLIC_SCREENSHOT_CDN_URL || "").replace(/\/+$/, "");
   if (!base || !path) return brandAssetUrl(path);
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  if (path.startsWith("/")) return brandAssetUrl(path);
   const encoded = path
     .split("/")
     .map((seg) => encodeURIComponent(seg))
