@@ -54,5 +54,8 @@ cloudflarefree.md
 # Local Redis persistence
 dump.rdb
 
+# Local Playwright MCP console/page dumps
+.playwright-mcp/
+
 # Local implementation spec
 newmodes.md
