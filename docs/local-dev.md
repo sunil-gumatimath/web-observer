@@ -68,6 +68,8 @@ DATABASE_URL=postgresql+psycopg://monitor:monitor@localhost:5432/web_observer
 
 Check the WSL side with `sudo grep -E '^\s*requirepass' /etc/redis/redis.conf`. If Windows→WSL forwarding breaks entirely, `wsl --shutdown` then `wsl` usually restores it.
 
+**Auto-start.** `scripts/restart-stack.ps1` probes `127.0.0.1:6379` before launching anything. If Redis is not answering it runs `sudo -n systemctl start redis-server` inside WSL2 and re-probes for ~10 s. On success it also leaves a **detached hold-open session** (`wsl.exe -d Ubuntu-26.04 --exec sleep infinity`) so the VM — and Windows' localhost forwarding — cannot idle out while the stack runs; the session exits with the machine, and `wsl --shutdown` clears it. `sudo -n` means passwordless sudo must already be configured, and the distro name is hard-coded: if yours is not `Ubuntu-26.04`, edit that line in `scripts/restart-stack.ps1` or start Redis yourself. A failed preflight is not fatal — workers and the rate limiter degrade rather than block.
+
 ---
 
 ## 2. Backend env
@@ -98,7 +100,7 @@ Playwright Chromium is **required** for `js_required` monitors (checks routed to
 
 ## 4. Start the stack (5 processes)
 
-Preferred on Windows — one command launches all 5 processes hidden (API :8002, HTTP+notifications worker, browser worker, scheduler, frontend :3000):
+Preferred on Windows — one command launches all 5 processes hidden (API :8002, HTTP+notifications worker, browser worker, scheduler, frontend :3000). It also preflights Redis and auto-starts it inside WSL2 when needed (see [§1](#redis)):
 
 ```powershell
 powershell -File .\scripts\restart-stack.ps1
@@ -212,6 +214,7 @@ Fetch behavior worth knowing while debugging:
 - The SSRF-pinned fetcher tries **every** validated IP in turn — one dead CDN PoP won't fail a check; only connect-level errors trigger failover (`backend/app/services/fetcher.py:_pinned_get`).
 - `readme` monitors hit the GitHub API first (`ref`-pinned to the parsed `/tree/<branch>` branch when there is one, default branch otherwise), then fall back to raw probes bounded by a wall-clock budget (fits inside the worker's 120s time limit).
 - LLM summaries fail over across `LLM_FALLBACK_MODELS`; `none` disables failover. The catalog default is the model list of the provider that `LLM_API_BASE` points at (see `backend/app/services/model_catalog.py`).
+- The Kilo catalog is **probe-ranked, not copied from the provider list**: every free model was run with the app's real prompt at the 200- and 800-token caps, and each entry's `note` records what happened plus the `verified_at` cap it needs (200 = fits the default cap, 800 = needs the larger one, absent = failed). The list is refreshed by re-running those probes and re-ranking — a model that is free today can 429, empty out, or reject structured output tomorrow, so treat the notes as dated evidence (currently 2026-10-28). Only `poolside/laguna-s-2.1:free` is verified at the default cap.
 - `js_required` monitors fall back to the **Cloudflare Browser Rendering Worker** when the local Playwright fetch fails (`CLOUDFLARE_BROWSER_URL` + `CLOUDFLARE_BROWSER_TOKEN`). Local stays primary so the free ~10 min/day edge-browser quota is preserved. Covered by `backend/tests/test_browser_failover.py`.
 - `security_scan` monitors run on Cloudflare's edge via the URL Scanner (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_URLSCANNER_TOKEN`). With no token the check fails with a clear error instead of silently passing.
 

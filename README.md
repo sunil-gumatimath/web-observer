@@ -57,7 +57,7 @@ Stack: **Next.js** (App Router, React 19, Clerk, Tailwind) → **FastAPI** → *
 ```mermaid
 flowchart TB
     subgraph Browser["Browser"]
-        UI["Next.js UI · :3000<br/>Clerk auth · live SSE · command palette"]
+        UI["Next.js UI · :3000<br/>Clerk auth · live SSE · visual diff viewer"]
     end
 
     subgraph Procs["Local processes"]
@@ -342,10 +342,10 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | `product_price` | Price + currency (defaults to a daily schedule) |
 | `list_items` | Link list under a CSS selector |
 | `json_field` | A single value via a JSONPath-style query, e.g. `$.data.price` |
-| `visual` | Perceptual screenshot comparison — DCT pHash, `VISUAL_PHASH_THRESHOLD=8` bits of 256 (legacy aHash path keeps `VISUAL_AHASH_THRESHOLD=5`) |
+| `visual` | Perceptual screenshot comparison — DCT pHash, `VISUAL_PHASH_THRESHOLD=8` bits of 256 (legacy aHash path keeps `VISUAL_AHASH_THRESHOLD=5`); the change detail renders the two compared runs as a before/after slider plus a collapsible pHash summary |
 | `security_scan` | Cloudflare URL Scanner verdict + technology inventory, diffed item-by-item; needs `CLOUDFLARE_URLSCANNER_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`; plain HTTP only — big reference: [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) |
 
-Also on the monitoring side: a **visual element picker** (point-and-click CSS-selector synthesis with sanitized proxied preview + brand/info auto-fill — `frontend/src/components/selector-picker.tsx`), opt-in **screenshots** captured only on signal changes, **watch notes** and **monitor tags** (up to 10, API + bulk import only), **bulk CSV/JSON import/export** with sitemap-driven batch creation, **adaptive scheduling** that stretches intervals after quiet runs, and a public **status badge** (`GET .../badge.svg`, no auth).
+Also on the monitoring side: a **visual element picker** (point-and-click CSS-selector synthesis with sanitized proxied preview + brand/info auto-fill — `frontend/src/components/selector-picker.tsx`), opt-in **screenshots** captured only on signal changes (`visual` monitors are the exception: each run keeps its own capture under `screenshots/<monitor_id>/<run_id>.png` so the before/after pair matches the run that fired), **watch notes** and **monitor tags** (up to 10, API + bulk import only), **bulk CSV/JSON import/export** with sitemap-driven batch creation, **adaptive scheduling** that stretches intervals after quiet runs, and a public **status badge** (`GET .../badge.svg`, no auth).
 
 ### Change intelligence
 
@@ -354,7 +354,7 @@ Also on the monitoring side: a **visual element picker** (point-and-click CSS-se
 | Diffs | GitHub-style added/removed line views for every content change (unified + split), plus readable markdown views for list/price/value modes |
 | AI summaries | Optional plain-language summaries per change — heuristic by default; any OpenAI-compatible gateway via `LLM_API_BASE` (default `api.kilo.ai`), toggled per workspace via `ai_summaries_enabled` |
 | SubQ System 1 triage | Optional fast decision model via SubQ Decisions API (`SUBQ_ENABLED=true`, `subq-snap-preview`) — acts as a fast Stage 1 decision gate: probabilistic noise rejection, calibrated category classification, and impact scoring before LLM summarization |
-| LLM providers & catalog | One OpenAI-compatible provider: Kilo Gateway (free models, default) — any other OpenAI-compatible gateway can be used via `LLM_API_BASE`; `GET /api/v1/model-catalog` feeds the settings UI and drives server-side failover with per-model probe status |
+| LLM providers & catalog | One OpenAI-compatible provider: Kilo Gateway (free models, default) — any other OpenAI-compatible gateway can be used via `LLM_API_BASE`; `GET /api/v1/model-catalog` feeds the settings UI and drives server-side failover with per-model probe status. The shipped Kilo list is a **probe ranking**, not a copy of the provider's marketing list: each model was run against the app's real prompt at the 200- and 800-token caps and ranked by whether it returns complete JSON, so the notes carry the evidence (and the cap it needs). Default `poolside/laguna-s-2.1:free` is currently the only model clean at the default cap; the rest need 800 tokens and/or are rate limited, empty, or reject structured output |
 | AI relevance filter | Optional per-monitor `watch_note` triage: the LLM scores each diff vs. the note; routine noise is marked `is_noise=true`, held (not deleted), and excluded from notifications/digests; fails open on LLM error |
 | Semantic triggers | Plain-English per-monitor trigger rules evaluated alongside thresholds |
 | Conditional alerting | Optional per-monitor `alert_config` JSONB — `price_below`/`price_above` + `percent_change`, `list_min_added`/`list_min_removed`, `min_diff_chars`, `regex_must_match`/`regex_must_not_match`; unmet thresholds mark the change `is_noise=true` with a stored reason; empty config = alert on any hash difference |
@@ -401,7 +401,7 @@ See [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-featur
 
 ### User interface
 
-The web UI (Next.js) exposes: **Dashboard** (with change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status tabs, sorting, bulk pause/resume, mode-specific snapshot previews including rich Cloudflare URL Scanner verdicts, non-blocking preview loading, and live brand asset re-scraping), **Logs** (workspace-wide run history + CSV export), **Changes** (per-change diff with before/after drag slider for screenshot pairs), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels, workspace keys, billing), and an in-app **Docs** page — plus a command palette (Ctrl+K / Cmd-K jump to pages + monitors) and an onboarding checklist (first monitor → baseline → channel). Styled with a Cohere-inspired design system (`frontend/src/app/globals.css`): 22px cards, pill buttons, `#1863dc` interaction blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator.
+The web UI (Next.js) exposes: **Dashboard** (with change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status tabs, sorting, bulk pause/resume, mode-specific snapshot previews including rich Cloudflare URL Scanner verdicts, non-blocking preview loading, and live brand asset re-scraping), **Logs** (workspace-wide run history + CSV export), **Changes** (per-change diff — text diffs for content modes, a run-keyed before/after screenshot slider plus collapsible pHash details for `visual` monitors), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels, workspace keys, API keys/webhooks, digest preferences — with one-click copy for one-time secrets and developer workspace tooling tucked behind an Advanced card), and an in-app **Docs** page — plus a live header clock and an onboarding checklist (first monitor → baseline → channel). Results surface as toasts, and status/error boxes carry `role="status"`/`role="alert"` with `aria-describedby` hints. Styled with a Cohere-inspired design system (`frontend/src/app/globals.css`): 22px cards, pill buttons, `#1863dc` interaction blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator.
 
 ## Tests & linting
 

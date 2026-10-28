@@ -141,7 +141,12 @@ Renders the page in a browser and compares screenshots perceptually.
   the legacy 64-bit aHash (`VISUAL_AHASH_THRESHOLD=5`).
 - The optional CSS selector clips the comparison to one region (e.g. `#hero`),
   which is the cheapest way to stop a rotating banner from firing alerts.
-- Needs **2 signal changes** before the before/after slider can render.
+- The change detail shows the two compared runs as a **before/after slider**
+  (`screenshots/<monitor_id>/<run_id>.png`) with the perceptual-hash summary in
+  a collapsible panel, so you see the pixels that actually moved, not just the
+  latest two screenshots. One detected change is enough: the baseline comes from
+  the change's `previous_snapshot_id` run, falling back to the preceding
+  succeeded run when the monitor detail page has only one change recorded.
 
 ### `security_scan`
 

@@ -165,6 +165,7 @@ To expand from developer-centric change detection into an all-in-one web intelli
 
 * **Done (2026-09):** swipe/split slider component (`frontend/src/components/visual-diff.tsx`), screenshot keying to changed runs (not latest runs), slider polish via UI batch.
 * **Done (2026-10):** the visual comparison now uses a **DCT pHash** (256-bit) instead of the legacy 64-bit aHash, with the perceptual distance exposed as the `min_diff_chars` threshold for `visual` monitors.
+* **Done (2026-10-28):** the slider renders on the **change detail** page too (not just monitor detail), keyed to the run pair that was actually compared — the API returns `previous_run_id` alongside the pHash summary, and monitor detail falls back to the preceding succeeded run so one change is enough. The pHash text sits in a collapsible panel under the slider.
 * **Remaining:** pixel-difference heatmap overlay (magenta/neon clusters) and flicker/blink mode.
 * **Problem:** Viewing old and new screenshots side-by-side makes subtle layout and typography changes difficult to detect.
 * **Proposed Solution:**
