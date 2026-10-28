@@ -421,8 +421,8 @@ if ($redisTest) {
         }
     } catch { $redisTest = $false }
     if ($redisTest) {
-        # Detached hold-open session: parent PowerShell exits, this survives.
-        Start-Process -FilePath "wsl.exe" -ArgumentList '-e','bash','-lc','exec sleep 2147483647' -WindowStyle Hidden | Out-Null
+        # Detached hold-open session: parent PowerShell exits, this survives without dying on stdin EOF.
+        Start-Process -FilePath "wsl.exe" -ArgumentList '-d','Ubuntu-26.04','--exec','sleep','infinity' -WindowStyle Hidden | Out-Null
         Write-Host "Redis preflight: auto-started and reachable on 127.0.0.1:$RedisPort" -ForegroundColor Green
     } else {
         Write-Host "Redis preflight: STILL not reachable on 127.0.0.1:$RedisPort (workers/limiter degrade; if Windows->WSL localhost forwarding is down, 'wsl --shutdown' then 'wsl' usually restores it)" -ForegroundColor Yellow
