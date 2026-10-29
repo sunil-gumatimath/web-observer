@@ -362,6 +362,7 @@ export type CatalogModel = {
   value: string;
   label: string;
   note: string;
+  recommended: boolean;
   /** True when the model completes the app's JSON task within a 200-token cap. */
   verified_200: boolean;
   /**

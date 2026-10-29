@@ -12,15 +12,17 @@ export function NavClock({ className }: NavClockProps) {
 
 	useEffect(() => {
 		const updateTime = () => {
-			const now = new Date();
-			const hours = String(now.getHours()).padStart(2, "0");
-			const minutes = String(now.getMinutes()).padStart(2, "0");
-			const seconds = String(now.getSeconds()).padStart(2, "0");
-			setTime(`${hours}:${minutes}:${seconds}`);
+			setTime(
+				new Intl.DateTimeFormat(undefined, {
+					hour: "numeric",
+					minute: "2-digit",
+					hour12: true,
+				}).format(new Date()),
+			);
 		};
 
 		updateTime();
-		const interval = setInterval(updateTime, 1000);
+		const interval = setInterval(updateTime, 60_000);
 		return () => clearInterval(interval);
 	}, []);
 
@@ -37,7 +39,7 @@ export function NavClock({ className }: NavClockProps) {
 				aria-label="Local time"
 				title="Local time"
 			>
-				{time || <span className="opacity-0">00:00:00</span>}
+				{time || <span className="opacity-0">0:00 AM</span>}
 			</span>
 		</span>
 	);

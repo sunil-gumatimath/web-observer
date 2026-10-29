@@ -44,6 +44,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
   }, [catalog, llmBase]);
 
   const models = useMemo(() => provider?.models ?? [], [provider]);
+  const selectedModel = models.find((model) => model.value === llmModel);
 
   // Bases offered in the picker: every catalog provider plus first-party
   // OpenAI (which has no catalog entry because the app ships no OpenAI models).
@@ -233,8 +234,8 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
           >
             <option value="">-- Use server default --</option>
             {models.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
+              <option key={m.value} value={m.value} title={m.note}>
+                {m.label}{m.recommended ? " — Recommended" : ""}
               </option>
             ))}
             <option value="__custom__">Custom…</option>
@@ -265,6 +266,12 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
             ) : null}
             {settings.llm_model ? ` · current: ${settings.llm_model}` : ""}
           </p>
+          {selectedModel ? (
+            <p className="mt-1 text-[11px] text-[var(--ink-subtle)]">
+              {selectedModel.recommended ? "Recommended for this app. " : "Model note: "}
+              {selectedModel.note}
+            </p>
+          ) : null}
           {provider?.models.some((m) => m.verified_at === null) ? (
             <p className="mt-1 text-[11px] text-[var(--ink-subtle)]">
               Models marked “needs a larger output cap” never returned a complete

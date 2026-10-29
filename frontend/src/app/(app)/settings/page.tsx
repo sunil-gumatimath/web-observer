@@ -5,7 +5,6 @@ import { NotificationChannelsPanel } from "@/components/notification-channels";
 import { TeamInvites } from "@/components/team-invites";
 import { WorkspaceKeys } from "@/components/workspace-keys";
 import { WorkspaceMembers } from "@/components/workspace-members";
-import { AuditLogsPanel } from "@/components/audit-logs";
 import { ConfirmButton } from "@/components/confirm-dialog";
 import {
   Badge,
@@ -125,108 +124,14 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="Settings"
-        description={
-          config.clerkEnabled
-            ? "Account, digests, AI summaries, and alert channels."
-            : "Dev auth, digests, AI, and alert channels (email / Slack / Discord)."
-        }
+        description="Manage workspace preferences, notifications, team access, and integrations."
       />
       {error ? <ErrorBox message={error} /> : null}
 
       <div className="space-y-4">
-        <WorkspaceKeys workspaceId={workspaceId} />
-        <TeamInvites workspaceId={workspaceId} />
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card>
-            <p className="section-label">API</p>
-            <p className="mt-2 truncate text-sm font-medium text-[var(--fg)]">{config.apiBaseUrl}</p>
-            <p className="mt-1 text-xs text-[var(--ink-subtle)]">
-              Health:{" "}
-              <span
-                className={
-                  apiStatus.startsWith("ok") || apiStatus.includes("ok")
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : apiStatus === "…"
-                      ? "text-[var(--ink-subtle)]"
-                      : "text-rose-600 dark:text-rose-400"
-                }
-              >
-                {apiStatus}
-              </span>
-            </p>
-          </Card>
-
-          <Card>
-            <p className="section-label">Auth mode</p>
-            <p className="mt-2 text-sm font-medium text-[var(--fg)]">
-              {config.clerkEnabled ? "Clerk (Bearer JWT)" : "Internal token (dev)"}
-            </p>
-            {me ? (
-              <div className="mt-2 space-y-0.5 text-xs text-[var(--ink-muted)]">
-                <p>Email: {me.email ?? "—"}</p>
-                <p>Internal: {me.is_internal ? "yes" : "no"}</p>
-                <p className="truncate">
-                  Workspaces: {me.workspaces.map((w) => w.name).join(", ") || "none"}
-                </p>
-              </div>
-            ) : null}
-          </Card>
-        </div>
-
-        <Card>
-          <details className="group">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
-              <span className="section-label">Advanced — workspace</span>
-              <span className="text-xs text-[var(--ink-subtle)] transition group-open:hidden">
-                Developer tooling — click to expand
-              </span>
-            </summary>
-            <div className="mt-3 space-y-3">
-              <div>
-                <Label htmlFor="ws">Active workspace ID</Label>
-                <Input
-                  id="ws"
-                  value={workspaceId}
-                  onChange={(e) => setWorkspaceId(e.target.value)}
-                  placeholder="UUID"
-                  className="font-mono text-xs"
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={saveWorkspace}>
-                  Save workspace
-                </Button>
-                {!config.clerkEnabled ? (
-                  <Button type="button" variant="secondary" onClick={seed}>
-                    Seed dev workspace
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={async () => {
-                    try {
-                      const id = await ensureWorkspace();
-                      setWorkspaceId(id);
-                      toast.success("Workspace resolved", `Using workspace ${id}`);
-                      const m = await api.me();
-                      setMe(m);
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : "Failed");
-                    }
-                  }}
-                >
-                  Ensure workspace
-                </Button>
-              </div>
-            </div>
-          </details>
-        </Card>
-
         {workspaceId ? (
           <Card className="space-y-4">
-            <p className="section-label">Preferences</p>
+            <SectionTitle>Preferences</SectionTitle>
             <div>
               <Label htmlFor="digest">Email/Slack digest</Label>
               <Select
@@ -234,9 +139,7 @@ export default function SettingsPage() {
                 value={digestCadence}
                 disabled={savingPrefs}
                 aria-describedby="digest-hint"
-                onChange={(e) => {
-                  setDigestCadence(e.target.value);
-                }}
+                onChange={(e) => setDigestCadence(e.target.value)}
               >
                 <option value="none">Off</option>
                 <option value="daily">Daily</option>
@@ -255,9 +158,7 @@ export default function SettingsPage() {
                 value={digestHour}
                 disabled={savingPrefs}
                 aria-describedby="hour-hint"
-                onChange={(e) => {
-                  setDigestHour(Number(e.target.value));
-                }}
+                onChange={(e) => setDigestHour(Number(e.target.value))}
               >
                 {Array.from({ length: 24 }, (_, h) => (
                   <option key={h} value={h}>
@@ -279,9 +180,7 @@ export default function SettingsPage() {
                 checked={aiEnabled}
                 disabled={savingPrefs}
                 aria-describedby="ai-hint"
-                onChange={(e) => {
-                  setAiEnabled(e.target.checked);
-                }}
+                onChange={(e) => setAiEnabled(e.target.checked)}
                 className="h-4 w-4 rounded-[4px] border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--primary)] focus:ring-[var(--primary-focus)]"
               />
               AI summaries &amp; categories
@@ -297,18 +196,114 @@ export default function SettingsPage() {
           </Card>
         ) : null}
 
+        <section className="space-y-3">
+          <SectionTitle>AI and email providers</SectionTitle>
+          <WorkspaceKeys workspaceId={workspaceId} />
+        </section>
+
         {workspaceId ? (
-          <div>
-            <SectionTitle>Alert channels</SectionTitle>
+          <section className="space-y-3">
+            <SectionTitle>Notifications</SectionTitle>
             <NotificationChannelsPanel workspaceId={workspaceId} />
-          </div>
+          </section>
         ) : null}
 
-        {workspaceId ? <WorkspaceMembers workspaceId={workspaceId} /> : null}
+        {workspaceId ? (
+          <section className="space-y-3">
+            <SectionTitle>Team access</SectionTitle>
+            <TeamInvites workspaceId={workspaceId} />
+            <WorkspaceMembers workspaceId={workspaceId} />
+          </section>
+        ) : null}
 
-        {workspaceId ? <AuditLogsPanel workspaceId={workspaceId} /> : null}
+        {workspaceId ? (
+          <section className="space-y-3">
+            <SectionTitle>Integrations</SectionTitle>
+            <EnterprisePanel workspaceId={workspaceId} />
+          </section>
+        ) : null}
 
-        {workspaceId ? <EnterprisePanel workspaceId={workspaceId} /> : null}
+        <Card>
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <span className="section-label">Advanced</span>
+              <span className="text-xs text-[var(--ink-subtle)] transition group-open:hidden">
+                Technical details and developer tools
+              </span>
+            </summary>
+            <div className="mt-3 space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Card>
+                  <p className="section-label">API</p>
+                  <p className="mt-2 truncate text-sm font-medium text-[var(--fg)]">{config.apiBaseUrl}</p>
+                  <p className="mt-1 text-xs text-[var(--ink-subtle)]">
+                    Health:{" "}
+                    <span
+                      className={
+                        apiStatus.startsWith("ok") || apiStatus.includes("ok")
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : apiStatus === "…"
+                            ? "text-[var(--ink-subtle)]"
+                            : "text-rose-600 dark:text-rose-400"
+                      }
+                    >
+                      {apiStatus}
+                    </span>
+                  </p>
+                </Card>
+                <Card>
+                  <p className="section-label">Authentication</p>
+                  <p className="mt-2 text-sm font-medium text-[var(--fg)]">
+                    {config.clerkEnabled ? "Clerk (Bearer JWT)" : "Internal token (dev)"}
+                  </p>
+                  {me ? (
+                    <p className="mt-1 truncate text-xs text-[var(--ink-muted)]">
+                      {me.email ?? "No user email"}
+                    </p>
+                  ) : null}
+                </Card>
+              </div>
+              {!config.clerkEnabled ? (
+                <>
+                  <div>
+                    <Label htmlFor="ws">Active workspace ID</Label>
+                    <Input
+                      id="ws"
+                      value={workspaceId}
+                      onChange={(e) => setWorkspaceId(e.target.value)}
+                      placeholder="UUID"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={saveWorkspace}>
+                      Save workspace
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={seed}>
+                      Seed dev workspace
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={async () => {
+                        try {
+                          const id = await ensureWorkspace();
+                          setWorkspaceId(id);
+                          toast.success("Workspace resolved", `Using workspace ${id}`);
+                          setMe(await api.me());
+                        } catch (e) {
+                          setError(e instanceof Error ? e.message : "Failed");
+                        }
+                      }}
+                    >
+                      Ensure workspace
+                    </Button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </details>
+        </Card>
       </div>
     </div>
   );
@@ -421,9 +416,8 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div className="space-y-4">
-      <SectionTitle>Optional: API keys &amp; webhooks</SectionTitle>
       <p className="text-xs text-[var(--ink-subtle)]">
-        API access tokens and outbound signed webhooks (HMAC-SHA256).
+        Connect scripts and services with API keys or signed webhooks.
       </p>
       {err ? <ErrorBox message={err} /> : null}
 

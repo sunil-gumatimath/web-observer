@@ -10,7 +10,11 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { NavClock } from "@/components/nav-clock";
 import { api } from "@/lib/api";
 import { config } from "@/lib/config";
-import { invalidateWorkspace, setStoredWorkspaceId } from "@/lib/workspace";
+import {
+	getStoredWorkspaceId,
+	invalidateWorkspace,
+	setStoredWorkspaceId,
+} from "@/lib/workspace";
 
 const nav = [
 	{
@@ -43,6 +47,11 @@ const nav = [
 		href: "/settings",
 		label: "Settings",
 		match: (p: string) => p.startsWith("/settings"),
+	},
+	{
+		href: "/activity",
+		label: "Activity",
+		match: (p: string) => p.startsWith("/activity"),
 	},
 ];
 
@@ -164,6 +173,33 @@ function ClerkWorkspaceSwitcher() {
 export function AppShell({ children }: { children: ReactNode }) {
 	const pathname = usePathname() || "";
 	const [open, setOpen] = useState(false);
+	const [canViewActivity, setCanViewActivity] = useState(false);
+
+	useEffect(() => {
+		let cancelled = false;
+		async function checkActivityAccess() {
+			try {
+				const me = await api.me();
+				if (me.is_internal) {
+					if (!cancelled) setCanViewActivity(true);
+					return;
+				}
+				const workspaceId = getStoredWorkspaceId() ?? me.workspaces[0]?.id;
+				if (!workspaceId || !me.id) return;
+				const members = await api.listMembers(workspaceId);
+				const role = members.find((member) => member.user_id === me.id)?.role;
+				if (!cancelled) setCanViewActivity(role === "owner" || role === "admin");
+			} catch {
+				if (!cancelled) setCanViewActivity(false);
+			}
+		}
+		void checkActivityAccess();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const visibleNav = nav.filter((item) => item.href !== "/activity" || canViewActivity);
 
 
 	// Close the mobile menu on route change and on Escape.
@@ -190,7 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 					<div className="flex items-center gap-4" suppressHydrationWarning>
 						<HeaderLogo />
 						<nav className="hidden items-center gap-1 md:flex" suppressHydrationWarning>
-							{nav.map((item) => {
+							{visibleNav.map((item) => {
 								const active = item.match(pathname);
 								return (
 									<Link
@@ -260,7 +296,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 						suppressHydrationWarning
 					>
 						<nav className="flex flex-col gap-1" suppressHydrationWarning>
-							{nav.map((item) => {
+							{visibleNav.map((item) => {
 								const active = item.match(pathname);
 								return (
 									<Link
