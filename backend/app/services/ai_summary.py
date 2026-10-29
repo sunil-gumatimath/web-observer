@@ -514,6 +514,11 @@ def _system_prompt(*, mode: str, has_watch: bool, has_semantic: bool = False) ->
     return base
 
 
+def escape_untrusted_text(value: str) -> str:
+    """Escape prompt delimiters so untrusted text cannot close its data block."""
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _untrusted(label: str, value: str) -> str:
     """Wrap a non-system-controlled prompt field as untrusted data.
 
@@ -521,7 +526,7 @@ def _untrusted(label: str, value: str) -> str:
     non-system field the model sees is wrapped so injected instructions stay
     inside an explicitly untrusted block the system prompt already disclaims.
     """
-    return f"<untrusted_{label}>\n{value}\n</untrusted_{label}>"
+    return f"<untrusted_{label}>\n{escape_untrusted_text(value)}\n</untrusted_{label}>"
 
 
 def _user_prompt(

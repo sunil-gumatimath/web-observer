@@ -91,21 +91,23 @@ def build_systemone_payload(
     model: str = "subq-snap-preview",
 ) -> dict:
     """Build the request dictionary for SubQ POST /v1/systemone."""
+    from app.services.ai_summary import escape_untrusted_text
+
     state_parts = [
-        f"MONITOR: {monitor_name} ({url})",
+        f"MONITOR: {escape_untrusted_text(monitor_name)} ({escape_untrusted_text(url)})",
         f"MODE: {mode}",
-        f"DETERMINISTIC SUMMARY: {deterministic_summary or 'Content changed'}",
+        f"DETERMINISTIC SUMMARY: {escape_untrusted_text(deterministic_summary or 'Content changed')}",
     ]
     has_watch = bool((watch_note or "").strip())
     has_semantic = bool((semantic_trigger or "").strip())
     if has_watch:
-        state_parts.append(f"WATCH NOTE: {watch_note.strip()}")
+        state_parts.append(f"WATCH NOTE: {escape_untrusted_text(watch_note.strip())}")
     if has_semantic:
-        state_parts.append(f"SEMANTIC TRIGGER: {semantic_trigger.strip()}")
+        state_parts.append(f"SEMANTIC TRIGGER: {escape_untrusted_text(semantic_trigger.strip())}")
 
     # Diff capped to avoid unnecessary token usage while preserving context
     capped_diff = (diff_text or "")[:4000]
-    state_parts.append(f"DIFF:\n{capped_diff}")
+    state_parts.append(f"DIFF:\n{escape_untrusted_text(capped_diff)}")
     state = "\n\n".join(state_parts)
 
     questions: dict[str, dict] = {
@@ -133,7 +135,7 @@ def build_systemone_payload(
         criteria_text = (semantic_trigger if has_semantic else watch_note) or ""
         questions["matches_criteria"] = {
             "type": "noul",
-            "instructions": f"Does this change match what the user is specifically watching for: '{criteria_text.strip()}'?",
+            "instructions": f"Does this change match what the user is specifically watching for: '{escape_untrusted_text(criteria_text.strip())}'?",
             "criteria": {
                 "true": "The change directly aligns with or satisfies the user's specific watch note or trigger criteria",
                 "false": "The change does not match or is irrelevant to the user's criteria",

@@ -50,7 +50,12 @@ def scan_digest_text(result: dict[str, Any]) -> str:
 
     verdicts = result.get("verdicts") or {}
     overall = verdicts.get("overall") or {}
-    lines.append(f"malicious={str(bool(overall.get('malicious'))).lower()}")
+    if not isinstance(overall, dict) or not isinstance(overall.get("malicious"), bool):
+        raise UrlScannerError(
+            "scan_incomplete",
+            "URL Scanner result is missing the overall malicious verdict",
+        )
+    lines.append(f"malicious={str(overall['malicious']).lower()}")
     categories = ",".join(sorted(str(c) for c in overall.get("categories") or []))
     lines.append(f"categories={categories}")
     tags = ",".join(sorted(str(t) for t in overall.get("tags") or []))
