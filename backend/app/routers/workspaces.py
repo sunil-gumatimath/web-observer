@@ -233,6 +233,7 @@ def get_model_catalog() -> dict:
                         "value": model.value,
                         "label": model.label,
                         "note": model.note,
+                        "recommended": model.recommended,
                         "verified_200": model.verified_200,
                         "verified_at": model.verified_at,
                     }

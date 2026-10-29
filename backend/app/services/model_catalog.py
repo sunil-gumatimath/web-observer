@@ -33,6 +33,7 @@ class ModelEntry:
     base: str
     #: Why the model is ranked where it is, and any caveat the user needs.
     note: str = ""
+    recommended: bool = False
     #: Output-token budget the model was measured to need, or None when the
     #: model never produced a complete reply. 200 means it fits the app's
     #: default cap; higher values are applied only to this model so reasoning
@@ -65,13 +66,9 @@ class Provider:
 # ---------------------------------------------------------------------------
 # Kilo Gateway — free models ($0 input/output).
 #
-# Set taken from the live ``/api/gateway/models`` payload (``isFree=true``) on
-# 2026-10-23 and refreshed on 2026-10-28 (the set is unchanged except
-# ``nvidia/nemotron-3-super-120b-a12b:free``, which has left the free list).
-# Ordering is a Jev (jev-1.14.0) ranking pass over that live set, scored
-# against this app's job: a short, factual, strictly-JSON diff summary. The
-# ranking was grounded in clean live probes of every model (no failover, no
-# dedup) with the app's real prompt, not in model descriptions.
+# The live gateway catalog was checked on 2026-10-29. This is a curated
+# shortlist of five free text-chat models for this app, based on app-prompt
+# probes rather than Kilo's coding rankings. Laguna is the tested default.
 #
 # ``verified_at`` comes from those probes. 200 = fits the app's default cap;
 # 800 = passes once its own cap is applied; None = no complete reply observed
@@ -81,58 +78,27 @@ class Provider:
 _KILO_MODELS: list[ModelEntry] = [
     ModelEntry(
         value="poolside/laguna-s-2.1:free",
-        label="Laguna S 2.1 (free) — Poolside · Coding · 262K ctx",
+        label="Laguna S 2.1 (free) — Poolside · 262K ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Jev #1. Complete JSON at the 200-token cap in 2/2 clean probes (3.7-5.1s); the only model verified at the default cap on 2026-10-28.",
+        note="Recommended default. Passed summary + watch/semantic triage, change Q&A, and digest probes on 2026-10-29. Previously completed strict JSON at the default 200-token cap in 2/2 probes.",
+        recommended=True,
         verified_at=200,
-    ),
-    ModelEntry(
-        value="xingchen-agi/xing4.0-29b-a4b:free",
-        label="Xing4.0 29B A4B (free) — XingChen · Reasoning · 262K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Jev #2. One complete JSON at the 200-token cap (2.5s) on 2026-10-28, then HTTP 429 in 3/3 paced retries; treat as rate-limited.",
-        verified_at=200,
-    ),
-    ModelEntry(
-        value="nvidia/nemotron-3-ultra-550b-a55b:free",
-        label="Nemotron 3 Ultra (free) — NVIDIA · 550B · 1M ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning model: truncated at 200 twice (finish=length); complete JSON at an 800-token cap (22.5s).",
-        verified_at=800,
-    ),
-    ModelEntry(
-        value="liquid/lfm-2.5-2.6b:free",
-        label="LFM2.5-2.6B (free) — Liquid AI · Lightweight · 65K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning is mandatory; HTTP 429 on both 200-cap probes, then complete JSON at an 800-token cap (1.8s).",
-        verified_at=800,
     ),
     ModelEntry(
         value="nvidia/nemotron-3.5-super-vl:free",
-        label="Nemotron 3.5 Super VL (free) — NVIDIA · Vision · Video · 1M ctx",
+        label="Nemotron 3.5 Super VL (free) — NVIDIA · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Reasoning model: empty at 200 twice; complete JSON at an 800-token cap (7.3s).",
+        note="Passed all three app feature probes on 2026-10-29. Kilo highlights it in its free catalog; NVIDIA free endpoints are trial use, so avoid personal or confidential content.",
         verified_at=800,
     ),
     ModelEntry(
-        value="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-        label="Nemotron 3 Nano Omni (free) — NVIDIA · Multimodal · 256K ctx",
+        value="nvidia/nemotron-3-ultra-550b-a55b:free",
+        label="Nemotron 3 Ultra (free) — NVIDIA · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Reasoning model: empty instantly at 200 twice; complete JSON at an 800-token cap (14.7s).",
-        verified_at=800,
-    ),
-    ModelEntry(
-        value="cohere/north-mini-code:free",
-        label="North Mini Code (free) — Cohere · Coding · 256K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning model: empty at 200 twice on 2026-10-28 (was 200-cap clean on 2026-10-23); complete JSON once at an 800-token cap (7.3s).",
+        note="Passed all three app feature probes on 2026-10-29, but was slower than the recommended default. NVIDIA free endpoints are trial use; avoid personal or confidential content.",
         verified_at=800,
     ),
     ModelEntry(
@@ -140,66 +106,16 @@ _KILO_MODELS: list[ModelEntry] = [
         label="Beam 1.0 (free) — Reflection · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Reasoning model: empty at 200 twice; complete JSON at an 800-token cap (2.2s).",
-        verified_at=800,
-    ),
-    ModelEntry(
-        value="kilo-auto/free",
-        label="Auto Free — Kilo · Server default router · 256K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Router over free models; empty at 200 twice, complete JSON at an 800-token cap (3.3s).",
+        note="Passed all three app feature probes on 2026-10-29. Its summary needs the larger 800-token output cap.",
         verified_at=800,
     ),
     ModelEntry(
         value="dots-studio/dots-3-note-preview:free",
-        label="Dots3-Note Preview (free) — Dots Studio · Vision · 512K ctx",
+        label="Dots3-Note Preview (free) — Dots Studio · 512K ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Reasoning model: complete JSON in 1 of 2 probes at an 800-token cap (10.1s); the other burned to empty.",
+        note="Completed summary + triage once at 800 tokens, but Q&A and digest returned HTTP 403 with the current Kilo key on 2026-10-29. Availability is not consistent across features.",
         verified_at=800,
-    ),
-    ModelEntry(
-        value="nvidia/nemotron-3.5-lightning:free",
-        label="Nemotron 3.5 Lightning (free) — NVIDIA · Reasoning · 1M ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning model: empty/truncated content at both 200 and 800 tokens.",
-    ),
-    ModelEntry(
-        value="stealth/glyph-cluster",
-        label="Glyph Cluster (free) — Stealth · 256K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Reasoning model: HTTP 400 'This model does not support structured output' on every 2026-10-28 probe (timed out >90s in earlier passes).",
-    ),
-    ModelEntry(
-        value="nvidia/nemotron-3.5-content-safety:free",
-        label="Nemotron 3.5 Content Safety (free) — NVIDIA · Moderation · 128K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Moderation model, not a summariser: fixed ~5-token non-JSON replies.",
-    ),
-    ModelEntry(
-        value="openrouter/free",
-        label="Free Models Router — OpenRouter · Vision · 200K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Router over random free models; truncated/empty at both 200 and 800 tokens.",
-    ),
-    ModelEntry(
-        value="recursive/flint-v1.0:free",
-        label="Flint v1.0 (free) — Recursive · Coding · 262K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="HTTP 429 on every 200-cap attempt (both passes) on 2026-10-28; the one 800-cap probe burned the whole budget on hidden reasoning.",
-    ),
-    ModelEntry(
-        value="poolside/laguna-xs-2.1:free",
-        label="Laguna XS 2.1 (free) — Poolside · Coding · 262K ctx",
-        provider="kilo",
-        base=KILO_BASE,
-        note="Hit the free-tier HTTP 429 limit on every recent probe.",
     ),
 ]
 
