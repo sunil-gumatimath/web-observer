@@ -305,30 +305,62 @@ All four are **implemented** — statuses verified against code 2026-09-04:
 
 > Solo + free-tier constraint: no paid proxy/SDK infra in Phase 8–9. Ship deployable increments per phase.
 
+### Recommended next phase: Private Beta Operations
+
+The feature roadmap is paused until Web Observer can be deployed and operated
+outside the local development stack. The hosting provider is intentionally
+undecided; choose it as the first deliverable rather than baking in an
+unreviewed platform choice.
+
+**Goal:** run a small invited beta with reliable scheduled checks, observable
+notification delivery, and a tested recovery path.
+
+**Work, in order:**
+
+1. **Choose the deployment shape.** Select hosting for the Next.js frontend,
+   FastAPI API, scheduler, HTTP/browser/notification workers, Redis, Postgres,
+   and snapshot storage. Confirm Playwright/Chromium support for the browser
+   worker before committing to a host.
+2. **Create staging and repeatable releases.** Configure services and secrets,
+   TLS and allowed origins, health/readiness probes, and a release process that
+   applies Alembic migrations before starting new code. Keep dev-token auth off.
+3. **Prove data recovery.** Document database and object-storage backups, run a
+   restore drill, and record how to roll back an application release without
+   rolling back a completed schema migration.
+4. **Make operations visible.** Alert on failed eligible checks, schedule
+   delays, stuck runs, and pending notification/webhook backlogs. Add a short
+   response runbook for each alert, using the service targets in
+   `docs/local-dev.md` as the initial thresholds.
+5. **Run an invited cohort.** Track the existing targets for at least two
+   weeks: check success, schedule punctuality, duplicate deliveries, alert
+   usefulness, and workspace retention. Review the results before selecting
+   the next feature phase.
+
+**Exit checks:** a clean staging deploy from the release process; one successful
+database and snapshot restore drill; operational alerts exercised end to end;
+and a two-week beta report against the service targets. If a target is missed,
+make its repair the next phase instead of expanding features.
+
+**Out of scope:** new notification channels, stealth/bot-defense bypass,
+authenticated-site support, and paid proxy infrastructure. The approved threat
+model continues to prohibit bot-defense bypass.
+
 ```mermaid
 gantt
     title Web Observer Enhancement Roadmap
     dateFormat  YYYY-MM-DD
-    section Phase 8 (Immediate High-ROI)
-    Telegram Bot Channel                   :p8telegram, 2026-09-08, 7d
-    Interactive Point-and-Click Selector   :p8selector, after p8telegram, 14d
-    section Phase 9 (Advanced Automation)
-    Multi-Step User Journeys (Logins/Clicks) :2026-10-06, 14d
-    Visual Bounding-Box Cropping           :2026-10-15, 10d
-    Diff Heatmap + Flicker (4.1 remainder) :2026-10-20, 8d
-    Web Push (PWA) Notifications           :2026-10-25, 7d
-    section Phase 10 (Enterprise & Ecosystem)
-    Stealth Evasion & Proxy Rotation       :2026-11-01, 14d
-    Chrome/Firefox Extension               :2026-11-10, 14d
-    Zapier & n8n Community Nodes           :2026-11-20, 10d
-    PDF / Document Monitoring Engine       :2026-11-25, 12d
+    section Next: Private Beta Operations
+    Choose hosting + staging                 :p8hosting, 2026-10-29, 14d
+    Release, backup + restore                :p8release, after p8hosting, 14d
+    Operational alerts + invited cohort      :p8beta, after p8release, 14d
 ```
 
 ### Effort vs. Impact Matrix
 
 | Feature | User Impact | Implementation Effort | Recommended Order |
 | --- | --- | --- | --- |
-| **Telegram Bot Alerting** | High | Low (1–2 days) | 1 |
+| **Private Beta Operations** | Critical prerequisite | Medium (host-dependent) | Next |
+| **Telegram Bot Alerting** | High | Low (1–2 days) | After beta feedback |
 | **Async Brand Fetch & Query Hardening** | Done 2026-09 (all 4 items verified in code) | — | Done, skip |
 | **Visual Element Selector (Point-and-Click)** | Partially done 2026-09 (preview + picker shipped; extension flow left) | — | Partial, see 2.1 |
 | **Visual Bounding-Box Crop** | High | Low-Medium (2 days) | 4 |
@@ -350,4 +382,4 @@ gantt
 
 ---
 
-*Document created for pair-programming and roadmap tracking. Last reviewed 2026-10-21: added a shipped-since table, marked the cooldown/flapping guards as partially implemented (3.4), recorded that monitor tags exist at the API level without a UI (4.4), and noted the pHash visual comparison (4.1). Still open: Telegram (3.1), Web Push (3.2), PDF documents (2.4), user journeys (2.2), bounding-box crop (2.3), custom headers/cookies (2.5), time travel (4.3), extension (6.1), SDKs (6.2), community nodes (6.3), PDF reports (6.4), proxies (5.1), stealth (5.2), warm browser pool (5.3). Review or update as feature requirements evolve.*
+*Document created for pair-programming and roadmap tracking. Last reviewed 2026-10-29: prioritized private beta operations before new feature work and replaced the expired Phase 8–10 schedule. Still open: Telegram (3.1), Web Push (3.2), PDF documents (2.4), user journeys (2.2), bounding-box crop (2.3), custom headers/cookies (2.5), time travel (4.3), extension (6.1), SDKs (6.2), community nodes (6.3), PDF reports (6.4), proxies (5.1), stealth (5.2), warm browser pool (5.3). Review or update as feature requirements evolve.*
