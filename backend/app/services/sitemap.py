@@ -134,7 +134,7 @@ def discover_sitemap_urls(
     # 1) Try the standard sitemap locations.
     candidate_locations = _local_urls(base_url)
     page_urls: list[str] = []
-    child_sitemaps: list[str] = []
+    child_sitemaps: list[tuple[str, int]] = []
 
     for loc in candidate_locations:
         if loc in seen:
@@ -153,7 +153,7 @@ def discover_sitemap_urls(
             continue
         root_tag = _root_tag(text)
         if root_tag == "sitemapindex":
-            child_sitemaps.extend(locs)
+            child_sitemaps.extend((child, _depth + 1) for child in locs)
         else:
             page_urls.extend(locs)
 
@@ -177,13 +177,15 @@ def discover_sitemap_urls(
             except SitemapError:
                 continue
             if _root_tag(text) == "sitemapindex":
-                child_sitemaps.extend(locs)
+                child_sitemaps.extend((child, _depth + 1) for child in locs)
             else:
                 page_urls.extend(locs)
 
     # 3) Recurse into child sitemaps (sitemapindex), bounded by depth.
-    if child_sitemaps and _depth < limits.max_depth:
-        for child in child_sitemaps:
+    if child_sitemaps:
+        for child, child_depth in child_sitemaps:
+            if child_depth > limits.max_depth:
+                continue
             if len(page_urls) >= limits.max_urls:
                 break
             if child in seen:
@@ -201,8 +203,8 @@ def discover_sitemap_urls(
             except SitemapError:
                 continue
             if _root_tag(text) == "sitemapindex":
-                if _depth + 1 < limits.max_depth:
-                    child_sitemaps.extend(locs)
+                if child_depth < limits.max_depth:
+                    child_sitemaps.extend((nested, child_depth + 1) for nested in locs)
             else:
                 page_urls.extend(locs)
 

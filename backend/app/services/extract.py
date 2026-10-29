@@ -402,38 +402,38 @@ def _normalize_amount(raw: str) -> str:
 
 
 def _price_candidates(text: str) -> list[str]:
-    candidates: list[str] = []
+    candidates: list[tuple[int, str]] = []
 
-    def add(code: str, amount_raw: str) -> None:
+    def add(position: int, code: str, amount_raw: str) -> None:
         amount = _normalize_amount(amount_raw)
         if amount:
-            candidates.append(f"{code} {amount}")
+            candidates.append((position, f"{code} {amount}"))
 
     sym_cls = re.escape(_PRICE_SYMBOLS)
     code_alt = "|".join(_PRICE_CODES)
 
     # 1) Symbol-led: $19.99, € 20, £15.00, ¥1,200
-    for sym, num in re.findall(rf"([{sym_cls}])\s*{_AMOUNT}", text):
-        add(_SYMBOL_TO_CODE.get(sym, "USD"), num)
+    for match in re.finditer(rf"([{sym_cls}])\s*{_AMOUNT}", text):
+        add(match.start(), _SYMBOL_TO_CODE.get(match.group(1), "USD"), match.group(2))
 
     # 2) Symbol-after (common in Europe): 19,99 €, 1290 Ft-style trailing symbol
-    for num, sym in re.findall(rf"{_AMOUNT}\s*([{sym_cls}])", text):
-        add(_SYMBOL_TO_CODE.get(sym, "USD"), num)
+    for match in re.finditer(rf"{_AMOUNT}\s*([{sym_cls}])", text):
+        add(match.start(), _SYMBOL_TO_CODE.get(match.group(2), "USD"), match.group(1))
 
     # 3) ISO code before or after the number: USD 19.99 / 19.99 EUR
-    for code, num in re.findall(rf"\b({code_alt})\s*{_AMOUNT}", text, re.IGNORECASE):
-        add(code.upper(), num)
-    for num, code in re.findall(rf"{_AMOUNT}\s*\b({code_alt})\b", text, re.IGNORECASE):
-        add(code.upper(), num)
+    for match in re.finditer(rf"\b({code_alt})\s*{_AMOUNT}", text, re.IGNORECASE):
+        add(match.start(), match.group(1).upper(), match.group(2))
+    for match in re.finditer(rf"{_AMOUNT}\s*\b({code_alt})\b", text, re.IGNORECASE):
+        add(match.start(), match.group(2).upper(), match.group(1))
 
     # 4) Bare decimal labelled as price-like text.
     bare = re.search(r"(?:price|cost|amount)\D{0,20}?" + _AMOUNT, text, re.I)
     if bare:
         amount = _normalize_amount(bare.group(1))
         if amount:
-            candidates.append(amount)
+            candidates.append((bare.start(), amount))
 
-    return candidates
+    return [value for _, value in sorted(candidates, key=lambda candidate: candidate[0])]
 
 
 def extract_price(
@@ -475,7 +475,7 @@ def extract_price(
                         sel_exc,
                     )
 
-        search_html = html
+        search_html = tree.html or html
         if css_selector and str(css_selector).strip():
             nodes = tree.css(str(css_selector).strip())
             if nodes:

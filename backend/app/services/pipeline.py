@@ -64,6 +64,7 @@ MODE_PRODUCT_PRICE = MonitorMode.PRODUCT_PRICE.value
 # longer contains any price. Treated as content ("price removed") rather than
 # a failed run, provided a baseline already exists.
 PRICE_REMOVED_MARKER = "(price removed)"
+JSON_FIELD_MISSING_MARKER = "(field missing)"
 
 # Length cap applied to the Snapshot.normalized_text DB preview (full text goes
 # to object storage). Generous cap (50k chars ~8k words) guarantees that in cloud/Postgres
@@ -83,7 +84,12 @@ class PipelineResult:
     unchanged: bool = False
 
 
-def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list[str] | None]:
+def extract_normalized(
+    monitor: Monitor,
+    result: FetchResult,
+    *,
+    _include_rss_identity: bool = False,
+) -> tuple[str, list[str] | None]:
     """Return ``(normalized_text, parsed_list_items_or_none)``.
 
     For ``site_links``/``list_items`` modes *items* carries the parsed item
@@ -132,7 +138,7 @@ def extract_normalized(monitor: Monitor, result: FetchResult) -> tuple[str, list
     if mode == "rss_feed":
         from app.services.rss import extract_rss_items
 
-        items = extract_rss_items(result.text)
+        items = extract_rss_items(result.text, include_identity=_include_rss_identity)
         return list_to_normalized(items), items
 
     if mode == "readme":
@@ -228,6 +234,22 @@ def _is_price_removal(db: Session, monitor: Monitor, error_code: str) -> bool:
     return _has_previous_success(db, monitor)
 
 
+def _is_list_removal(db: Session, monitor: Monitor, error_code: str) -> bool:
+    if error_code != "selector_not_found":
+        return False
+    if monitor.mode != "list_items":
+        return False
+    return _has_previous_success(db, monitor)
+
+
+def _is_json_field_removal(db: Session, monitor: Monitor, error_code: str) -> bool:
+    if error_code != "selector_not_found":
+        return False
+    if monitor.mode != MonitorMode.JSON_FIELD.value:
+        return False
+    return _has_previous_success(db, monitor)
+
+
 def _mode_summary(mode: str, prev_text: str, new_text: str) -> str:
     """Deterministic change summary, tailored to the monitor mode.
 
@@ -284,7 +306,7 @@ def _extract_and_store_snapshot(
         )
 
     try:
-        normalized, items = extract_normalized(monitor, result)
+        normalized, items = extract_normalized(monitor, result, _include_rss_identity=True)
     except ExtractionError as exc:
         # A vanished price is a *change* ("price removed"), not a broken check
         # — but only once a baseline exists to differ from; otherwise there is
@@ -292,6 +314,12 @@ def _extract_and_store_snapshot(
         # NOTE: keep boolean operators out of this handler (no-boolean-in-except).
         if _is_price_removal(db, monitor, exc.code):
             normalized = PRICE_REMOVED_MARKER
+            items = None
+        elif _is_list_removal(db, monitor, exc.code):
+            normalized = ""
+            items = []
+        elif _is_json_field_removal(db, monitor, exc.code):
+            normalized = JSON_FIELD_MISSING_MARKER
             items = None
         else:
             run.status = RunStatus.FAILED.value
@@ -313,7 +341,12 @@ def _extract_and_store_snapshot(
                 ),
             )
 
-    if not normalized:
+    empty_list_after_baseline = (
+        monitor.mode == "list_items"
+        and items == []
+        and _has_previous_success(db, monitor)
+    )
+    if not normalized and not empty_list_after_baseline:
         run.status = RunStatus.FAILED.value
         run.http_status = result.status_code
         run.latency_ms = result.latency_ms
@@ -348,7 +381,14 @@ def _extract_and_store_snapshot(
             ),
         )
 
-    digest = content_hash(normalized)
+    # List modes are compared as sets; preserve their display order in the
+    # snapshot while making the fast-path hash use the same set semantics.
+    digest_text = (
+        "\n".join(sorted(set(items)))
+        if monitor.mode in LIST_DIFF_MODES and items is not None
+        else normalized
+    )
+    digest = content_hash(digest_text)
     object_key: str | None = None
     text_key: str | None = None
     ct = result.content_type
@@ -515,9 +555,20 @@ def _detect_change(
                 )
     ctx.prev_text = prev_text
 
-    # Unchanged fast-path (shared by every mode): identical hash means no
-    # change regardless of how the mode extracts content.
-    if prev.content_hash == digest:
+    # List snapshots are set-compared. Compare the recovered prior items too:
+    # this keeps reorders quiet and avoids a one-time alert when adopting the
+    # order-independent hash from an older baseline.
+    lists_unchanged = False
+    if monitor.mode in LIST_DIFF_MODES and items is not None:
+        previous_items = items_from_normalized(prev_text)
+        if monitor.mode == "rss_feed":
+            previous_visible = {item.split("<!--mtw-id:", 1)[0] for item in previous_items}
+            current_visible = {item.split("<!--mtw-id:", 1)[0] for item in items}
+            lists_unchanged = previous_visible == current_visible
+        else:
+            lists_unchanged = set(previous_items) == set(items)
+
+    if prev.content_hash == digest or lists_unchanged:
         from app.services.adaptive import note_check_outcome
 
         run.status = RunStatus.SUCCEEDED.value
@@ -745,7 +796,14 @@ def _create_change_event(
     # Backward-compat fallback: if enrichment came from a mocked heuristic/fallback
     # provider with no noise flag but watch_note exists, fall back to triage_change
     # so existing tests mocking _call_llm_triage still work.
-    if watch_note and not is_noise and enrichment.provider != "llm":
+    if (
+        watch_note
+        and not is_noise
+        and enrichment.provider != "llm"
+        and ai_enabled
+        and provider_config_valid
+        and _settings.ai_summaries_enabled
+    ):
         from app.services.ai_summary import triage_change
 
         fallback_noise, fallback_reason = triage_change(

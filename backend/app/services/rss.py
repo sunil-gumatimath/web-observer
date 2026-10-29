@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from urllib.parse import quote
 
 from app.services.extract import ExtractionError
 
 
-def extract_rss_items(text: str) -> list[str]:
-    """Parse RSS/Atom XML and return items as ``[title](link)`` or guid."""
+def extract_rss_items(text: str, *, include_identity: bool = False) -> list[str]:
+    """Parse RSS/Atom XML into display items, optionally including diff identities."""
     text = (text or "").strip()
     if not text:
         raise ExtractionError("extraction_failed", "Empty RSS feed")
@@ -50,7 +51,13 @@ def extract_rss_items(text: str) -> list[str]:
             if not label:
                 continue
             href = link or gid
-            items.append(f"[{label}]({href})" if href else label)
+            identity = gid or link
+            item = f"[{label}]({href})" if href else label
+            items.append(
+                f"{item}<!--mtw-id:{quote(identity, safe='')}-->"
+                if identity and include_identity
+                else item
+            )
     else:
         # RSS: <channel><item><title>/<link>/<guid>
         for item in root.iter():
@@ -70,7 +77,13 @@ def extract_rss_items(text: str) -> list[str]:
                 if not label:
                     continue
                 href = link or guid
-                items.append(f"[{label}]({href})" if href else label)
+                identity = guid or link
+                item_text = f"[{label}]({href})" if href else label
+                items.append(
+                    f"{item_text}<!--mtw-id:{quote(identity, safe='')}-->"
+                    if identity and include_identity
+                    else item_text
+                )
 
     if not items:
         raise ExtractionError("extraction_failed", "RSS feed contained no items")

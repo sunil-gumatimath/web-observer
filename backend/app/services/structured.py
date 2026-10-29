@@ -94,11 +94,11 @@ class ListDiff:
         """
         lines: list[str] = []
         for item in self.removed:
-            lines.append(f"- {item}")
+            lines.append(f"- {_display_item(item)}")
         for item in self.added:
-            lines.append(f"+ {item}")
+            lines.append(f"+ {_display_item(item)}")
         for before, after in self.modified:
-            lines.append(f"~ {before} → {after}")
+            lines.append(f"~ {_display_item(before)} → {_display_item(after)}")
         return "\n".join(lines) if lines else "(no list changes)"
 
 
@@ -199,15 +199,26 @@ def diff_lists(before: list[str], after: list[str]) -> ListDiff:
     ``before`` order — alphabetical sorting used to scramble recency (e.g. new
     blog posts no longer surfaced first in alerts).
     """
-    before_set = set(before)
-    after_set = set(after)
-    added = _dedupe_keep_order(x for x in after if x not in before_set)
-    removed = _dedupe_keep_order(x for x in before if x not in after_set)
+    def identity(item: str) -> str:
+        match = re.search(r"<!--mtw-id:(.*?)-->$", item)
+        return f"id:{match.group(1)}" if match else f"item:{item}"
+
+    before_by_id = {identity(item): item for item in before}
+    after_by_id = {identity(item): item for item in after}
+    added = _dedupe_keep_order(item for item in after if identity(item) not in before_by_id)
+    removed = _dedupe_keep_order(item for item in before if identity(item) not in after_by_id)
+    modified = [
+        (before_by_id[identity(item)], item)
+        for item in after
+        if identity(item) in before_by_id and before_by_id[identity(item)] != item
+    ]
     summary_parts = []
     if added:
         summary_parts.append(f"+{len(added)} added")
     if removed:
         summary_parts.append(f"-{len(removed)} removed")
+    if modified:
+        summary_parts.append(f"~{len(modified)} updated")
     if not summary_parts:
         summary = "List unchanged"
     else:
@@ -215,7 +226,12 @@ def diff_lists(before: list[str], after: list[str]) -> ListDiff:
     return ListDiff(
         added=added,
         removed=removed,
-        modified=[],
+        modified=modified,
         summary=summary,
         normalized=list_to_normalized(after),
     )
+
+
+def _display_item(item: str) -> str:
+    """Hide feed identity metadata from the user-facing diff."""
+    return re.sub(r"<!--mtw-id:.*?-->$", "", item)
