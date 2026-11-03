@@ -426,12 +426,15 @@ def _price_candidates(text: str) -> list[str]:
     for match in re.finditer(rf"{_AMOUNT}\s*\b({code_alt})\b", text, re.IGNORECASE):
         add(match.start(), match.group(2).upper(), match.group(1))
 
-    # 4) Bare decimal labelled as price-like text.
-    bare = re.search(r"(?:price|cost|amount)\D{0,20}?" + _AMOUNT, text, re.I)
-    if bare:
-        amount = _normalize_amount(bare.group(1))
-        if amount:
-            candidates.append((bare.start(), amount))
+    # 4) Bare decimal labelled as price-like text. Only used as a last resort
+    # when no currency symbol or ISO code was found, so that an attribute like
+    # class="price" cannot shadow a real "$29.99" candidate.
+    if not candidates:
+        bare = re.search(r"(?:price|cost|amount)\D{0,20}?" + _AMOUNT, text, re.I)
+        if bare:
+            amount = _normalize_amount(bare.group(1))
+            if amount:
+                candidates.append((bare.start(), amount))
 
     return [value for _, value in sorted(candidates, key=lambda candidate: candidate[0])]
 
