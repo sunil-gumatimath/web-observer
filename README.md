@@ -20,7 +20,7 @@ Web change-detection and alerting platform.
 
 Cloudflare free tier is wired end-to-end and every piece is optional: raw snapshots in R2, a Browser Rendering **failover** Worker for `js_required` fetches (local Playwright stays primary so the ~10 min/day edge-browser quota is preserved), a `security_scan` monitor mode backed by the URL Scanner, screenshots served from a public R2 bucket over a custom domain, and a cookie-less Web Analytics beacon. Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
 
-Verified end-to-end (last run 2026-10-26): backend `335 passed` unit tests (integration tests run separately in CI), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `94 passed` vitest tests across 13 files; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client.
+Verified end-to-end (last run 2026-11-03): backend `336 passed` unit tests (`347 passed` full suite across 47 files), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `88 passed` vitest tests across 12 files; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client.
 
 ## Documentation
 
