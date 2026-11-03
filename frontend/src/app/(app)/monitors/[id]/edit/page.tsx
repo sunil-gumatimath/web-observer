@@ -292,7 +292,9 @@ export default function EditMonitorPage() {
 							value={mode}
 							onChange={(e) => {
 								const m = e.target.value as MonitorMode;
+								if (selectorLabel(m) !== selectorLabel(mode)) setCssSelector(null);
 								setMode(m);
+								if (m === "security_scan") setIntervalRaw("1440");
 								if (!needsJs(m)) setJsRequired(false);
 							}}
 						>
@@ -358,6 +360,10 @@ export default function EditMonitorPage() {
 						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
 							Site links mode reads the sitemap over HTTP and watches for added
 							or removed URLs.
+						</p>
+					) : mode === "security_scan" ? (
+						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
+							Security scan uses Cloudflare URL Scanner. It requires the server token; run daily or less often.
 						</p>
 					) : (
 						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">

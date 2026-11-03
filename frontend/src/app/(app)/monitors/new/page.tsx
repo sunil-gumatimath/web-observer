@@ -367,7 +367,9 @@ export default function NewMonitorPage() {
 								value={mode}
 								onChange={(e) => {
 									const m = e.target.value as MonitorMode;
+									if (selectorLabel(m) !== selectorLabel(mode)) setCssSelector(null);
 									setMode(m);
+									if (m === "security_scan") setIntervalRaw("1440");
 									if (!needsJs(m)) setJsRequired(false);
 								}}
 							>
@@ -679,6 +681,7 @@ function SitemapDiscovery({
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [result, setResult] = useState<SitemapImportResult | null>(null);
+	const [submittedUrls, setSubmittedUrls] = useState<string[]>([]);
 
 	function toggleAll(next: boolean) {
 		if (!discovery) return;
@@ -734,6 +737,8 @@ function SitemapDiscovery({
 		setResult(null);
 		try {
 			const ws = await ensureWorkspace();
+			const urls = [...selected];
+			setSubmittedUrls(urls);
 			const ignore = ignoreSelectors
 				.split("\n")
 				.map((s) => s.trim())
@@ -744,7 +749,7 @@ function SitemapDiscovery({
 				.filter(Boolean);
 			const res = await api.createMonitorsFromSitemap(ws, {
 				url: discovery.url,
-				urls: [...selected],
+				urls,
 				mode,
 				css_selector: cssSelector || null,
 				schedule_interval_minutes: interval!,
@@ -775,9 +780,20 @@ function SitemapDiscovery({
 						</p>
 					) : null}
 					{result.errors.length ? (
-						<p className="text-xs text-[var(--danger)]">
-							{result.errors.length} failed — see server logs.
-						</p>
+						<div className="space-y-2 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/5 p-3">
+							<p className="text-xs font-medium text-[var(--danger)]">
+								{result.errors.length} failed — review the URL and reason below.
+							</p>
+							<ul className="max-h-48 space-y-1 overflow-y-auto text-xs text-[var(--ink-muted)]">
+								{result.errors.map((item, index) => (
+									<li key={`${item.row}-${index}`}>
+										<span className="font-medium">
+											{submittedUrls[Number(item.row)] ?? `Row ${item.row}`}:
+										</span>{" "}{item.error}
+									</li>
+								))}
+							</ul>
+						</div>
 					) : null}
 					<div className="flex gap-2 pt-2">
 						<Button type="button" onClick={onDone}>
@@ -864,7 +880,12 @@ function SitemapDiscovery({
 									<Select
 										id="sm-mode"
 										value={mode}
-										onChange={(e) => setMode(e.target.value as MonitorMode)}
+										onChange={(e) => {
+											const nextMode = e.target.value as MonitorMode;
+											if (selectorLabel(nextMode) !== selectorLabel(mode)) setCssSelector(null);
+											setMode(nextMode);
+											if (!needsJs(nextMode)) setJsRequired(false);
+										}}
 									>
 										{MONITOR_MODE_OPTIONS.filter((o) =>
 											SITEMAP_IMPORT_MODES.includes(o.value),

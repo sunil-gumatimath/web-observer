@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   Badge,
   Button,
+  buttonClass,
   Card,
   EmptyState,
   ErrorBox,
@@ -62,6 +63,7 @@ export default function DashboardPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [baselineCaptured, setBaselineCaptured] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,9 +76,18 @@ export default function DashboardPage() {
           api.alertsSummary(ws).catch(() => null),
           api.listNotificationChannels(ws).catch(() => []),
         ]);
+        const hasChecksAlready =
+          (u?.checks_count ?? 0) > 0 || m.some((item) => Boolean(item.latest_change));
+        const firstMonitorRuns = !hasChecksAlready && m[0]
+          ? await api.listRuns(ws, m[0].id).catch(() => [])
+          : [];
         if (!cancelled) {
           setWorkspaceId(ws);
           setMonitors(m);
+          setBaselineCaptured(
+            hasChecksAlready ||
+            firstMonitorRuns.some((run) => run.status === "succeeded" && run.snapshot_id),
+          );
           setUsage(u);
           setAlerts(a);
           setChannels(c);
@@ -145,7 +156,10 @@ export default function DashboardPage() {
       ? (100 * monitors.length) / usage.max_monitors
       : null;
   const hasMonitor = monitors.length > 0;
-  const hasBaseline = (usage?.checks_count ?? 0) > 0 || monitors.some((m) => m.latest_change);
+  const hasBaseline =
+    baselineCaptured ||
+    (usage?.checks_count ?? 0) > 0 ||
+    monitors.some((m) => Boolean(m.latest_change));
   const recentMonitors = [...monitors]
     .sort((a, b) => {
       const timeA = new Date(a.latest_change?.created_at || a.created_at).getTime();
@@ -154,7 +168,7 @@ export default function DashboardPage() {
     })
     .slice(0, 8);
   const hasChannel = channels.some((c) => c.enabled);
-  const showChecklist = monitors.length === 0 || !hasBaseline;
+  const showChecklist = !hasMonitor || !hasBaseline || !hasChannel;
 
   return (
     <div>
@@ -195,13 +209,14 @@ export default function DashboardPage() {
                 Resume all
               </Button>
             ) : null}
-            <Link href="/monitors/new">
-              <Button type="button">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                New monitor
-              </Button>
+            <Link
+              href="/monitors/new"
+              className={buttonClass({ variant: "primary" })}
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              New monitor
             </Link>
           </>
         }
@@ -265,8 +280,11 @@ export default function DashboardPage() {
           title="No monitors yet"
           body="Create a monitor for a public URL — page content, site links, product price, list items, JSON field, RSS feed, GitHub README, visual diff, or security scan."
           action={
-            <Link href="/monitors/new">
-              <Button type="button">Create your first monitor</Button>
+            <Link
+              href="/monitors/new"
+              className={buttonClass({ variant: "primary" })}
+            >
+              Create your first monitor
             </Link>
           }
         />

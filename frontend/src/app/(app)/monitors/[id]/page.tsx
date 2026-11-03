@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
 	Badge,
 	Button,
+	buttonClass,
 	Card,
 	CategoryBadge,
 	ErrorBox,
@@ -574,7 +575,7 @@ function MonitorDetailInner() {
 								href={monitor.url}
 								target="_blank"
 								rel="noreferrer"
-								className="inline-flex items-center gap-1 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)] transition"
+								className={buttonClass({ variant: "secondary", size: "sm" })}
 							>
 								Visit site ↗
 							</a>
@@ -944,7 +945,7 @@ function MonitorDetailInner() {
 								</div>
 								<Link
 									href={`/changes/${latestChange.id}`}
-									className="inline-flex items-center gap-1 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)]"
+									className={buttonClass({ variant: "secondary", size: "sm" })}
 								>
 									Inspect Diff →
 								</Link>

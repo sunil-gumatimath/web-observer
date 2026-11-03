@@ -16,29 +16,31 @@ export function cn(...parts: Array<string | false | null | undefined>) {
 	return parts.filter(Boolean).join(" ");
 }
 
-export function Button({
-	className,
+export type ButtonVariant = "primary" | "secondary" | "tertiary" | "inverse" | "danger" | "ghost";
+export type ButtonSize = "sm" | "md" | "lg";
+
+export function buttonClass({
 	variant = "primary",
 	size = "md",
-	...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-	variant?: "primary" | "secondary" | "tertiary" | "inverse" | "danger" | "ghost";
-	size?: "sm" | "md" | "lg";
-	ref?: React.Ref<HTMLButtonElement>;
-}) {
+	className,
+}: {
+	variant?: ButtonVariant;
+	size?: ButtonSize;
+	className?: string;
+} = {}) {
 	const styles = {
 		primary:
-			"bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] hover:text-[var(--on-primary)] active:bg-[var(--primary-focus)] active:text-[var(--on-primary)] border border-transparent",
+			"bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] hover:!text-[var(--on-primary)] active:bg-[var(--primary-focus)] active:!text-[var(--on-primary)] border border-transparent",
 		secondary:
-			"bg-[var(--surface-1)] text-[var(--ink)] border border-[var(--hairline)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)] active:text-[var(--ink)]",
+			"bg-[var(--surface-1)] text-[var(--ink)] border border-[var(--hairline)] hover:bg-[var(--surface-2)] hover:!text-[var(--ink)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)] active:!text-[var(--ink)]",
 		tertiary:
-			"bg-[var(--canvas)] text-[var(--ink)] border border-transparent hover:bg-[var(--surface-1)] hover:text-[var(--ink)] active:bg-[var(--surface-2)] active:text-[var(--ink)]",
+			"bg-[var(--canvas)] text-[var(--ink)] border border-transparent hover:bg-[var(--surface-1)] hover:!text-[var(--ink)] active:bg-[var(--surface-2)] active:!text-[var(--ink)]",
 		inverse:
-			"bg-[var(--inverse-canvas)] text-[var(--inverse-ink)] border border-transparent hover:bg-[var(--inverse-surface-1)] hover:text-[var(--inverse-ink)] active:bg-[var(--inverse-surface-2)] active:text-[var(--inverse-ink)]",
+			"bg-[var(--inverse-canvas)] text-[var(--inverse-ink)] border border-transparent hover:bg-[var(--inverse-surface-1)] hover:!text-[var(--inverse-ink)] active:bg-[var(--inverse-surface-2)] active:!text-[var(--inverse-ink)]",
 		danger:
-			"bg-[var(--danger)] text-white hover:opacity-90 hover:text-white active:opacity-100 active:text-white border border-transparent",
+			"bg-[var(--danger)] text-white hover:opacity-90 hover:!text-white active:opacity-100 active:!text-white border border-transparent",
 		ghost:
-			"bg-transparent text-[var(--ink)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)] active:bg-[var(--surface-3)] active:text-[var(--ink)] border border-transparent",
+			"bg-transparent text-[var(--ink)] hover:bg-[var(--surface-2)] hover:!text-[var(--ink)] active:bg-[var(--surface-3)] active:!text-[var(--ink)] border border-transparent",
 	}[variant];
 
 	const sizes = {
@@ -47,16 +49,29 @@ export function Button({
 		lg: "px-4 py-2.5 text-sm leading-[1.20] rounded-[8px] min-h-[40px]",
 	}[size];
 
+	return cn(
+		"btn inline-flex items-center justify-center gap-1.5 font-medium transition",
+		"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--canvas)]",
+		"disabled:pointer-events-none disabled:opacity-40",
+		styles,
+		sizes,
+		className,
+	);
+}
+
+export function Button({
+	className,
+	variant = "primary",
+	size = "md",
+	...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+	variant?: ButtonVariant;
+	size?: ButtonSize;
+	ref?: React.Ref<HTMLButtonElement>;
+}) {
 	return (
 		<button
-			className={cn(
-				"inline-flex items-center justify-center gap-1.5 font-medium transition",
-				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--canvas)]",
-				"disabled:pointer-events-none disabled:opacity-40",
-				styles,
-				sizes,
-				className,
-			)}
+			className={buttonClass({ variant, size, className })}
 			{...props}
 		/>
 	);
@@ -302,7 +317,7 @@ export function ErrorBox({ message }: { message: string }) {
 					d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
 				/>
 			</svg>
-			<span>{message}</span>
+			<span className="whitespace-pre-line">{message}</span>
 		</div>
 	);
 }
@@ -326,7 +341,7 @@ export function SuccessBox({ message }: { message: string }) {
 					d="m4.5 12.75 6 6 9-13.5"
 				/>
 			</svg>
-			<span>{message}</span>
+			<span className="whitespace-pre-line">{message}</span>
 		</div>
 	);
 }

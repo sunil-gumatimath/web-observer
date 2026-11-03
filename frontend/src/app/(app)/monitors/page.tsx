@@ -440,6 +440,9 @@ export default function MonitorsPage() {
 										aria-label={m.name}
 										onClick={() => router.push(`/monitors/${m.id}`)}
 										onKeyDown={(e) => {
+											// Keep the card's link shortcut from consuming Space on its
+											// nested selection checkbox.
+											if (e.target !== e.currentTarget) return;
 											if (e.key === "Enter" || e.key === " ") {
 												e.preventDefault();
 												router.push(`/monitors/${m.id}`);

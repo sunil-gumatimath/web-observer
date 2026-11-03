@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { Logo } from "@/components/logo";
-import { cn } from "@/components/ui";
+import { buttonClass, cn } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NavClock } from "@/components/nav-clock";
 import { api } from "@/lib/api";
@@ -95,13 +95,13 @@ function ClerkUserControls() {
 			<div className="flex items-center gap-2" suppressHydrationWarning>
 				<Link
 					href="/sign-in"
-					className="rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] px-2.5 py-1 text-xs font-medium text-[var(--fg)] transition hover:bg-[var(--surface-2)] hover:border-[var(--hairline-strong)] active:bg-[var(--surface-3)]"
+					className={buttonClass({ variant: "secondary", size: "sm" })}
 				>
 					Sign in
 				</Link>
 				<Link
 					href="/sign-up"
-					className="rounded-[8px] bg-[var(--primary)] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[var(--primary-hover)] active:bg-[var(--primary-focus)]"
+					className={buttonClass({ variant: "primary", size: "sm" })}
 				>
 					Sign up
 				</Link>
@@ -322,7 +322,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 			<main
 				key={pathname}
-				className="mx-auto max-w-6xl px-4 py-8 animate-fade-in-up"
+				className="mx-auto max-w-6xl px-4 py-8"
 				suppressHydrationWarning
 			>
 				{children}

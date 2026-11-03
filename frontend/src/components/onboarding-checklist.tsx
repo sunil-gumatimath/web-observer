@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Badge, Button, Card } from "@/components/ui";
+import { Badge, Button, buttonClass, Card } from "@/components/ui";
 
 export const ONBOARDING_DISMISSED_KEY = "wo-onboarding-dismissed";
 
@@ -73,7 +73,14 @@ export function OnboardingChecklist({
   hasChannel: boolean;
   firstMonitorId?: string | null;
 }) {
-  const [dismissed, setDismissed] = useState<boolean>(readDismissed);
+  const [dismissed, setDismissed] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (readDismissed()) {
+      setDismissed(true);
+    }
+  }, []);
+
   if (dismissed) return null;
 
   const steps: Step[] = [
@@ -190,15 +197,15 @@ export function OnboardingChecklist({
                 </div>
               </div>
               {state === "done" ? null : (
-                <Link href={step.href} className="shrink-0">
-                  <Button
-                    type="button"
-                    variant={state === "current" ? "primary" : "secondary"}
-                    size="sm"
-                    tabIndex={-1}
-                  >
-                    {step.cta} →
-                  </Button>
+                <Link
+                  href={step.href}
+                  className={buttonClass({
+                    variant: state === "current" ? "primary" : "secondary",
+                    size: "sm",
+                    className: "shrink-0",
+                  })}
+                >
+                  {step.cta} →
                 </Link>
               )}
             </li>
