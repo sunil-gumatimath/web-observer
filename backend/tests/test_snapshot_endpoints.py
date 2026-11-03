@@ -48,6 +48,7 @@ def test_get_snapshot_screenshots_fallback():
     assert res.raw_download_url == "/api/v1/public/assets/screenshots/test.png"
     assert res.normalized_text == "ahash:0000\nsha256:1234"
 
+
 def test_get_snapshot_raw_fallback():
     ws_id = uuid.uuid4()
     snap_id = uuid.uuid4()
@@ -132,6 +133,7 @@ def test_get_snapshot_raw_endpoint_404_when_missing():
             _workspace=MagicMock(),
         )
     assert exc_info.value.status_code == 404
+
 
 def test_get_change_visual_diff_and_previous_run_id():
     from app.models.entities import ChangeEvent, Monitor

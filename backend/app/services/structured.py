@@ -199,6 +199,7 @@ def diff_lists(before: list[str], after: list[str]) -> ListDiff:
     ``before`` order — alphabetical sorting used to scramble recency (e.g. new
     blog posts no longer surfaced first in alerts).
     """
+
     def identity(item: str) -> str:
         match = re.search(r"<!--mtw-id:(.*?)-->$", item)
         return f"id:{match.group(1)}" if match else f"item:{item}"

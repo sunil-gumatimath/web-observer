@@ -45,9 +45,9 @@ def test_build_systemone_payload_with_watch_and_trigger() -> None:
         semantic_trigger="price increase > $5",
     )
     assert "matches_criteria" in payload["questions"]
-    assert "price increase > $5" in payload["questions"]["matches_criteria"]["instructions"]
+    assert "price increase &gt; $5" in payload["questions"]["matches_criteria"]["instructions"]
     assert "WATCH NOTE: only alert on price changes" in payload["state"]
-    assert "SEMANTIC TRIGGER: price increase > $5" in payload["state"]
+    assert "SEMANTIC TRIGGER: price increase &gt; $5" in payload["state"]
 
 
 def test_parse_subq_response_signal() -> None:

@@ -16,7 +16,7 @@ from app.models import *  # noqa: F401,F403
 def _pg_url() -> str:
     return os.environ.get(
         "TEST_DATABASE_URL",
-        "postgresql+psycopg://monitor:monitor@localhost:5432/web_observer_test",
+        "postgresql+psycopg://monitor:monitor@127.0.0.1:5432/web_observer_test",
     )
 
 

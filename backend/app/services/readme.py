@@ -281,7 +281,7 @@ def fetch_readme_text(
     budget_exhausted = False
     last_exc: Exception | None = None
     for raw_url in _candidate_raw_urls(owner, repo, branch_hint):
-        if time.monotonic() > deadline:
+        if time.monotonic() >= deadline:
             budget_exhausted = True
             logger.warning(
                 "readme_probe_budget_exhausted owner=%s repo=%s url=%s",

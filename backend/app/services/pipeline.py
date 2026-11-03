@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
@@ -342,9 +343,7 @@ def _extract_and_store_snapshot(
             )
 
     empty_list_after_baseline = (
-        monitor.mode == "list_items"
-        and items == []
-        and _has_previous_success(db, monitor)
+        monitor.mode == "list_items" and items == [] and _has_previous_success(db, monitor)
     )
     if not normalized and not empty_list_after_baseline:
         run.status = RunStatus.FAILED.value
@@ -1061,11 +1060,23 @@ def _commit_terminal_success(db: Session, run: MonitorRun) -> bool:
         )
         return False
     # Keep the ORM object consistent with the committed row for the rest of
-    # the request (PipelineResult reads run.status after commit expiry).
-    run.status = RunStatus.SUCCEEDED.value
-    run.finished_at = now
-    run.error_code = None
-    run.error_message = None
+    # the request (PipelineResult reads run.status after commit expiry) without
+    # reopening a transaction on the now-idle session.
+    state = sa_inspect(run, raiseerr=False)
+    if state is not None:
+        run.__dict__["status"] = RunStatus.SUCCEEDED.value
+        run.__dict__["finished_at"] = now
+        run.__dict__["error_code"] = None
+        run.__dict__["error_message"] = None
+        state.expired_attributes.discard("status")
+        state.expired_attributes.discard("finished_at")
+        state.expired_attributes.discard("error_code")
+        state.expired_attributes.discard("error_message")
+    else:
+        run.status = RunStatus.SUCCEEDED.value
+        run.finished_at = now
+        run.error_code = None
+        run.error_message = None
     return True
 
 
