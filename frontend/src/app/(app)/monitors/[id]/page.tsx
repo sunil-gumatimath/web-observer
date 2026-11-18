@@ -20,6 +20,7 @@ import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
+import { brandPreviewUrl } from "@/lib/brand";
 import { api, ApiError, brandAssetUrl, screenshotUrl } from "@/lib/api";
 import { VALUE_HISTORY_MODES } from "@/lib/modes";
 import {
@@ -464,7 +465,9 @@ function MonitorDetailInner() {
 	// Full result panel: after create (?fresh=1), or while any check is in flight.
 	const showResultCard =
 		showFreshBanner || polling || Boolean(latestRun && isActiveRun(latestRun));
-	const brandHero = brandAssetUrl(monitor.brand?.hero_path) || monitor.brand?.hero_url;
+	const brandHero = brandPreviewUrl(monitor.brand);
+	const logoOnlyPreview =
+		!monitor.brand?.hero_path && !monitor.brand?.hero_url && Boolean(brandHero);
 	const screenshotFallback =
 		(latestOkRun && screenshotUrl(`screenshots/${monitor.id}/${latestOkRun.id}.png`)) ||
 		(changes[0]?.run_id && screenshotUrl(`screenshots/${monitor.id}/${changes[0].run_id}.png`)) ||
@@ -490,7 +493,9 @@ function MonitorDetailInner() {
 							<img
 								src={activeHero}
 								alt={monitor.name ? `${monitor.name} preview` : "Preview"}
-								className="absolute inset-0 size-full object-cover object-top"
+								className={`absolute inset-0 size-full ${
+					logoOnlyPreview ? "object-contain p-6" : "object-cover object-top"
+				}`}
 								onError={() => {
 									if (!heroImgFailed && brandHero) {
 										setHeroImgFailed(true);
