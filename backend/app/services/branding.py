@@ -46,6 +46,41 @@ def _abs(base_url: str, candidate: str) -> str | None:
     return urljoin(base_url, candidate)
 
 
+def _logo_fallback_candidates(url: str) -> list[str]:
+    """Provider logos/favicons for a domain, used when page HTML is unavailable."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    domain = (parsed.netloc or "").split(":")[0]
+    if not domain:
+        return []
+    return [
+        f"https://logo.clearbit.com/{domain}?size=256",
+        f"https://www.google.com/s2/favicons?domain={domain}&sz=256",
+        f"https://www.google.com/s2/favicons?domain={domain}&sz=128",
+        f"https://icons.duckduckgo.com/ip3/{domain}.ico",
+        f"https://unavatar.io/{domain}",
+        f"https://{domain}/favicon.ico",
+    ]
+
+
+def _merge_logo_fallbacks(candidates: list[str], url: str) -> list[str]:
+    """Append provider fallbacks without duplicates, capped at 8."""
+    merged = list(candidates)
+    for candidate in _logo_fallback_candidates(url):
+        if candidate not in merged:
+            merged.append(candidate)
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for candidate in merged:
+        if candidate not in seen:
+            seen.add(candidate)
+            deduped.append(candidate)
+        if len(deduped) >= 8:
+            break
+    return deduped
+
+
 def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
     """Best-effort extraction of brand info from an HTML document."""
     from selectolax.parser import HTMLParser
@@ -200,7 +235,6 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
 
 def fetch_brand_info(url: str, *, timeout_seconds: int = 5) -> BrandMeta:
     """Fetch a page and parse its brand metadata."""
-    from urllib.parse import urlparse
 
     try:
         result: FetchResult = fetch_url(
@@ -208,44 +242,13 @@ def fetch_brand_info(url: str, *, timeout_seconds: int = 5) -> BrandMeta:
         )
     except FetchError as exc:  # noqa: BLE001
         logger.info("brand_fetch_failed url=%s error=%s", url, exc)
-        return BrandMeta()
+        return BrandMeta(logo_candidates=_logo_fallback_candidates(url))
     if result.status_code >= 400:
-        return BrandMeta()
+        return BrandMeta(logo_candidates=_logo_fallback_candidates(result.final_url or url))
 
     # Resolve relative URLs against the final URL after redirects
     meta = parse_brand_meta(result.text or "", result.final_url or url)
-
-    # Build tiered fallback stack: keep extracted candidates first, then
-    # append multi-provider candidates in priority order (highest quality first).
-    # Deduplicate, keep order, cap at 8.
-    parsed = urlparse(result.final_url or url)
-    domain = (parsed.netloc or urlparse(url).netloc).split(":")[0]
-    if domain:
-        tiered = [
-            f"https://logo.clearbit.com/{domain}?size=256",
-            f"https://www.google.com/s2/favicons?domain={domain}&sz=256",
-            f"https://www.google.com/s2/favicons?domain={domain}&sz=128",
-            f"https://icons.duckduckgo.com/ip3/{domain}.ico",
-            f"https://unavatar.io/{domain}",
-            f"https://{domain}/favicon.ico",
-        ]
-        # If extracted candidates already exist they keep priority; append tiered
-        # ones that are not duplicates. If no extracted candidates, the tiered
-        # list itself becomes the fallback stack.
-        for cand in tiered:
-            if cand not in meta.logo_candidates:
-                meta.logo_candidates.append(cand)
-        # Deduplicate while preserving order and enforce max 8 candidates
-        seen: set[str] = set()
-        deduped: list[str] = []
-        for c in meta.logo_candidates:
-            if c not in seen:
-                seen.add(c)
-                deduped.append(c)
-            if len(deduped) >= 8:
-                break
-        meta.logo_candidates = deduped
-
+    meta.logo_candidates = _merge_logo_fallbacks(meta.logo_candidates, result.final_url or url)
     return meta
 
 
