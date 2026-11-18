@@ -30,27 +30,60 @@ export function SelectorPicker({ open, initialUrl, onClose, onPick }: SelectorPi
 	const [truncated, setTruncated] = useState(false);
 	const [picked, setPicked] = useState<Picked | null>(null);
 	const previewRef = useRef<HTMLDivElement>(null);
+	const panelRef = useRef<HTMLDivElement>(null);
 	const hoveredRef = useRef<HTMLElement | null>(null);
 
-	useEffect(() => {
-		if (open) {
-			setUrl(initialUrl);
-			setHtml(null);
-			setFinalUrl(null);
-			setTruncated(false);
-			setPicked(null);
-			setError(null);
-			setLoading(false);
-		}
-	}, [open, initialUrl]);
+	// Reset the picker whenever it opens (or the source URL changes). Adjusting
+	// state during render avoids the cascading render an effect would cause.
+	const pickerKey = open ? initialUrl : null;
+	const [lastPickerKey, setLastPickerKey] = useState<string | null>(pickerKey);
+	if (pickerKey !== lastPickerKey) {
+		setLastPickerKey(pickerKey);
+		setUrl(initialUrl);
+		setHtml(null);
+		setFinalUrl(null);
+		setTruncated(false);
+		setPicked(null);
+		setError(null);
+		setLoading(false);
+	}
 
 	useEffect(() => {
 		if (!open) return;
+		const panel = panelRef.current;
+		const previousFocus = document.activeElement as HTMLElement | null;
+		const FOCUSABLE =
+			'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") onClose();
+			if (e.key === "Escape") {
+				onClose();
+				return;
+			}
+			if (e.key !== "Tab" || !panel) return;
+			// Keep Tab / Shift+Tab inside the dialog while it is open.
+			const focusables = Array.from(
+				panel.querySelectorAll<HTMLElement>(FOCUSABLE),
+			).filter((el) => el.offsetParent !== null);
+			if (focusables.length === 0) return;
+			const first = focusables[0];
+			const last = focusables[focusables.length - 1];
+			const active = document.activeElement;
+			if (e.shiftKey && (active === first || !panel.contains(active))) {
+				e.preventDefault();
+				last.focus();
+			} else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+				e.preventDefault();
+				first.focus();
+			}
 		};
 		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
+		// Move focus into the dialog on open, and restore it to the trigger on close.
+		panel?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+		return () => {
+			window.removeEventListener("keydown", onKey);
+			previousFocus?.focus();
+		};
 	}, [open, onClose]);
 
 	if (!open) return null;
@@ -138,6 +171,7 @@ export function SelectorPicker({ open, initialUrl, onClose, onPick }: SelectorPi
 			aria-label="Pick element visually"
 		>
 			<div
+				ref={panelRef}
 				className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[12px] border border-[var(--hairline-strong)] bg-[var(--surface-1)] text-[var(--fg)]"
 				onClick={(e) => e.stopPropagation()}
 			>

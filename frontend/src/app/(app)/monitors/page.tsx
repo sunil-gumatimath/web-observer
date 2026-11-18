@@ -15,6 +15,7 @@ import {
 	Select,
 } from "@/components/ui";
 import { useToast } from "@/components/toasts";
+import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonTable } from "@/components/skeleton";
 import { api } from "@/lib/api";
@@ -23,7 +24,7 @@ import { MONITOR_MODE_OPTIONS } from "@/lib/modes";
 import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
-import { config } from "@/lib/config";
+import { exportFileName, triggerBlobDownload } from "@/lib/download";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
 
 type StatusFilter = "all" | "active" | "paused";
@@ -198,11 +199,19 @@ export default function MonitorsPage() {
 							type="button"
 							variant="secondary"
 							onClick={async () => {
-								const ws = await ensureWorkspace();
-								window.open(
-									`${config.apiBaseUrl}/api/v1/workspaces/${ws}/export/monitors?format=csv`,
-									"_blank",
-								);
+								try {
+									const ws = await ensureWorkspace();
+									const blob = await api.exportMonitors(ws);
+									triggerBlobDownload(
+										blob,
+										exportFileName("monitors", "csv"),
+									);
+								} catch (e) {
+									toast.error(
+										"Export failed",
+										e instanceof Error ? e.message : "Could not export monitors",
+									);
+								}
 							}}
 						>
 							Export CSV
@@ -235,7 +244,17 @@ export default function MonitorsPage() {
 					<span>{selected.size} selected</span>
 					<Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => runBulk("pause")}>Pause</Button>
 					<Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => runBulk("resume")}>Resume</Button>
-					<Button size="sm" variant="danger" disabled={bulkBusy} onClick={() => runBulk("delete")}>Delete</Button>
+					<ConfirmButton
+						size="sm"
+						variant="danger"
+						busy={bulkBusy}
+						disabled={selected.size === 0}
+						onConfirm={() => runBulk("delete")}
+						title={`Delete ${selected.size} monitor${selected.size === 1 ? "" : "s"}?`}
+						body="This permanently deletes the selected monitors and all of their check history and change events."
+					>
+						Delete
+					</ConfirmButton>
 					<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
 				</div>
 			)}

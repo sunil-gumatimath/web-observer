@@ -115,10 +115,16 @@ function MonitorDetailInner() {
 		monitorIdRef.current = monitorId;
 	}, [isFresh, monitorId]);
 
-	useEffect(() => {
+	// Reset the image-failure flags when the monitor's hero image changes.
+	// Derived during render (React's supported "adjust state during render"
+	// pattern) instead of in an effect, so no cascading render is scheduled.
+	const heroKey = `${monitor?.id ?? ""}|${monitor?.brand?.hero_path ?? ""}|${monitor?.brand?.hero_url ?? ""}`;
+	const [lastHeroKey, setLastHeroKey] = useState(heroKey);
+	if (lastHeroKey !== heroKey) {
+		setLastHeroKey(heroKey);
 		setHeroImgFailed(false);
 		setScreenshotFailed(false);
-	}, [monitor?.id, monitor?.brand?.hero_path, monitor?.brand?.hero_url]);
+	}
 
 	const load = useCallback(async () => {
 		const ws = await ensureWorkspace();
@@ -322,13 +328,18 @@ function MonitorDetailInner() {
 
 	useEffect(() => {
 		if (!workspaceId || !latestOkSnapId) {
-			setPreviewSnapshot(null);
-			setPreviewLoading(false);
+			// Defer the reset so the effect body has no synchronous state updates.
+			queueMicrotask(() => {
+				setPreviewSnapshot(null);
+				setPreviewLoading(false);
+			});
 			return;
 		}
 
 		let active = true;
-		setPreviewLoading(true);
+		queueMicrotask(() => {
+			if (active) setPreviewLoading(true);
+		});
 
 		api.getSnapshot(workspaceId, latestOkSnapId)
 			.then((snap) => {
@@ -493,7 +504,7 @@ function MonitorDetailInner() {
 								type="button"
 								onClick={handleRefreshBrand}
 								disabled={brandRefreshing}
-								className="absolute top-3 right-3 hidden group-hover:inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/60 backdrop-blur-md px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black/80 transition shadow-sm"
+								className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/60 backdrop-blur-md px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition shadow-sm"
 								title="Re-scrape page for product preview image"
 							>
 								<svg

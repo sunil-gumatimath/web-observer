@@ -14,6 +14,7 @@ import {
 	Textarea,
 } from "@/components/ui";
 import { ThresholdEditor } from "@/components/threshold-editor";
+import { alertConfigPatch } from "@/lib/alert-config";
 import { api, brandAssetUrl } from "@/lib/api";
 import {
 	isReadmeMode,
@@ -199,9 +200,9 @@ export default function EditMonitorPage() {
 				semantic_trigger: semanticTrigger.trim() || null,
 				ignore_selectors: ignore,
 				ignore_regexes: ignoreRegex,
-				...(alertConfig && Object.keys(alertConfig).length > 0
-					? { alert_config: alertConfig }
-					: {}),
+				// Always send alert_config: omitting the key leaves the old
+				// thresholds in place when the editor is blanked.
+				...alertConfigPatch(alertConfig),
 			});
 			router.push(`/monitors/${monitorId}`);
 		} catch (err) {

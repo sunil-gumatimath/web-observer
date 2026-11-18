@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { Badge, Button, buttonClass, Card } from "@/components/ui";
 
@@ -73,13 +73,9 @@ export function OnboardingChecklist({
   hasChannel: boolean;
   firstMonitorId?: string | null;
 }) {
-  const [dismissed, setDismissed] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (readDismissed()) {
-      setDismissed(true);
-    }
-  }, []);
+  // Read the stored dismissal during the initial render (readDismissed is
+  // SSR-safe) instead of flashing the checklist before an effect hides it.
+  const [dismissed, setDismissed] = useState<boolean>(() => readDismissed());
 
   if (dismissed) return null;
 

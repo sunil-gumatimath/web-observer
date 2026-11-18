@@ -9,7 +9,10 @@ from app.routers.monitors import _bucket_activity, change_activity
 
 
 def _now():
-    return datetime.now(UTC)
+    # Pin to midday UTC: an event 3h earlier must still be "today". Using the
+    # real clock made these tests fail between 00:00 and 03:00 UTC because
+    # _bucket_activity buckets by ts.date().
+    return datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
 
 
 def test_buckets_every_event_oldest_first():

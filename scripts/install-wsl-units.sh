@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
 # Install persistent systemd unit files for the Web Observer stack inside WSL2.
 # Units start on WSL boot (systemd) and are NOT transient, so they survive the
-# closing of the wsl.exe session that installed them.
-#   Project is used in place at /mnt/c (nothing is copied into WSL).
-# Usage: wsl -e bash /mnt/c/Users/Tedz/OneDrive/Desktop/Projects/monitor-the-web/scripts/install-wsl-units.sh
+# closing of the wsl.exe session that installed them. The repo root, runtime
+# user/group and venv are derived here — nothing is tied to one machine's path.
+#
+# Usage (from Windows):  wsl -e bash <repo>/scripts/install-wsl-units.sh
+# Usage (from the repo): bash scripts/install-wsl-units.sh
+#
+# Assumptions (override where noted): WSL2 distro with systemd and passwordless
+# sudo (`sudo -n`), a systemd `redis-server` service, a repo-local backend/.venv
+# with requirements installed, and installed frontend dependencies. Override the
+# venv with MTW_VENV, the unit user/group with MTW_RUN_USER/MTW_RUN_GROUP, the
+# node/next binaries with MTW_NODE_BIN/MTW_NEXT_BIN.
 set -euo pipefail
 
-ROOT="/mnt/c/Users/Tedz/OneDrive/Desktop/Projects/monitor-the-web"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(dirname "$SCRIPT_DIR")
 LOG="$ROOT/data/logs"
-VENV="$HOME/venvs/monitor-web"
+VENV=${MTW_VENV:-$ROOT/backend/.venv}
+RUN_USER=${MTW_RUN_USER:-${USER:-$(id -un)}}
+RUN_GROUP=${MTW_RUN_GROUP:-$(id -gn)}
+NODE_BIN=${MTW_NODE_BIN:-$(command -v node || echo /usr/bin/node)}
+NEXT_BIN=${MTW_NEXT_BIN:-$ROOT/frontend/node_modules/next/dist/bin/next}
 
 mkdir -p "$LOG"
 
@@ -24,8 +37,8 @@ Wants=redis-server.service
 
 [Service]
 Type=simple
-User=ted
-Group=ted
+User=$RUN_USER
+Group=$RUN_GROUP
 WorkingDirectory=$4
 ExecStart=$exec
 Restart=on-failure
@@ -52,10 +65,10 @@ unit mtw-scheduler "Due-monitor scheduler" \
     "$VENV/bin/python -m app.scheduler" \
     "$ROOT/backend"
 
-# Frontend: webpack dev (Turbopack rejects node_modules symlinked to the ext4
-# home); node_modules is symlinked from ~/mtw-web so it lives on Linux disk.
+# Frontend: webpack dev stays for compatibility with node_modules symlinked
+# across filesystems (Turbopack rejects that). By default use the repo-local
+# frontend/node_modules; set MTW_NEXT_BIN if yours lives elsewhere.
 FRONT="$ROOT/frontend"
-NGENTO="$HOME/mtw-web/node_modules"
 if [[ -L "$FRONT/.next" ]]; then sudo -n rm "$FRONT/.next"; fi
 mkdir -p "$FRONT/.next"
 sudo -n tee /etc/systemd/system/mtw-frontend.service >/dev/null <<EOF
@@ -65,10 +78,10 @@ After=network.target mtw-api.service
 
 [Service]
 Type=simple
-User=ted
-Group=ted
+User=$RUN_USER
+Group=$RUN_GROUP
 WorkingDirectory=$FRONT
-ExecStart=/usr/bin/node $NGENTO/next/dist/bin/next dev --port 3000 --webpack --hostname 0.0.0.0
+ExecStart=$NODE_BIN $NEXT_BIN dev --port 3000 --webpack --hostname 0.0.0.0
 Environment=NODE_ENV=development
 Restart=on-failure
 RestartSec=3

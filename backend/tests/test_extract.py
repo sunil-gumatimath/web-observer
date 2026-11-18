@@ -49,6 +49,13 @@ def test_extract_price_missing() -> None:
         assert exc.code == "price_not_found"
 
 
+def test_extract_price_does_not_merge_adjacent_numbers() -> None:
+    """A strike-through/compare-at price next to the real one must not be
+    concatenated into one fictitious amount by the amount regex."""
+    html = "<html><body><p>Price $19.99 24.99 USD</p></body></html>"
+    assert extract_price(html) == "USD 19.99"
+
+
 # ---------------------------------------------------------------------------
 # product_price hardening: script exclusion, EU formats, selector scoping
 # ---------------------------------------------------------------------------

@@ -40,6 +40,8 @@ import type {
   WorkspaceSettings,
 } from "@/lib/types";
 
+export type ExportFormat = "csv" | "json";
+
 export class ApiError extends Error {
   status: number;
   body: unknown;
@@ -156,6 +158,57 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return body as T;
+}
+
+/**
+ * Authenticated binary fetch for exports. Uses the same authHeaders() as every
+ * other API call so window.open()-style URLs (which cannot carry the Clerk
+ * Bearer token or the dev X-Internal-Token) are never used for protected data.
+ */
+async function requestBlob(path: string): Promise<Blob> {
+  const headers = await authHeaders();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${config.apiBaseUrl}${path}`, {
+      headers,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new ApiError(
+        0,
+        `Request timed out after ${FETCH_TIMEOUT_MS / 1000}s: ${path}`,
+        { detail: "timeout" },
+      );
+    }
+    throw new ApiError(
+      0,
+      err instanceof Error ? err.message : `Network error calling ${path}`,
+      { detail: "network_error" },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    let body: unknown = text;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* raw text */
+    }
+    const message =
+      typeof body === "object" && body && "detail" in body
+        ? JSON.stringify((body as { detail: unknown }).detail)
+        : res.statusText;
+    throw new ApiError(res.status, message, body);
+  }
+
+  return res.blob();
 }
 
 /**
@@ -345,17 +398,32 @@ export const api = {
     );
   },
 
-  /** Direct URL for the run-log CSV export (opened in a new tab). */
-  exportRunLogsUrl: (workspaceId: string, opts?: RunLogFilters) => {
+  /** Authenticated run-log export blob (CSV or JSON), honouring the Logs filters. */
+  exportRunLogs: (
+    workspaceId: string,
+    opts?: RunLogFilters,
+    format: ExportFormat = "csv",
+  ) => {
     const q = new URLSearchParams();
-    q.set("format", "csv");
+    q.set("format", format);
     if (opts?.monitorId) q.set("monitor_id", opts.monitorId);
     if (opts?.outcome && opts.outcome !== "all") q.set("outcome", opts.outcome);
     if (opts?.from) q.set("date_from", opts.from);
     if (opts?.to) q.set("date_to", opts.to);
-    const qs = q.toString();
-    return `${config.apiBaseUrl}/api/v1/workspaces/${workspaceId}/export/runs${qs ? `?${qs}` : ""}`;
+    return requestBlob(
+      `/api/v1/workspaces/${workspaceId}/export/runs?${q.toString()}`,
+    );
   },
+
+  /** Authenticated monitor export blob (CSV or JSON). */
+  exportMonitors: (workspaceId: string, format: ExportFormat = "csv") =>
+    requestBlob(
+      `/api/v1/workspaces/${workspaceId}/export/monitors?format=${format}`,
+    ),
+
+  /** Authenticated change export blob (JSON). */
+  exportChanges: (workspaceId: string) =>
+    requestBlob(`/api/v1/workspaces/${workspaceId}/export/changes`),
 
   listRuns: (workspaceId: string, monitorId: string) =>
     request<MonitorRun[]>(`/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/runs`),

@@ -406,7 +406,7 @@ class NotificationChannel(Base):
         index=True,
     )
     type: Mapped[str] = mapped_column(String(32), nullable=False, default="email")
-    address: Mapped[str] = mapped_column(Text, nullable=False)  # email or webhook URL
+    address: Mapped[str] = mapped_column(String(320), nullable=False)  # email or webhook URL
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

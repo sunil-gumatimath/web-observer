@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NotificationChannelsPanel } from "@/components/notification-channels";
 import { TeamInvites } from "@/components/team-invites";
 import { WorkspaceKeys } from "@/components/workspace-keys";
@@ -334,7 +334,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
-  async function loadApiKeys() {
+  const loadApiKeys = useCallback(async () => {
     setApiKeysLoading(true);
     try {
       const list = await api.listApiKeys(workspaceId);
@@ -344,7 +344,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     } finally {
       setApiKeysLoading(false);
     }
-  }
+  }, [workspaceId]);
 
   async function deleteApiKey(keyId: string) {
     setErr(null);
@@ -357,7 +357,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  async function loadWebhooks() {
+  const loadWebhooks = useCallback(async () => {
     setWebhooksLoading(true);
     try {
       const list = await api.listWebhooks(workspaceId);
@@ -367,7 +367,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     } finally {
       setWebhooksLoading(false);
     }
-  }
+  }, [workspaceId]);
 
   async function deleteWebhook(endpointId: string) {
     setErr(null);
@@ -380,7 +380,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  async function loadDeliveries() {
+  const loadDeliveries = useCallback(async () => {
     setDeliveriesLoading(true);
     try {
       const list = await api.listWebhookDeliveries(workspaceId, { limit: 50 });
@@ -390,15 +390,18 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     } finally {
       setDeliveriesLoading(false);
     }
-  }
+  }, [workspaceId]);
 
   useEffect(() => {
     if (workspaceId) {
-      loadApiKeys();
-      loadWebhooks();
-      loadDeliveries();
+      // Defer the loaders so the effect body has no synchronous state updates.
+      queueMicrotask(() => {
+        void loadApiKeys();
+        void loadWebhooks();
+        void loadDeliveries();
+      });
     }
-  }, [workspaceId]);
+  }, [workspaceId, loadApiKeys, loadWebhooks, loadDeliveries]);
 
   async function retry(deliveryId: string) {
     setRetryingId(deliveryId);

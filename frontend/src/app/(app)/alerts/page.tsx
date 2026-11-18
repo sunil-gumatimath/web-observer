@@ -25,8 +25,13 @@ import { relativeTime } from "@/lib/format";
 import type { AlertInboxItem, AlertsSummary, ChangeEventDetail, Monitor } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
 import { ensureWorkspace } from "@/lib/workspace";
-import { config } from "@/lib/config";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
+import {
+  alertTabTotal,
+  canLoadMoreAlerts,
+  nextAlertLimit,
+} from "@/lib/alerts-pagination";
+import { exportFileName, triggerBlobDownload } from "@/lib/download";
 import { composeHeadline, parseSummaryParts } from "@/lib/summary";
 
 type Filter = "all" | "unread" | "noise";
@@ -59,6 +64,7 @@ export default function AlertsPage() {
 	const [loading, setLoading] = useState(true);
 	const [busy, setBusy] = useState(false);
 	const [limit, setLimit] = useState(PAGE_SIZE);
+	const [exporting, setExporting] = useState(false);
 	const [refreshTick, setRefreshTick] = useState(0);
 	const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -260,6 +266,26 @@ export default function AlertsPage() {
 	}
 
 	const signalCount = summary ? summary.total - summary.noise : 0;
+	// Gate "Load more" on the tab's unfiltered total, not on the length of the
+	// filtered page (noise/search/monitor/impact/date can hide most of it).
+	const tabTotal = alertTabTotal(summary, filter);
+	const showLoadMore = canLoadMoreAlerts(limit, tabTotal);
+
+	async function exportChanges() {
+		if (!workspaceId || exporting) return;
+		setExporting(true);
+		setError(null);
+		try {
+			const blob = await api.exportChanges(workspaceId);
+			triggerBlobDownload(blob, exportFileName("changes", "json"));
+		} catch (e) {
+			const message = e instanceof Error ? e.message : "Failed to export changes";
+			setError(message);
+			toast.error("Could not export changes", message);
+		} finally {
+			setExporting(false);
+		}
+	}
 
 	if (loading) return <Spinner />;
 
@@ -273,15 +299,10 @@ export default function AlertsPage() {
 						<Button
 							type="button"
 							variant="secondary"
-							onClick={() => {
-								if (!workspaceId) return;
-								window.open(
-									`${config.apiBaseUrl}/api/v1/workspaces/${workspaceId}/export/changes`,
-									"_blank",
-								);
-							}}
+							disabled={exporting || !workspaceId}
+							onClick={exportChanges}
 						>
-							Export JSON
+							{exporting ? "Exporting…" : "Export JSON"}
 						</Button>
 						<Button
 							type="button"
@@ -636,19 +657,19 @@ export default function AlertsPage() {
 						);
 					})}
 
-					{/* Pagination / Load more */}
-					{alerts.length >= limit ? (
+					{/* Pagination / Load more — based on the unfiltered tab total */}
+					{showLoadMore ? (
 						<div className="flex flex-col items-center gap-1.5 pt-4">
 							<Button
 								type="button"
 								variant="secondary"
 								disabled={loading || busy}
-								onClick={() => setLimit((l) => l + PAGE_SIZE)}
+								onClick={() => setLimit((l) => nextAlertLimit(l, tabTotal))}
 							>
 								Load more
 							</Button>
 							<p className="text-xs text-[var(--ink-subtle)]">
-								Showing the first {alerts.length} alerts for this filter.
+								Showing the first {alerts.length} alerts for this filter of {tabTotal} total.
 							</p>
 						</div>
 					) : null}

@@ -328,10 +328,12 @@ Two Workers live in `workers/` and are deployed separately from the app:
 | Worker | Purpose | Source |
 | ------ | ------- | ------ |
 | `browser-failover` | Edge Chromium used **only** as a failover for `js_required` fetches, after a local Playwright fetch has already failed. Free quota is ~10 min of browser time per UTC day, so local stays primary. | `workers/browser-failover/` |
-| `share-cache` | Edge cache for public share pages and Next.js static assets (`/share/`, `/_next/static/`). Deployed standalone; attach routes when a public hostname exists. | `workers/share-cache/` |
+| `share-cache` | Edge cache for public share pages and Next.js static assets (`/share/`, `/_next/static/`). Deployed standalone but passes through until a route is attached **and** `CACHE_HOST` is set — the shipped `wrangler.toml` has both unset/commented. | `workers/share-cache/` |
 
 Neither Worker is required for the stack to run. If `CLOUDFLARE_BROWSER_URL` is
-unset, the failover is simply off and a failed browser check fails.
+unset, the failover is simply off and a failed browser check fails; it is also
+dormant by design on networks that block `*.workers.dev`. The share-cache Worker
+only caches once a public hostname and `CACHE_HOST` are configured.
 
 ## 12. Secrets
 

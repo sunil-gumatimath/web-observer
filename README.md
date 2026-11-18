@@ -11,16 +11,16 @@ Web change-detection and alerting platform.
 - **9 monitoring modes** — page text, sitemaps, RSS/Atom, GitHub READMEs, prices, CSS-selector lists, JSON values, visual screenshots, and Cloudflare security scans.
 - **Intelligence, not spam** — content-hashing diffs, conditional thresholds, watch-note AI triage, and noise marking mean you only get told when something matters.
 - **Reliable delivery** — email (Resend), Slack, Discord, HMAC-signed webhooks, and an in-app alerts inbox, all driven by an outbox with bounded retries.
-- **Runs anywhere** — local processes (Windows/Linux) against a hosted Neon Postgres + local Redis, with optional `$0` Cloudflare edge workers for failover fetching, scan verdicts and share-page caching.
+- **Runs anywhere** — local processes (Windows/Linux/macOS) against a hosted Neon Postgres + local Redis, with optional, opt-in `$0` Cloudflare edge workers for failover fetching and scan verdicts; share-page caching needs a configured public hostname.
 - **Built for teams** — workspaces, RBAC, audit log, API keys, invited links, public share pages, and per-workspace BYO keys.
 
 ## Status
 
 **Phases 0–7 complete** — the original roadmap has been exceeded. Post-roadmap work added the alerts inbox, per-monitor conditional thresholds and semantic triggers, first-class AI impact/confidence triage, distributed Redis dedup caching, monitor tags, workspace run logs with CSV/JSON export, brand/enrichment columns, encrypted webhook secrets, and per-principal rate limits. DB schema is at Alembic migration `015_change_run_set_null`. Billing is optional (solo use: skip Stripe).
 
-Cloudflare free tier is wired end-to-end and every piece is optional: raw snapshots in R2, a Browser Rendering **failover** Worker for `js_required` fetches (local Playwright stays primary so the ~10 min/day edge-browser quota is preserved), a `security_scan` monitor mode backed by the URL Scanner, screenshots served from a public R2 bucket over a custom domain, and a cookie-less Web Analytics beacon. Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
+Cloudflare free-tier integrations are wired up but **opt-in, not active by default**: raw snapshots in R2 (needs `STORAGE_BACKEND=s3`), a Browser Rendering **failover** Worker for `js_required` fetches (needs `CLOUDFLARE_BROWSER_URL` + token; local Playwright stays primary so the ~10 min/day edge-browser quota is preserved), a `security_scan` monitor mode backed by the URL Scanner (needs its API token), screenshots served from a public R2 bucket over a custom domain (needs `NEXT_PUBLIC_SCREENSHOT_CDN_URL`), and a cookie-less Web Analytics beacon (needs `NEXT_PUBLIC_CF_BEACON_TOKEN`). The `share-cache` Worker caches `/share/` pages **only when a public hostname and `CACHE_HOST` are configured** — the shipped `workers/share-cache/wrangler.toml` has its routes commented out and `CACHE_HOST` empty — and the browser-failover Worker is dormant by design on networks that block `*.workers.dev`. Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
 
-Verified end-to-end (last run 2026-11-03): backend `336 passed` unit tests (`347 passed` full suite across 47 files), `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and `88 passed` vitest tests across 12 files; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client.
+Verified end-to-end: backend unit tests (`pytest -q -m "not integration"`) and the Postgres-backed integration suite are green, `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and vitest green; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client. Test counts change as fixes land and are deliberately not quoted here — [CI](.github/workflows/ci.yml) is the source of truth.
 
 ## Documentation
 
@@ -75,9 +75,9 @@ flowchart TB
         ST[("Snapshots<br/>./data/snapshots or S3/R2")]
     end
 
-    subgraph Edge["Cloudflare edge — optional, free tier"]
-        BF["browser-failover worker<br/>edge Chromium, retry path only"]
-        SCS["share-cache worker<br/>caches /share/ pages"]
+    subgraph Edge["Cloudflare edge — opt-in, free tier"]
+        BF["browser-failover worker<br/>edge Chromium, retry path only<br/>(dormant where workers.dev is blocked)"]
+        SCS["share-cache worker<br/>caches /share/ only when CACHE_HOST is set"]
         SCAN["URL Scanner<br/>security_scan verdicts"]
     end
 
@@ -242,7 +242,7 @@ cd backend
 alembic upgrade head
 ```
 
-Every supported variable is listed with its default in [`.env.example`](.env.example).
+Backend variables are listed with their defaults in [`.env.example`](.env.example); frontend build/runtime variables are in [`frontend/.env.example`](frontend/.env.example).
 
 **`frontend/.env.local`:**
 
@@ -264,6 +264,8 @@ CLERK_SECRET_KEY=sk_test_...
 
 ### One-time
 
+**Windows (PowerShell):**
+
 ```powershell
 cd backend
 python -m venv .venv
@@ -272,6 +274,19 @@ pip install -r requirements.txt
 # required for JS rendering / screenshots:
 python -m playwright install chromium
 cd ..\frontend
+npm ci # CI-canonical (also works: bun install)
+```
+
+**Linux / macOS (bash or zsh):**
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# required for JS rendering / screenshots:
+python -m playwright install chromium
+cd ../frontend
 npm ci # CI-canonical (also works: bun install)
 ```
 
@@ -301,15 +316,27 @@ These are separate processes. Run them on a schedule/cron.
 
 **Helpers:**
 
+**Windows (PowerShell):**
+
 ```powershell
-# Windows PowerShell: full stack (loads backend\.env, API :8002; launches background jobs, logs to data\logs)
+# Full stack (loads backend\.env, API :8002; launches background jobs, logs to data\logs)
 powershell -File .\scripts\restart-stack.ps1
+powershell -File .\scripts\stop-stack.ps1
+```
 
-# WSL2: transient systemd stack (API :8002, workers, scheduler; uses repo in-place)
-wsl -e bash scripts/run-wsl-stack.sh
+**Linux / macOS (bash or zsh):** start the stack directly — no `wsl` prefix needed:
 
-# WSL2: persistent systemd units (auto-restart on WSL boot)
-wsl -e bash scripts/install-wsl-units.sh
+```bash
+# Native processes (API :8002, workers, scheduler, frontend; logs to data/logs)
+bash scripts/restart-stack.sh
+bash scripts/stop-stack.sh
+```
+
+**WSL2 only** (requires systemd + passwordless sudo in the distro):
+
+```bash
+bash scripts/run-wsl-stack.sh        # transient systemd units, repo used in place
+bash scripts/install-wsl-units.sh    # persistent units, auto-restart on WSL boot
 ```
 
 | URL | What |
@@ -390,14 +417,14 @@ Also on the monitoring side: a **visual element picker** (point-and-click CSS-se
 | API keys | `mtw_...` bearer tokens for programmatic access |
 | Plans / billing | Free / pro / business / enterprise tiers, per-workspace usage quotas; Stripe checkout or simulated (solo: skip Stripe) |
 | Keys: managed or BYO | Server defaults (`LLM_API_*`, `RESEND_API_KEY`) — or each workspace brings its own per-service keys and overrides the global |
-| Public share pages | Opaque-token read-only page per monitor (`/share/{token}` — unguessable, hashed at rest, expiring, no login), edge-cached by the `share-cache` Worker |
+| Public share pages | Opaque-token read-only page per monitor (`/share/{token}` — unguessable, hashed at rest, expiring, no login); optionally edge-cached by the `share-cache` Worker **only when a public hostname and `CACHE_HOST` are configured** (off in the shipped config) |
 | Brand-aware dashboard | Adding a website auto-fills logo/title/description/hero from page meta and re-hosts via `brand-assets/`; inbox items carry `monitor_brand` with favicon fallback |
 | Retention | Background `retention_job` purges snapshots (default 30 days) and runs (default 90 days); change events survive run cleanup (migration `015`) — `docs/local-dev.md` §13 is the source of truth |
 | Security | SSRF-pinned fetcher with redirect re-validation and domain guard, ReDoS/size-capped regexes, CSS selectors (300 chars) and URLs (2048 chars) at the schema + bulk-import layer, HKDF-purposed crypto (share tokens / API keys / Fernet keys), Gitleaks + a full threat model in [docs/security/threat-model.md](docs/security/threat-model.md) |
 
 ### Cloudflare free tier (optional, every piece optional, all $0)
 
-See [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md). Raw snapshots in R2; Browser Rendering **failover** Worker for `js_required` fetches (`workers/browser-failover/`, covered by `backend/tests/test_browser_failover.py` — local Playwright stays primary to preserve the ~10 min/day edge-browser quota); `security_scan` backed by the URL Scanner; screenshots servable from a public R2 bucket over a custom domain (`NEXT_PUBLIC_SCREENSHOT_CDN_URL`); edge caching for share pages (`workers/share-cache/`); optional cookie-less Web Analytics beacon on the UI.
+See [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md). Every piece below is opt-in and inactive until configured: raw snapshots in R2 (`STORAGE_BACKEND=s3`); Browser Rendering **failover** Worker for `js_required` fetches (`workers/browser-failover/`, covered by `backend/tests/test_browser_failover.py` — local Playwright stays primary to preserve the ~10 min/day edge-browser quota; the Worker is dormant by design on networks that block `*.workers.dev`); `security_scan` backed by the URL Scanner (needs its API token); screenshots servable from a public R2 bucket over a custom domain (`NEXT_PUBLIC_SCREENSHOT_CDN_URL`); **opt-in** edge caching for share pages (`workers/share-cache/` — caches only when `CACHE_HOST` is set; routes are commented out and `CACHE_HOST` is empty by default); optional cookie-less Web Analytics beacon on the UI (`NEXT_PUBLIC_CF_BEACON_TOKEN`).
 
 ### User interface
 
@@ -405,13 +432,14 @@ The web UI (Next.js) exposes: **Dashboard** (with change-activity card), **Monit
 
 ## Tests & linting
 
+**Windows (PowerShell):**
+
 ```powershell
-# Backend (Python / venv on Windows or WSL2)
+# Backend (repo-local venv)
 cd backend
 .\.venv\Scripts\ruff check app tests
 .\.venv\Scripts\ruff format --check app tests
 .\.venv\Scripts\python -m pytest tests -q -m "not integration"
-# (or in WSL2: wsl -e bash -c "cd /mnt/c/.../backend && .venv/bin/pytest")
 
 # Frontend (Bun or Node / npm)
 cd ..\frontend
@@ -420,4 +448,23 @@ bun run test      # or: npm test (vitest run)
 bun run build     # or: npm run build
 ```
 
-CI (`.github/workflows/ci.yml`) runs the backend unit tests and the Postgres-backed integration tests in separate jobs, plus a Gitleaks secret scan, and the frontend type-check / lint / test / build.
+**Linux / macOS (bash or zsh):**
+
+```bash
+# Backend (repo-local venv)
+cd backend
+source .venv/bin/activate
+.venv/bin/ruff check app tests
+.venv/bin/ruff format --check app tests
+.venv/bin/python -m pytest tests -q -m "not integration"
+# Integration tests need TEST_DATABASE_URL pointing at a real Postgres:
+# .venv/bin/python -m pytest tests -q -m "integration"
+
+# Frontend (Node / npm — CI-canonical)
+cd ../frontend
+npm run lint      # tsc --noEmit && eslint .
+npm test          # vitest run
+npm run build
+```
+
+CI (`.github/workflows/ci.yml`) runs the backend unit tests and the Postgres-backed integration tests in separate jobs, plus a Gitleaks secret scan on the backend and frontend jobs, and the frontend type-check / lint / test / build. It is the source of truth for which checks must pass and their current counts.

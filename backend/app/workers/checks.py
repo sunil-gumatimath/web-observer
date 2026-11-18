@@ -46,7 +46,11 @@ def run_http_check(run_id: str) -> None:
         if monitor.mode == MODE_SITE_LINKS:
             started = time.perf_counter()
             try:
-                text = sitemap_monitor_text(monitor.url, timeout_seconds=monitor.timeout_seconds)
+                text = sitemap_monitor_text(
+                    monitor.url,
+                    timeout_seconds=monitor.timeout_seconds,
+                    max_response_bytes=monitor.max_response_bytes,
+                )
             except SitemapError as exc:
                 raise FetchError("sitemap_error", str(exc)) from exc
             content = text.encode("utf-8")

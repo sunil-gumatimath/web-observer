@@ -45,3 +45,5 @@ next-env.d.ts
 
 .vercel
 .env*
+# Keep the committed example; .env.local and other .env* stay ignored.
+!.env.example

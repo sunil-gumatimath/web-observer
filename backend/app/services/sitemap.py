@@ -114,6 +114,7 @@ def discover_sitemap_urls(
     base_url: str,
     *,
     timeout_seconds: int | None = None,
+    max_response_bytes: int | None = None,
     max_urls: int = 500,
     max_depth: int = 3,
     _depth: int = 0,
@@ -128,6 +129,7 @@ def discover_sitemap_urls(
     """
     settings = get_settings()
     timeout = timeout_seconds or settings.default_timeout_seconds
+    max_bytes = max_response_bytes or settings.default_max_response_bytes
     limits = _DiscoveryLimits(max_urls=max_urls, max_depth=max_depth)
     seen = _seen if _seen is not None else set()
 
@@ -141,9 +143,7 @@ def discover_sitemap_urls(
             continue
         seen.add(loc)
         try:
-            text = _fetch_text(
-                loc, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes
-            )
+            text = _fetch_text(loc, timeout_seconds=timeout, max_bytes=max_bytes)
         except SitemapError as exc:
             logger.debug("sitemap_location_failed loc=%s error=%s", loc, exc.code)
             continue
@@ -159,16 +159,12 @@ def discover_sitemap_urls(
 
     # 2) Fall back to robots.txt Sitemap: directives if nothing found yet.
     if not page_urls and not child_sitemaps:
-        for sm in _robots_sitemap_urls(
-            base_url, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes
-        ):
+        for sm in _robots_sitemap_urls(base_url, timeout_seconds=timeout, max_bytes=max_bytes):
             if sm in seen:
                 continue
             seen.add(sm)
             try:
-                text = _fetch_text(
-                    sm, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes
-                )
+                text = _fetch_text(sm, timeout_seconds=timeout, max_bytes=max_bytes)
             except SitemapError as exc:
                 logger.debug("robots_sitemap_failed loc=%s error=%s", sm, exc.code)
                 continue
@@ -192,9 +188,7 @@ def discover_sitemap_urls(
                 continue
             seen.add(child)
             try:
-                text = _fetch_text(
-                    child, timeout_seconds=timeout, max_bytes=settings.default_max_response_bytes
-                )
+                text = _fetch_text(child, timeout_seconds=timeout, max_bytes=max_bytes)
             except SitemapError as exc:
                 logger.debug("child_sitemap_failed loc=%s error=%s", child, exc.code)
                 continue
@@ -245,6 +239,7 @@ def sitemap_monitor_urls(
     base_url: str,
     *,
     timeout_seconds: int | None = None,
+    max_response_bytes: int | None = None,
     max_urls: int = 5000,
 ) -> list[str]:
     """Return the de-duplicated list of page URLs for a ``site_links`` monitor.
@@ -256,6 +251,7 @@ def sitemap_monitor_urls(
     return discover_sitemap_urls(
         base_url,
         timeout_seconds=timeout_seconds,
+        max_response_bytes=max_response_bytes,
         max_urls=max_urls,
     )
 
@@ -264,10 +260,16 @@ def sitemap_monitor_text(
     base_url: str,
     *,
     timeout_seconds: int | None = None,
+    max_response_bytes: int | None = None,
     max_urls: int = 5000,
 ) -> str:
     """Convenience wrapper: sitemap page URLs joined by newlines (stable order)."""
-    urls = sitemap_monitor_urls(base_url, timeout_seconds=timeout_seconds, max_urls=max_urls)
+    urls = sitemap_monitor_urls(
+        base_url,
+        timeout_seconds=timeout_seconds,
+        max_response_bytes=max_response_bytes,
+        max_urls=max_urls,
+    )
     return "\n".join(urls)
 
 

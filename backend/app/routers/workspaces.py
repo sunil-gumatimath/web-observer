@@ -12,6 +12,7 @@ from app.auth import (
     list_user_workspaces,
     require_role,
     require_workspace_member,
+    sync_clerk_principal,
 )
 from app.db import get_db
 from app.models import (
@@ -35,6 +36,16 @@ router = APIRouter(prefix="/api/v1", tags=["workspaces"])
 
 @router.get("/me", response_model=MeOut)
 def me(principal: Principal, db: Db) -> MeOut:
+    # The auth dependency is deliberately read-only: first-login Clerk users
+    # have no User row yet, so a background task normally provisions them
+    # *after* the response. /me is the frontend's bootstrap call and expects
+    # to see the default workspace immediately; provision synchronously here
+    # so a following createWorkspace cannot 401 or duplicate the workspace.
+    if principal.user is None and principal.clerk_user_id and not principal.is_internal:
+        email = principal.email or f"{principal.clerk_user_id}@users.clerk.local"
+        user = sync_clerk_principal(db, clerk_user_id=principal.clerk_user_id, email=email)
+        principal.user = user
+        principal.email = user.email
     workspaces = list_user_workspaces(db, principal)
     return MeOut(
         id=principal.user_id,

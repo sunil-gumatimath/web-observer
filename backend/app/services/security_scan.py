@@ -33,6 +33,9 @@ CF_API_BASE = "https://api.cloudflare.com/client/v4"
 # URL Scanner takes a few seconds to render; poll patiently but bound it.
 _POLL_INTERVAL_SECONDS = 4.0
 _SUBMIT_TIMEOUT_SECONDS = 20.0
+# run_http_check has a 120s time_limit. Worst case is submit (20s) + polling
+# plus one in-flight result GET (20s), so cap polling well below 120s.
+_MAX_POLL_SECONDS = 75.0
 
 
 def _sort_key(value: str) -> str:
@@ -198,6 +201,11 @@ def scanner_ok() -> tuple[str, str] | None:
     return account_id, token
 
 
+def _poll_deadline_seconds(timeout_seconds: int) -> float:
+    """Poll deadline that cannot outlive the HTTP worker's 120s time limit."""
+    return float(min(max(30, int(timeout_seconds)), _MAX_POLL_SECONDS))
+
+
 def scan_url(
     url: str,
     *,
@@ -227,7 +235,11 @@ def scan_url(
         with httpx.Client() as client:
             scan_uuid = _submit_scan(client, account_id, token, validated.url)
             result = _poll_result(
-                client, account_id, token, scan_uuid, float(max(30, timeout_seconds))
+                client,
+                account_id,
+                token,
+                scan_uuid,
+                _poll_deadline_seconds(timeout_seconds),
             )
     except UrlScannerError:
         raise

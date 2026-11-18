@@ -81,19 +81,8 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
       .catch(() => setErr("Could not load the model catalog."));
   }, []);
 
-  // keep forceCustom in sync when model/base is typed to a custom value
-  useEffect(() => {
-    if (llmModel && models.length > 0 && !models.some((m) => m.value === llmModel)) {
-      setForceCustom(true);
-    }
-  }, [llmModel, models]);
-
-  useEffect(() => {
-    if (llmBase && basePresets.length > 0 && !basePresets.includes(llmBase)) {
-      setForceCustomBase(true);
-    }
-  }, [llmBase, basePresets]);
-
+  // `isCustomModel` / `isCustomBase` already derive the custom state from the
+  // current values, so no effect is needed to mirror them into `forceCustom`.
   if (!settings) {
     return (
       <Card>

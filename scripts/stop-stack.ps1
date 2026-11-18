@@ -41,7 +41,7 @@ foreach ($p in $snapshot) {
     if ($tracked -contains $p.ProcessId) {
         # A recorded PID may have been reused by an unrelated process since it
         # was recorded - only kill it if it still looks like ours.
-        $looksOurs = ($p.CommandLine -match "monitor-the-web") -or ($tracked -contains $p.ParentProcessId)
+        $looksOurs = ($p.CommandLine -match [regex]::Escape($RootDir)) -or ($tracked -contains $p.ParentProcessId)
         if ($looksOurs) { $victims += $p.ProcessId }
         continue
     }
@@ -52,7 +52,7 @@ foreach ($p in $snapshot) {
 # Anything started by hand from this repository.
 foreach ($p in $snapshot) {
     if ($p.Name -notmatch "python|dramatiq|uvicorn|bun|node|cmd") { continue }
-    if ($p.CommandLine -notmatch "monitor-the-web") { continue }
+    if ($p.CommandLine -notmatch [regex]::Escape($RootDir)) { continue }
     if ($p.CommandLine -match "stop-stack\.ps1|restart-stack\.ps1") { continue }
     if ($protect -contains $p.ProcessId) { continue }
     $victims += $p.ProcessId

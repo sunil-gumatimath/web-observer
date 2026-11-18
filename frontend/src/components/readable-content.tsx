@@ -475,7 +475,10 @@ export function ReadableContent({
               }
 
               if (block.type === "image") {
-                const src = resolveImageUrl(block.src, baseUrl) || block.src;
+                // Rejected/unsafe URLs resolve to null — never fall back to the
+                // raw src here, that would reintroduce the invalid URL.
+                const src = resolveImageUrl(block.src, baseUrl);
+                if (!src) return null;
                 return (
                   <figure key={i} className="my-3 overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] p-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}

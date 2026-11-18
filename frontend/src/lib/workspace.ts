@@ -47,6 +47,9 @@ let workspacePromise: Promise<string> | null = null;
 let workspacePromiseUid: string | null = null;
 
 export function invalidateWorkspace(): void {
+  // Drop the tracked identity too: a stale Clerk user id would make the next
+  // ensureWorkspace() treat a fresh sign-in as a cache hit for the old user.
+  setClerkUserId(null);
   workspacePromise = null;
   workspacePromiseUid = null;
   if (typeof window !== "undefined") {

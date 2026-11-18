@@ -1,8 +1,11 @@
 # Cloudflare free features wired into Web Observer
 
 Web Observer uses a set of Cloudflare free-tier features. Every one of them is
-optional, runs at $0 under the free quota, and can be switched off independently
-by unsetting its env var.
+opt-in, runs at $0 under the free quota, and can be switched off independently
+by unsetting its env var. Most are **not active in a fresh checkout**: the
+shipped configs leave tokens/hostnames empty (or routes commented), so nothing
+reaches the edge until you configure it. The two Workers have extra caveats —
+see §4 and §6 below.
 
 | Feature | What it does here | Needs | Guide |
 | ------- | ----------------- | ----- | ----- |
@@ -12,7 +15,7 @@ by unsetting its env var.
 | **URL Scanner** | Backs the `security_scan` monitoring mode (verdict / categories / tech stack) | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_URLSCANNER_TOKEN` | below |
 | **Web Analytics** | Cookie-less, no-individual-tracking beacon on the Next.js UI | `NEXT_PUBLIC_CF_BEACON_TOKEN` | §3 below |
 | **Cloudflare Tunnel** | Exposes the local stack publicly without port-forwarding | connector token | below |
-| **Workers** | `browser-failover` (edge browser) and `share-cache` (edge cache for share pages) | Wrangler deploy | below |
+| **Workers** | `browser-failover` (edge browser; dormant where `workers.dev` is blocked) and `share-cache` (edge cache for share pages; caches nothing until `CACHE_HOST` is set and routes are enabled) | Wrangler deploy + configuration | §4 / §6 |
 
 Account-level features work regardless of whether a domain is attached. The
 zone-level ones (Tunnel hostnames, Cache Rules, WAF, Zero Trust Access) need a
@@ -225,6 +228,10 @@ Notes:
   bot-challenge detection to whatever comes back.
 - The Worker is optional. With `CLOUDFLARE_BROWSER_URL` unset, a failed
   browser check simply fails.
+- **Dormant by design on this machine.** `workers/browser-failover/wrangler.toml`
+  documents that `*.workers.dev` is TCP/SNI-blocked on the local ISP, so the
+  failover is configured but never engages here; it activates only on networks
+  that allow `workers.dev` and after the Worker is deployed with its bindings.
 - Some networks block `*.workers.dev` at the TCP/SNI level. If the failover
   fails fast with a connection error and local Playwright works fine, that is
   the cause — the failover engages on networks that allow it.
@@ -256,19 +263,24 @@ Mode reference: [monitoring-modes.md](monitoring-modes.md).
 
 ## 6. Share-page edge cache Worker
 
-`workers/share-cache/` is a Worker that caches `/share/` and `/_next/static/`
-on the edge. It complements zone-level Cache Rules with explicit cache-key
-scope and TTL trimming.
+`workers/share-cache/` is a Worker that *can* cache `/share/` and
+`/_next/static/` on the edge. It complements zone-level Cache Rules with
+explicit cache-key scope and TTL trimming. **It is configured but not active by
+default:** the Worker fails closed and caches nothing unless the request
+hostname matches `CACHE_HOST` (`workers/share-cache/src/index.js:18-24`), and
+the shipped `workers/share-cache/wrangler.toml` leaves `CACHE_HOST = ""` with
+its `routes` lines commented out.
 
 ```bash
 cd workers/share-cache
 npx wrangler deploy
 ```
 
-It runs standalone on `workers.dev` today. To put it in front of a real
-hostname, set `CACHE_HOST` in `wrangler.toml` and add the route. Free-tier
-Worker limits (100k req/day, 10 ms CPU) are far beyond what a read-only cache
-interceptor needs.
+It runs standalone on `workers.dev` today, where it passes every request
+straight through. To put it in front of a real hostname, uncomment the `routes`
+in `wrangler.toml`, set `CACHE_HOST` to that hostname, and redeploy — only then
+does caching begin. Free-tier Worker limits (100k req/day, 10 ms CPU) are far
+beyond what a read-only cache interceptor needs.
 
 ## 7. Cloudflare Tunnel (optional)
 
@@ -316,6 +328,7 @@ drop the internal-token mode before sharing links.
 | Cache Rules | Optional zone-level TTLs for `/share/*`, Next.js static assets and the screenshots CDN. The `share-cache` Worker is the code-level complement. |
 | WAF / Bot Fight Mode | Optional zone-level rules. Note the backend's `/internal/*` routes are dev-only and should be blocked at the edge. |
 | Turnstile | A widget exists on the account, but there is **no public form to protect** and no backend `siteverify` call. The fetcher only *detects* Turnstile challenge markers. Empty keys = feature off. |
+| Active share-page edge cache | The `share-cache` Worker is deployed to `workers.dev` with `CACHE_HOST = ""` and no routes, so it passes through without caching. Enable per §6. |
 | D1, Queues, Cron + Hyperdrive, Pages | Not used. |
 
 ## Related
