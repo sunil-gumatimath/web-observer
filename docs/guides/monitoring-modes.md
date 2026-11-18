@@ -166,6 +166,23 @@ watches the security verdict.
 
 ---
 
+## Fetch reliability and previews
+
+You can add any public `http(s)` URL as a monitor, but a monitor only produces a preview after a
+**successful** check. The preview is a stored snapshot from that run, not a live view of the site.
+
+- Public HTML, RSS/sitemap, README, JSON and price pages generally work over plain HTTP.
+- JS-heavy pages need `js_required` (or `visual` mode) and a working local Playwright Chromium install.
+- Bot protections (Cloudflare/ Turnstile challenges), login-only and paywalled pages can make a check
+  fail with `bot_challenge` or `http_error`; no new preview is produced. Product Hunt is a common
+  example. Enabling browser mode may help, but it does not bypass authentication.
+- Private/loopback/link-local addresses are blocked by the SSRF guard on purpose, so `localhost`
+  and LAN URLs cannot be monitored.
+- The first successful run is a baseline; later successful runs create change events and update the
+  preview.
+
+If a check fails, open the monitor's run history to see the error code before debugging the preview.
+
 ## Choosing a mode
 
 | If you want to watch... | Use |

@@ -1,6 +1,6 @@
 # Kilo free models for Web Observer
 
-Checked: 2026-10-29. The live Kilo Gateway model-list endpoint and Kilo's current Free Models page were checked. Free promotions and availability can change.
+Checked: 2026-10-29. The live Kilo Gateway model-list endpoint and Kilo's current Free Models page were checked. Free promotions and availability can change. **Current state:** see the 2026-11-18 live refresh at the bottom; Laguna S is no longer served and Beam is now the recommended default.
 
 ## What the live catalog says
 
