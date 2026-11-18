@@ -117,7 +117,7 @@ def test_verified_candidates_exclude_models_that_cannot_finish_the_job() -> None
     assert verified and set(verified) <= set(full)
     assert "nvidia/nemotron-3.5-lightning:free" not in verified
     assert "poolside/laguna-xs-2.1:free" not in verified
-    assert "poolside/laguna-s-2.1:free" in verified
+    assert "reflection/beam-free" in verified
 
 
 def test_verified_only_is_off_by_default_so_explicit_lists_keep_full_scope() -> None:
@@ -135,11 +135,11 @@ def test_catalog_exposes_at_least_one_model_verified_at_the_output_cap() -> None
 def test_output_cap_only_expands_for_models_measured_to_need_it() -> None:
     """A per-model cap must never shrink the caller's budget."""
     # Fits the default cap: unchanged.
-    assert output_cap_for(KILO_BASE, "poolside/laguna-s-2.1:free", 200) == 200
+    assert output_cap_for(KILO_BASE, "reflection/beam-free", 200) == 200
     # Measured to need more room: gets its own cap.
-    assert output_cap_for(KILO_BASE, "reflection/beam-free", 200) == 800
+    assert output_cap_for(KILO_BASE, "dots-studio/dots-3-note-preview:free", 200) == 800
     # An explicit larger default wins over the catalog hint.
-    assert output_cap_for(KILO_BASE, "poolside/laguna-s-2.1:free", 1200) == 1200
+    assert output_cap_for(KILO_BASE, "reflection/beam-free", 1200) == 1200
     # Unknown model or unknown base: the caller's default.
     assert output_cap_for(KILO_BASE, "not/a-real-model:free", 200) == 200
     assert output_cap_for("https://api.example.com/v1", "reflection/beam-free", 200) == 200

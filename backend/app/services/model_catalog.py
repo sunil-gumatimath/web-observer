@@ -66,9 +66,10 @@ class Provider:
 # ---------------------------------------------------------------------------
 # Kilo Gateway — free models ($0 input/output).
 #
-# The live gateway catalog was checked on 2026-10-29. This is a curated
-# shortlist of five free text-chat models for this app, based on app-prompt
-# probes rather than Kilo's coding rankings. Laguna is the tested default.
+# The live gateway catalog was re-checked on 2026-11-18: Laguna S 2.1 is no
+# longer served by Kilo. This is a curated shortlist of free text-chat models,
+# based on app-prompt probes rather than Kilo's coding rankings. Beam is the
+# tested default.
 #
 # ``verified_at`` comes from those probes. 200 = fits the app's default cap;
 # 800 = passes once its own cap is applied; None = no complete reply observed
@@ -77,11 +78,11 @@ class Provider:
 # ---------------------------------------------------------------------------
 _KILO_MODELS: list[ModelEntry] = [
     ModelEntry(
-        value="poolside/laguna-s-2.1:free",
-        label="Laguna S 2.1 (free) — Poolside · 262K ctx",
+        value="reflection/beam-free",
+        label="Beam 1.0 (free) — Reflection · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Recommended default. Passed summary + watch/semantic triage, change Q&A, and digest probes on 2026-10-29. Previously completed strict JSON at the default 200-token cap in 2/2 probes.",
+        note="Recommended default. Passed summary + triage, change Q&A, and digest probes on 2026-11-18 at the default 200-token output cap; fastest passing model.",
         recommended=True,
         verified_at=200,
     ),
@@ -90,31 +91,39 @@ _KILO_MODELS: list[ModelEntry] = [
         label="Nemotron 3.5 Super VL (free) — NVIDIA · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Passed all three app feature probes on 2026-10-29. Kilo highlights it in its free catalog; NVIDIA free endpoints are trial use, so avoid personal or confidential content.",
-        verified_at=800,
+        note="Passed all three app feature probes on 2026-11-18. NVIDIA free endpoints are trial use; avoid personal or confidential content.",
+        verified_at=200,
     ),
     ModelEntry(
         value="nvidia/nemotron-3-ultra-550b-a55b:free",
         label="Nemotron 3 Ultra (free) — NVIDIA · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Passed all three app feature probes on 2026-10-29, but was slower than the recommended default. NVIDIA free endpoints are trial use; avoid personal or confidential content.",
-        verified_at=800,
+        note="Passed all three app feature probes on 2026-11-18. NVIDIA free endpoints are trial use; avoid personal or confidential content.",
+        verified_at=200,
     ),
     ModelEntry(
-        value="reflection/beam-free",
-        label="Beam 1.0 (free) — Reflection · 1M ctx",
+        value="baidu/ernie-5.5-flash-preview:free",
+        label="ERNIE 5.5 Flash Preview (free) — Baidu · 1M ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Passed all three app feature probes on 2026-10-29. Its summary needs the larger 800-token output cap.",
-        verified_at=800,
+        note="Passed all three app feature probes on 2026-11-18; slower Q&A than Beam.",
+        verified_at=200,
+    ),
+    ModelEntry(
+        value="particle-ai/particle-1:free",
+        label="Particle 1 (free) — Particle AI · 1M ctx",
+        provider="kilo",
+        base=KILO_BASE,
+        note="Passed all three app feature probes on 2026-11-18; digest was noticeably slower.",
+        verified_at=200,
     ),
     ModelEntry(
         value="dots-studio/dots-3-note-preview:free",
         label="Dots3-Note Preview (free) — Dots Studio · 512K ctx",
         provider="kilo",
         base=KILO_BASE,
-        note="Completed summary + triage once at 800 tokens, but Q&A and digest returned HTTP 403 with the current Kilo key on 2026-10-29. Availability is not consistent across features.",
+        note="Completed summary + triage at 800 tokens, but Q&A and digest returned HTTP 403 on 2026-10-29 and empty content on 2026-11-18. Not recommended as a default.",
         verified_at=800,
     ),
 ]

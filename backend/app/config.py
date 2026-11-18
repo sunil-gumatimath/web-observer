@@ -149,9 +149,8 @@ class Settings(BaseSettings):
     ai_summaries_enabled: bool = True
     llm_api_key: str | None = None
     llm_api_base: str = "https://api.kilo.ai/api/gateway"
-    # Recommended free Kilo model for this app's AI features; see the
-    # app-specific probe notes in services/model_catalog.py.
-    llm_model: str = "poolside/laguna-s-2.1:free"
+    # Best live app-probed free Kilo model (2026-11-18); see model_catalog.py.
+    llm_model: str = "reflection/beam-free"
     # Comma-separated server-level fallback models tried in order after the
     # primary. Empty string asks the catalog for same-provider verified
     # models; "none" disables failover (primary only).
