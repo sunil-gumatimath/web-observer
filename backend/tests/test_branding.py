@@ -1,4 +1,6 @@
-from app.services.branding import parse_brand_meta
+from app.services import branding
+from app.services.branding import fetch_brand_info, parse_brand_meta
+from app.services.fetcher import FetchError
 
 
 def test_parse_brand_meta_og_image():
@@ -61,3 +63,17 @@ def test_parse_brand_meta_img_fallback():
     html = '<html><body><img id="landingImage" src="https://example.com/landing.jpg"></body></html>'
     meta = parse_brand_meta(html, "https://example.com")
     assert "https://example.com/landing.jpg" in meta.hero_candidates
+
+
+def test_fetch_brand_info_uses_logo_fallbacks_when_page_fetch_fails(monkeypatch):
+    """Sites that block the HTML fetch must still get a favicon/logo preview."""
+
+    def blocked(*_args, **_kwargs):
+        raise FetchError("blocked", "blocked")
+
+    monkeypatch.setattr(branding, "fetch_url", blocked)
+    meta = fetch_brand_info("https://openai.com/news/")
+
+    assert "https://logo.clearbit.com/openai.com?size=256" in meta.logo_candidates
+    assert "https://www.google.com/s2/favicons?domain=openai.com&sz=256" in meta.logo_candidates
+    assert "https://openai.com/favicon.ico" in meta.logo_candidates

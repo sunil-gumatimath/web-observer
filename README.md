@@ -430,6 +430,12 @@ See [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-featur
 
 The web UI (Next.js) exposes: **Dashboard** (with change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status tabs, sorting, bulk pause/resume, mode-specific snapshot previews including rich Cloudflare URL Scanner verdicts, non-blocking preview loading, and live brand asset re-scraping), **Logs** (workspace-wide run history + CSV export), **Changes** (per-change diff — text diffs for content modes, a run-keyed before/after screenshot slider plus collapsible pHash details for `visual` monitors), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels, workspace keys, API keys/webhooks, digest preferences — with one-click copy for one-time secrets and developer workspace tooling tucked behind an Advanced card), and an in-app **Docs** page — plus a live header clock and an onboarding checklist (first monitor → baseline → channel). Results surface as toasts, and status/error boxes carry `role="status"`/`role="alert"` with `aria-describedby` hints. Styled with a Cohere-inspired design system (`frontend/src/app/globals.css`): 22px cards, pill buttons, `#1863dc` interaction blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator.
 
+Monitor previews are snapshots from the last successful check, not live page views. With
+`STORAGE_BACKEND=local` the snapshot files live on the machine that ran the check; a database moved
+to another machine needs fresh runs (or S3-backed storage) before previews appear. Bot-protected,
+login-only, and private-network URLs can fail the check even though the monitor was accepted — see
+[docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md#fetch-reliability-and-previews).
+
 ## Tests & linting
 
 **Windows (PowerShell):**

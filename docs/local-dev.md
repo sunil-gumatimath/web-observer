@@ -214,16 +214,30 @@ Fetch behavior worth knowing while debugging:
 - The SSRF-pinned fetcher tries **every** validated IP in turn — one dead CDN PoP won't fail a check; only connect-level errors trigger failover (`backend/app/services/fetcher.py:_pinned_get`).
 - `readme` monitors hit the GitHub API first (`ref`-pinned to the parsed `/tree/<branch>` branch when there is one, default branch otherwise), then fall back to raw probes bounded by a wall-clock budget (fits inside the worker's 120s time limit).
 - LLM summaries fail over across `LLM_FALLBACK_MODELS`; `none` disables failover. The catalog default is the model list of the provider that `LLM_API_BASE` points at (see `backend/app/services/model_catalog.py`).
-- The Kilo picker is a **five-model shortlist**, checked against the live Gateway catalog on 2026-10-29 and ranked using this app's prompts. The `note` and `verified_at` fields distinguish catalog availability from actual behavior: Laguna passed summary + triage, Q&A, and digest probes and remains the default. Free availability and rate limits can change; NVIDIA free endpoints have trial-use data handling terms.
+- The Kilo picker is a **six-model shortlist**, re-checked against the live Gateway catalog on 2026-11-18 and ranked using this app's prompts. `reflection/beam-free` is the recommended default; `nvidia/nemotron-3.5-super-vl`, `nvidia/nemotron-3-ultra`, `baidu/ernie-5.5-flash-preview`, and `particle-ai/particle-1` are verified fallbacks. `dots-studio/dots-3-note-preview` is listed but not recommended after empty Q&A/digest responses. The former default `poolside/laguna-s-2.1:free` is no longer served by Kilo. Free availability and rate limits can change; NVIDIA free endpoints have trial-use data handling terms.
 - `js_required` monitors fall back to the **Cloudflare Browser Rendering Worker** when the local Playwright fetch fails (`CLOUDFLARE_BROWSER_URL` + `CLOUDFLARE_BROWSER_TOKEN`). Local stays primary so the free ~10 min/day edge-browser quota is preserved. Covered by `backend/tests/test_browser_failover.py`.
 - `security_scan` monitors run on Cloudflare's edge via the URL Scanner (`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_URLSCANNER_TOKEN`). With no token the check fails with a clear error instead of silently passing.
+
+### Snapshot previews on a second machine
+
+A monitor's preview is rendered from the **last successful snapshot**, not a live iframe. With
+`STORAGE_BACKEND=local`, the snapshot HTML/PNG lives at `LOCAL_STORAGE_PATH` (`./data/snapshots`)
+on the machine that ran the check; the Postgres row only stores the object key and text preview.
+Copying a database to another machine therefore leaves the preview broken until you either:
+
+- click **Run now** for each monitor so this machine fetches and stores fresh snapshots, or
+- switch to `STORAGE_BACKEND=s3` with a shared bucket.
+
+The snapshot download endpoint requires the same auth as the rest of the API; a browser tab opened
+directly at `raw_download_url` without a token will get 401. A monitor whose latest check failed
+keeps its last successful snapshot, if one exists locally.
 
 Optional env (defaults work locally):
 
 ```env
 LLM_API_KEY=            # empty => heuristic summaries only
 LLM_API_BASE=https://api.kilo.ai/api/gateway
-LLM_MODEL=poolside/laguna-s-2.1:free
+LLM_MODEL=reflection/beam-free
 LLM_FALLBACK_MODELS=    # empty => catalog default for the active provider; "none" => primary only
 
 STORAGE_BACKEND=local   # set to s3 + endpoint/keys for GCS/R2-compatible storage

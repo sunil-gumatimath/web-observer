@@ -1,6 +1,6 @@
 # Kilo free models for Web Observer
 
-Checked: 2026-10-29. The live Kilo Gateway model-list endpoint and Kilo's current Free Models page were checked. Free promotions and availability can change.
+Checked: 2026-10-29. The live Kilo Gateway model-list endpoint and Kilo's current Free Models page were checked. Free promotions and availability can change. **Current state:** see the 2026-11-18 live refresh at the bottom; Laguna S is no longer served and Beam is now the recommended default.
 
 ## What the live catalog says
 
@@ -26,3 +26,9 @@ Settings now shows a five-model shortlist with per-model probe notes and marks L
 - Kilo official Free Models page: <https://kilo.ai/landing/free-models> (four highlighted active free models, zero-cost criteria, catalog freshness, no current comparable tested winner, Auto Free data-handling note).
 - Kilo official free-usage guide: <https://github.com/Kilo-Org/kilocode/blob/main/packages/kilo-docs/pages/getting-started/using-kilo-for-free.md> (Auto Free routing, individual free model selection, upstream rate limits and provider logging cautions).
 - App-specific model probes and catalog snapshot: `backend/app/services/model_catalog.py` (updated 2026-10-28; use as dated app evidence, not as Kilo's live availability source).
+
+## 2026-11-18 live refresh
+
+Laguna S 2.1 is no longer served by Kilo (`model_not_found`). The live gateway still lists 17 zero-priced text-capable entries. Re-running the app's combined summary/triage prompt at the default 200-token cap, plus change Q&A and a plain digest prompt, passed on five models: `reflection/beam-free`, `nvidia/nemotron-3.5-super-vl:free`, `nvidia/nemotron-3-ultra-550b-a55b:free`, `baidu/ernie-5.5-flash-preview:free`, and `particle-ai/particle-1:free`. `liquid/lfm-3-1.7b:free` and `dots-studio/dots-3-note-preview:free` returned empty content.
+
+`reflection/beam-free` is now the recommended default: it passed all three paths at the 200-token cap and was the fastest in both follow-up probes. The other four passing models are configured as server-level fallbacks.
