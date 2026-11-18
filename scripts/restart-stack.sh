@@ -18,6 +18,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(dirname "$SCRIPT_DIR")
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
+VENV=${MTW_VENV:-$BACKEND_DIR/.venv}
 LOG_DIR="$ROOT_DIR/data/logs"
 PIDS_FILE="$LOG_DIR/our-processes.txt"
 KEEPALIVE_FILE="$LOG_DIR/keepalive.pid"
@@ -39,8 +40,10 @@ cmdline_of() {
 }
 
 looks_ours() {
+    # Match this checkout's repo root and its venv, so a PID reused by an
+    # unrelated process is never killed. Both paths are derived above.
     case "$1" in
-        *monitor-the-web*|*venvs/monitor-web*) return 0 ;;
+        *"$ROOT_DIR"*|*"$VENV"*) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -165,7 +168,7 @@ export CORS_ORIGINS=${CORS_LIST//,,/,}
 export NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:$API_PORT"
 
 # --- venv ---------------------------------------------------------------------
-VENV=${MTW_VENV:-$HOME/venvs/monitor-web}
+# VENV is resolved from the repo root near the top of this script.
 PY="$VENV/bin/python"
 UVICORN="$VENV/bin/uvicorn"
 DRAMATIQ="$VENV/bin/dramatiq"

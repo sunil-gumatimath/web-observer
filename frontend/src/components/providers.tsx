@@ -3,7 +3,7 @@
 import { ToastProvider } from "@/components/toasts";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, type ReactNode } from "react";
-import { setAuthTokenGetter } from "@/lib/auth-token";
+import { setAuthTokenGetter, setClerkUserId } from "@/lib/auth-token";
 import { config } from "@/lib/config";
 import { invalidateWorkspace } from "@/lib/workspace";
 
@@ -35,6 +35,9 @@ function ClerkTokenBridge({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
       invalidateWorkspace();
+      // invalidateWorkspace() already clears it, but make the sign-out path
+      // explicit here so a future change to that helper cannot regress it.
+      setClerkUserId(null);
     }
   }, [isLoaded, isSignedIn]);
 

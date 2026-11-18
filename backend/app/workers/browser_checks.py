@@ -25,7 +25,10 @@ settings = get_settings()
 def run_browser_check(run_id: str) -> None:
     """Execute a JS-required or visual monitor run with Playwright."""
 
+    rerouted_mode: list[str | None] = [None]
+
     def _pre_run_hook(monitor, run, db):
+        rerouted_mode[0] = monitor.mode
         # Defense-in-depth: site_links/rss_feed/readme monitors must never run
         # through Playwright — they fetch sitemap/feed/README over plain HTTP.
         if monitor.mode in PLAIN_HTTP_MODES:
@@ -150,6 +153,11 @@ def run_browser_check(run_id: str) -> None:
     # Best-effort preview screenshot for the finished run (see
     # capture_run_screenshot). No-ops for visual mode (the check stored
     # its own capture), failed runs, and monitors with screenshots off.
+    # A plain-HTTP job bounced to the HTTP worker above must not launch
+    # Chromium here just to screenshot a sitemap/feed/README.
+    if rerouted_mode[0] in PLAIN_HTTP_MODES:
+        logger.debug("run_screenshot_skipped rerouted_mode=%s", rerouted_mode[0])
+        return
     try:
         capture_run_screenshot.send(run_id)
     except Exception as e_exc:  # noqa: BLE001 - hero preview is advisory

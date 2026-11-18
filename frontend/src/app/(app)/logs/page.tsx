@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import {
 	Badge,
 	Button,
@@ -12,7 +12,8 @@ import {
 	Select,
 	Spinner,
 } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, type ExportFormat } from "@/lib/api";
+import { exportFileName, triggerBlobDownload } from "@/lib/download";
 import { relativeTime } from "@/lib/format";
 import type { Monitor, MonitorRunLog } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -45,6 +46,7 @@ export default function LogsPage() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [refreshTick, setRefreshTick] = useState(0);
+	const [exporting, setExporting] = useState<ExportFormat | null>(null);
 
 	const load = useCallback(
 		async (ws: string, lim: number) => {
@@ -120,6 +122,20 @@ export default function LogsPage() {
 		...(dateTo ? { to: dateTo } : {}),
 	};
 
+	async function exportRuns(format: ExportFormat) {
+		if (!workspaceId || exporting) return;
+		setExporting(format);
+		setError(null);
+		try {
+			const blob = await api.exportRunLogs(workspaceId, serverFilters, format);
+			triggerBlobDownload(blob, exportFileName("monitor-runs", format));
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Failed to export run logs");
+		} finally {
+			setExporting(null);
+		}
+	}
+
 	if (loading) return <Spinner />;
 
 	return (
@@ -132,16 +148,18 @@ export default function LogsPage() {
 						<Button
 							type="button"
 							variant="secondary"
-							disabled={!workspaceId}
-							onClick={() => {
-								if (!workspaceId) return;
-								window.open(
-									api.exportRunLogsUrl(workspaceId, serverFilters),
-									"_blank",
-								);
-							}}
+							disabled={!workspaceId || exporting !== null}
+							onClick={() => exportRuns("csv")}
 						>
-							Export CSV
+							{exporting === "csv" ? "Exporting…" : "Export CSV"}
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							disabled={!workspaceId || exporting !== null}
+							onClick={() => exportRuns("json")}
+						>
+							{exporting === "json" ? "Exporting…" : "Export JSON"}
 						</Button>
 					</div>
 				}
@@ -206,6 +224,13 @@ export default function LogsPage() {
 				) : null}
 			</div>
 
+			{/* Results are the tabpanel controlled by the outcome tablist above. */}
+			<div
+				id="run-results"
+				role="tabpanel"
+				aria-labelledby={`outcome-tab-${outcome}`}
+				tabIndex={0}
+			>
 			{/* Run table */}
 			{rows.length === 0 ? (
 				hasFilters ? (
@@ -331,6 +356,7 @@ export default function LogsPage() {
 					</Button>
 				</div>
 			) : null}
+			</div>
 		</div>
 	);
 }
@@ -350,14 +376,33 @@ function OutcomeTabs({
 		failed: "Failed",
 		changed: "Changed",
 	};
+	const keys = Object.keys(labels) as Outcome[];
+
+	function onKeyDown(e: KeyboardEvent<HTMLButtonElement>, key: Outcome) {
+		const idx = keys.indexOf(key);
+		let next: Outcome | null = null;
+		if (e.key === "ArrowRight") next = keys[(idx + 1) % keys.length];
+		else if (e.key === "ArrowLeft") next = keys[(idx - 1 + keys.length) % keys.length];
+		else if (e.key === "Home") next = keys[0];
+		else if (e.key === "End") next = keys[keys.length - 1];
+		if (next === null) return;
+		e.preventDefault();
+		onChange(next);
+		document.getElementById(`outcome-tab-${next}`)?.focus();
+	}
+
 	return (
 		<div className="flex flex-wrap gap-2" role="tablist" aria-label="Run outcome filter">
-			{(Object.keys(labels) as Outcome[]).map((key) => (
+			{keys.map((key) => (
 				<button
 					key={key}
+					id={`outcome-tab-${key}`}
 					type="button"
 					role="tab"
 					aria-selected={value === key}
+					aria-controls="run-results"
+					tabIndex={value === key ? 0 : -1}
+					onKeyDown={(e) => onKeyDown(e, key)}
 					onClick={() => onChange(key)}
 					className={`rounded-[8px] border px-3 py-1.5 text-sm font-medium transition ${
 						value === key

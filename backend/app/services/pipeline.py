@@ -508,14 +508,8 @@ def _detect_change(
     # Sickness symptom: run_fenced ... status=succeeded seconds after the run
     # started, followed by the reaper marking it "stuck in running".
     if prev is None or prev.content_hash is None:
-        from app.services.adaptive import note_check_outcome
-
-        run.status = RunStatus.SUCCEEDED.value
-        run.finished_at = datetime.now(UTC)
-        run.error_code = None
-        run.error_message = None
-        note_check_outcome(monitor, changed=False, succeeded=True)
-        db.commit()
+        if not _finish_early_run(db, monitor, run):
+            return _reaped_result(run)
         return PipelineResult(status=run.status, content_hash=digest, is_baseline=True)
 
     ctx.prev_run = prev
@@ -568,14 +562,8 @@ def _detect_change(
             lists_unchanged = set(previous_items) == set(items)
 
     if prev.content_hash == digest or lists_unchanged:
-        from app.services.adaptive import note_check_outcome
-
-        run.status = RunStatus.SUCCEEDED.value
-        run.finished_at = datetime.now(UTC)
-        run.error_code = None
-        run.error_message = None
-        note_check_outcome(monitor, changed=False, succeeded=True)
-        db.commit()
+        if not _finish_early_run(db, monitor, run):
+            return _reaped_result(run)
         return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
 
     # Detect preview truncation: no text_object_key or storage miss, and DB preview indicates truncation
@@ -584,18 +572,17 @@ def _detect_change(
         from app.config import get_settings
         from app.services.visual import visual_diff_summary
 
+        settings = get_settings()
+        ahash_threshold, phash_threshold = _visual_thresholds(monitor, settings)
         v_summary, v_diff = visual_diff_summary(
-            prev_text, normalized, threshold=get_settings().visual_ahash_threshold
+            prev_text,
+            normalized,
+            threshold=ahash_threshold,
+            phash_threshold=phash_threshold,
         )
         if "Visual similar" in v_summary:
-            from app.services.adaptive import note_check_outcome
-
-            run.status = RunStatus.SUCCEEDED.value
-            run.finished_at = datetime.now(UTC)
-            run.error_code = None
-            run.error_message = None
-            note_check_outcome(monitor, changed=False, succeeded=True)
-            db.commit()
+            if not _finish_early_run(db, monitor, run):
+                return _reaped_result(run)
             return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
         ctx.summary = v_summary
         ctx.diff_text = v_diff
@@ -1024,6 +1011,48 @@ def _live_run_status(db: Session, run: MonitorRun) -> str | None:
         return probe.scalar(select(MonitorRun.status).where(MonitorRun.id == run.id))
 
 
+def _reaped_result(run: MonitorRun) -> PipelineResult:
+    return PipelineResult(
+        status=RunStatus.FAILED.value,
+        error_code="run_reaped",
+        error_message="Run was reaped or superseded before results could commit.",
+    )
+
+
+def _finish_early_run(db: Session, monitor: Monitor, run: MonitorRun) -> bool:
+    """Commit a baseline/unchanged run through the same terminal fence.
+
+    Adaptive counters are staged first so they commit atomically with the
+    run; a lost fence rolls them back together with the snapshot.
+    """
+    from app.services.adaptive import note_check_outcome
+
+    note_check_outcome(monitor, changed=False, succeeded=True)
+    return _commit_terminal_success(db, run)
+
+
+def _visual_thresholds(monitor: Monitor, settings: object) -> tuple[int, int]:
+    """Return (aHash threshold, pHash threshold) for a visual check.
+
+    ``min_diff_chars`` is documented as the minimum perceptual distance for
+    visual monitors. Change detection's "Visual similar" short-circuit must
+    use the same value or configured values 1-8 have no effect at all.
+    """
+    ahash = int(getattr(settings, "visual_ahash_threshold", 5))
+    phash = int(getattr(settings, "visual_phash_threshold", 8))
+    cfg = getattr(monitor, "alert_config", None) or {}
+    try:
+        need = int(cfg.get("min_diff_chars", 0))
+    except (TypeError, ValueError):
+        need = 0
+    if need > 0:
+        # Tighten only: a larger min_diff_chars must not make the detector
+        # less sensitive than the configured global thresholds.
+        ahash = min(ahash, need)
+        phash = min(phash, need)
+    return ahash, phash
+
+
 def _commit_terminal_success(db: Session, run: MonitorRun) -> bool:
     """Fenced terminal SUCCEEDED commit for the current worker's run.
 
@@ -1050,7 +1079,6 @@ def _commit_terminal_success(db: Session, run: MonitorRun) -> bool:
             error_message=None,
         )
     )
-    db.commit()
     # rowcount exists on CursorResult; the Result stub omits it.
     if terminal.rowcount != 1:  # type: ignore[attr-defined]
         logger.warning(
@@ -1058,7 +1086,12 @@ def _commit_terminal_success(db: Session, run: MonitorRun) -> bool:
             "results rolled back",
             run.id,
         )
+        # Roll back BEFORE returning: the fenced UPDATE autoflushed every
+        # staged Snapshot/ChangeEvent/NotificationOutbox write. A commit here
+        # would persist results for a run the reaper already marked FAILED.
+        db.rollback()
         return False
+    db.commit()
     # Keep the ORM object consistent with the committed row for the rest of
     # the request (PipelineResult reads run.status after commit expiry) without
     # reopening a transaction on the now-idle session.

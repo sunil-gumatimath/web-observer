@@ -158,6 +158,9 @@ function ClerkWorkspaceSwitcher() {
 				setCurrent(id);
 				setStoredWorkspaceId(id);
 				invalidateWorkspace();
+				// Full reload is deliberate: workspace-scoped client caches
+				// must be rebuilt from scratch after a switch.
+				// eslint-disable-next-line @next/next/no-location-assign-relative-destination
 				window.location.href = "/dashboard";
 			}}
 		>

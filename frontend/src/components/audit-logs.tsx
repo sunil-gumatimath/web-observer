@@ -25,7 +25,11 @@ export function AuditLogsPanel({ workspaceId }: { workspaceId: string }) {
   }, [workspaceId]);
 
   useEffect(() => {
-    load();
+    // Start after the current render commits; keeps the effect body free of
+    // synchronous state updates while preserving the same fetch behaviour.
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   return (

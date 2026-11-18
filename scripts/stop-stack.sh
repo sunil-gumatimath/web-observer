@@ -7,6 +7,7 @@ set -u
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(dirname "$SCRIPT_DIR")
+VENV=${MTW_VENV:-$ROOT_DIR/backend/.venv}
 LOG_DIR="$ROOT_DIR/data/logs"
 PIDS_FILE="$LOG_DIR/our-processes.txt"
 KEEPALIVE_FILE="$LOG_DIR/keepalive.pid"
@@ -14,7 +15,8 @@ KEEPALIVE_FILE="$LOG_DIR/keepalive.pid"
 is_running() { kill -0 "$1" 2>/dev/null; }
 cmdline_of() { tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null; }
 looks_ours() {
-    case "$1" in *monitor-the-web*|*venvs/monitor-web*) return 0 ;; *) return 1 ;; esac
+    # Match this checkout's repo root and its venv (both derived above).
+    case "$1" in *"$ROOT_DIR"*|*"$VENV"*) return 0 ;; *) return 1 ;; esac
 }
 stop_group() {
     local pid=$1

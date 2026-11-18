@@ -43,7 +43,7 @@ flowchart TB
     end
     subgraph Edge["Cloudflare edge (optional, $0 tier)"]
         CFW["Worker: browser-failover\nedge Chromium, failover only\n(~10 min browser time/day)"]
-        CFS["Worker: share-cache\nedge cache for /share/ + /_next/static/"]
+        CFS["Worker: share-cache\nedge cache for /share/ + /_next/static/\n(only when CACHE_HOST is set)"]
         SCAN["Cloudflare URL Scanner\nsecurity_scan mode verdicts"]
     end
 

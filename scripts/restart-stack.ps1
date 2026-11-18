@@ -101,7 +101,7 @@ function Stop-TrackedProcesses {
         if ($tracked -contains $p.ProcessId) {
             # A recorded PID may have been REUSED by an unrelated process since
             # it was recorded. Only kill it if it still looks like ours.
-            $looksOurs = ($p.CommandLine -match "monitor-the-web") -or ($tracked -contains $p.ParentProcessId)
+            $looksOurs = ($p.CommandLine -match [regex]::Escape($RootDir)) -or ($tracked -contains $p.ParentProcessId)
             if ($looksOurs) { $victims += $p.ProcessId }
             continue
         }
@@ -181,7 +181,7 @@ function Test-OurPortOwner {
     foreach ($p in (@(Get-PortOwner -Port $Port) | Select-Object -Unique)) {
         if ($tracked -contains $p) { return $true }
         $proc = $snapshot | Where-Object { $_.ProcessId -eq $p }
-        if ($proc -and $proc.CommandLine -match "monitor-the-web") { return $true }
+        if ($proc -and $proc.CommandLine -match [regex]::Escape($RootDir)) { return $true }
     }
     return $false
 }
@@ -247,7 +247,7 @@ function Test-PortOwnedByUs {
     foreach ($p in (@(Get-PortOwner -Port $Port) | Select-Object -Unique)) {
         if ($tracked -contains $p) { return $true }
         $proc = $snapshot | Where-Object { $_.ProcessId -eq $p }
-        if ($proc -and $proc.CommandLine -match "monitor-the-web") { return $true }
+        if ($proc -and $proc.CommandLine -match [regex]::Escape($RootDir)) { return $true }
     }
     return $false
 }
@@ -335,7 +335,7 @@ $snapshot = Get-ProcessSnapshot
 $protect = @(Get-AncestorProcessIds -ProcessId $PID -Snapshot $snapshot)
 foreach ($p in $snapshot) {
     if ($p.Name -notmatch "python|dramatiq|uvicorn|bun|node|cmd") { continue }
-    if ($p.CommandLine -notmatch "monitor-the-web") { continue }
+    if ($p.CommandLine -notmatch [regex]::Escape($RootDir)) { continue }
     if ($p.CommandLine -match "restart-stack\.ps1") { continue }
     if ($protect -contains $p.ProcessId) { continue }
     Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue

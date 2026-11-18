@@ -198,6 +198,11 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
             select(NotificationOutbox).where(NotificationOutbox.change_event_id == change.id)
         )
         if has_outbox is not None:
+            # The LLM enrichment fields were staged above. With no commit they
+            # are rolled back when the session closes, leaving the
+            # heuristic_pending placeholder and forcing a repeat LLM call on
+            # the next retry. Notifications already exist, so commit here.
+            db.commit()
             return
 
         # Reuse pipeline's queuing logic

@@ -65,7 +65,7 @@ export default function DocsPage() {
       <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
         {/* TOC */}
         <aside className="hidden lg:block">
-          <nav className="sticky top-24 space-y-1">
+          <nav className="sticky top-24 space-y-1" aria-label="On this page">
             <p className="section-label mb-3">On this page</p>
             {toc.map((item) => (
               <a

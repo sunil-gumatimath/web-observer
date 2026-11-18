@@ -72,7 +72,10 @@ def test_fence_refuses_when_run_no_longer_running():
     db = _FakeDB(rowcount=0)
 
     assert _commit_terminal_success(db, run) is False
-    assert db.commit_count == 1  # no-op commit; caller rolls back and returns
+    # The fence lost: nothing may commit. Staged snapshot/change/outbox writes
+    # must be discarded here, not left for a no-op caller rollback after commit.
+    assert db.commit_count == 0
+    assert db.rollback_count == 1
 
 
 def test_fence_where_clause_targets_running_status():

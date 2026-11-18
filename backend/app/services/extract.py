@@ -365,7 +365,9 @@ _PRICE_CODES = (
     "THB",
 )
 
-_AMOUNT = r"(\d[\d.,\s]*)"
+# Do NOT include whitespace in the amount itself: a page with a compare-at
+# price ("$19.99 24.99") must yield two candidates, not one fictitious number.
+_AMOUNT = r"(\d[\d.,]*)"
 
 
 def _normalize_amount(raw: str) -> str:

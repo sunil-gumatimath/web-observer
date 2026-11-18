@@ -122,6 +122,16 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        # gitleaks-action scans the pushed commit range on push events; a
+        # shallow (depth=1) clone cannot resolve that range and the scan
+        # fails with "unknown revision". Fetch the full history instead.
+        with:
+          fetch-depth: 0
+      - name: Gitleaks (secret scan)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
