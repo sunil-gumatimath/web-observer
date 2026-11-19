@@ -7,7 +7,11 @@ compatibility_date = "2026-10-01"
 # set CACHE_HOST (a secret/plain-text binding) to that hostname:
 #   routes = ["app.example.com/share/*", "app.example.com/_next/static/*"]
 
+routes = [
+  { pattern = "app.sunilted.qzz.io/share/*", zone_id = "103bb95edfbca4f2d449af67c0a0b492" },
+  { pattern = "app.sunilted.qzz.io/_next/static/*", zone_id = "103bb95edfbca4f2d449af67c0a0b492" },
+]
+
 [vars]
-# Must be set to the public app hostname when routed — empty CACHE_HOST
-# disables caching entirely (fail closed, find #3 in the review).
-CACHE_HOST = ""
+# Active for the app's public hostname; requests for other hosts pass through.
+CACHE_HOST = "app.sunilted.qzz.io"
