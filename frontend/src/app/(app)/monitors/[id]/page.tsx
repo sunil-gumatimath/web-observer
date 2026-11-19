@@ -20,7 +20,7 @@ import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
-import { brandPreviewUrl } from "@/lib/brand";
+import { brandPreviewKind, brandPreviewUrl, isLivePreviewStale } from "@/lib/brand";
 import { api, ApiError, brandAssetUrl, screenshotUrl } from "@/lib/api";
 import { VALUE_HISTORY_MODES } from "@/lib/modes";
 import {
@@ -54,6 +54,10 @@ const POLL_MAX_MS = 45_000;
 const SSE_RETRY_MS = 2_000;
 const SSE_RETRY_MAX_MS = 30_000;
 const SSE_STALL_MS = 45_000;
+// Live preview capture runs on the browser worker (Chromium launch + page
+// load, up to ~30s), so poll the monitor for the new screenshot.
+const PREVIEW_POLL_MS = 4_000;
+const PREVIEW_POLL_MAX_TRIES = 20;
 
 export default function MonitorDetailPage() {
 	return (
@@ -90,6 +94,7 @@ function MonitorDetailInner() {
 	const [previewLoading, setPreviewLoading] = useState(false);
 	const [showFreshBanner, setShowFreshBanner] = useState(isFresh);
 	const [brandRefreshing, setBrandRefreshing] = useState(false);
+	const [previewCapturing, setPreviewCapturing] = useState(false);
 	const [sseConnected, setSseConnected] = useState(false);
 	const [heroImgFailed, setHeroImgFailed] = useState(false);
 	const [screenshotFailed, setScreenshotFailed] = useState(false);
@@ -119,7 +124,7 @@ function MonitorDetailInner() {
 	// Reset the image-failure flags when the monitor's hero image changes.
 	// Derived during render (React's supported "adjust state during render"
 	// pattern) instead of in an effect, so no cascading render is scheduled.
-	const heroKey = `${monitor?.id ?? ""}|${monitor?.brand?.hero_path ?? ""}|${monitor?.brand?.hero_url ?? ""}`;
+	const heroKey = `${monitor?.id ?? ""}|${monitor?.brand?.hero_path ?? ""}|${monitor?.brand?.hero_url ?? ""}|${monitor?.brand?.preview_path ?? ""}|${monitor?.brand?.preview_at ?? ""}`;
 	const [lastHeroKey, setLastHeroKey] = useState(heroKey);
 	if (lastHeroKey !== heroKey) {
 		setLastHeroKey(heroKey);
@@ -165,6 +170,56 @@ function MonitorDetailInner() {
 			cancelled = true;
 		};
 	}, [load]);
+
+	// Live page preview: the capture runs on the browser worker, so after
+	// queueing one we poll the monitor until `brand.preview_at` changes (or
+	// give up: bot-walled pages never produce a preview and keep the logo/hero).
+	const mountedRef = useRef(true);
+	useEffect(() => {
+		mountedRef.current = true;
+		return () => {
+			mountedRef.current = false;
+		};
+	}, []);
+
+	const waitForLivePreview = useCallback(async (ws: string, baselineAt: string | null) => {
+		setPreviewCapturing(true);
+		try {
+			for (let i = 0; i < PREVIEW_POLL_MAX_TRIES; i++) {
+				await new Promise((resolve) => setTimeout(resolve, PREVIEW_POLL_MS));
+				if (!mountedRef.current) return;
+				const latest = await api.getMonitor(ws, monitorIdRef.current);
+				if (!mountedRef.current) return;
+				if ((latest.brand?.preview_at ?? null) !== baselineAt) {
+					setMonitor(latest);
+					return;
+				}
+			}
+		} catch {
+			// Preview is cosmetic: stop quietly on network errors.
+		} finally {
+			if (mountedRef.current) setPreviewCapturing(false);
+		}
+	}, []);
+
+	// Keep the banner live: capture on first open and whenever it is stale.
+	// Runs once per monitor (the guard ref) so polling can't retrigger it.
+	const autoPreviewFor = useRef<string | null>(null);
+	useEffect(() => {
+		if (loading || !workspaceId || !monitor) return;
+		if (autoPreviewFor.current === monitor.id) return;
+		autoPreviewFor.current = monitor.id;
+		if (!isLivePreviewStale(monitor.brand)) return;
+		const baseline = monitor.brand?.preview_at ?? null;
+		void (async () => {
+			try {
+				const res = await api.refreshLivePreview(workspaceId, monitor.id);
+				if (res.queued) await waitForLivePreview(workspaceId, baseline);
+			} catch {
+				// Optional enrichment; the existing hero/logo stays.
+			}
+		})();
+	}, [loading, workspaceId, monitor, waitForLivePreview]);
 
 	// Live updates: SSE primary with polling fallback.
 	// `polling` stays true while waiting (even past the stall budget) so the
@@ -442,9 +497,11 @@ function MonitorDetailInner() {
 		if (!workspaceId || !monitor) return;
 		setBrandRefreshing(true);
 		setError(null);
+		const baseline = monitor.brand?.preview_at ?? null;
 		try {
 			const updated = await api.enrichBrand(workspaceId, monitor.id);
 			setMonitor(updated);
+			void waitForLivePreview(workspaceId, baseline);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Failed to refresh website thumbnail");
 		} finally {
@@ -466,8 +523,7 @@ function MonitorDetailInner() {
 	const showResultCard =
 		showFreshBanner || polling || Boolean(latestRun && isActiveRun(latestRun));
 	const brandHero = brandPreviewUrl(monitor.brand);
-	const logoOnlyPreview =
-		!monitor.brand?.hero_path && !monitor.brand?.hero_url && Boolean(brandHero);
+	const logoOnlyPreview = brandPreviewKind(monitor.brand) === "logo";
 	const screenshotFallback =
 		(latestOkRun && screenshotUrl(`screenshots/${monitor.id}/${latestOkRun.id}.png`)) ||
 		(changes[0]?.run_id && screenshotUrl(`screenshots/${monitor.id}/${changes[0].run_id}.png`)) ||
@@ -508,12 +564,12 @@ function MonitorDetailInner() {
 							<button
 								type="button"
 								onClick={handleRefreshBrand}
-								disabled={brandRefreshing}
+								disabled={brandRefreshing || previewCapturing}
 								className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/60 backdrop-blur-md px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition shadow-sm"
 								title="Re-scrape page for product preview image"
 							>
 								<svg
-									className={`size-3 ${brandRefreshing ? "animate-spin" : ""}`}
+									className={`size-3 ${brandRefreshing || previewCapturing ? "animate-spin" : ""}`}
 									fill="none"
 									viewBox="0 0 24 24"
 									stroke="currentColor"
@@ -525,7 +581,11 @@ function MonitorDetailInner() {
 										d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
 									/>
 								</svg>
-								{brandRefreshing ? "Refreshing…" : "Update preview"}
+								{brandRefreshing
+									? "Refreshing…"
+									: previewCapturing
+										? "Capturing live preview…"
+										: "Update preview"}
 							</button>
 						</>
 					) : (
@@ -541,14 +601,18 @@ function MonitorDetailInner() {
 								<div className="flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] bg-[color:color-mix(in_srgb,var(--surface-1)_90%,transparent)] px-3 py-1.5 shadow-sm backdrop-blur-sm">
 									<span
 										className={`size-2 rounded-full ${
-											brandRefreshing ? "bg-[var(--primary)] animate-ping" : "bg-[var(--ink-subtle)]"
+											brandRefreshing || previewCapturing
+												? "bg-[var(--primary)] animate-ping"
+												: "bg-[var(--ink-subtle)]"
 										}`}
 									/>
 									<span className="text-xs font-medium text-[var(--ink-muted)]">
-										{brandRefreshing ? "Fetching product preview…" : "No product preview image"}
+										{brandRefreshing || previewCapturing
+											? "Capturing live preview…"
+											: "No product preview image"}
 									</span>
 								</div>
-								{!brandRefreshing && (
+								{!brandRefreshing && !previewCapturing && (
 									<button
 										type="button"
 										onClick={handleRefreshBrand}

@@ -88,7 +88,7 @@ start_root() {
     # start_root <name> <outdir> <workdir> <cmd...> — new session, detached, logged.
     local name=$1 out=$2 dir=$3
     shift 3
-    (cd "$dir" && setsid nohup "$@" </dev/null >"$out/$name.log" 2>"$out/$name_err.log" &) 2>/dev/null
+    (cd "$dir" && setsid nohup "$@" </dev/null >"$out/$name.log" 2>"$out/${name}_err.log" &) 2>/dev/null
     sleep 0.3
 }
 

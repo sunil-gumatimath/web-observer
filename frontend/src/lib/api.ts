@@ -666,6 +666,13 @@ export const api = {
       method: "POST",
     }),
 
+  /** Queue a fresh live screenshot of the page; poll the monitor for `brand.preview_at`. */
+  refreshLivePreview: (workspaceId: string, monitorId: string) =>
+    request<{ queued: boolean }>(
+      `/api/v1/workspaces/${workspaceId}/monitors/${monitorId}/brand/preview`,
+      { method: "POST" },
+    ),
+
   selectorPreview: (workspaceId: string, url: string) =>
     request<SelectorPreview>(`/api/v1/workspaces/${workspaceId}/monitors/selector-preview`, {
       method: "POST",

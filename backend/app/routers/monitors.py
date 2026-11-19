@@ -77,6 +77,7 @@ from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
 from app.services.structured import diff_lists, items_from_normalized
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
+from app.workers.branding import capture_brand_preview as enqueue_brand_preview
 from app.workers.branding import enrich_monitor_brand as enqueue_brand_enrichment
 from app.workers.enqueue import enqueue_check
 
@@ -750,7 +751,62 @@ def enrich_monitor_brand(
     monitor.brand = store_brand_assets(monitor, meta)
     db.commit()
     db.refresh(monitor)
+    # Explicit user refresh: bypass the cooldown (the route is rate-limited).
+    _enqueue_live_preview(monitor.id, force=True)
     return monitor
+
+
+# Minimum seconds between live-preview captures for one monitor. Each capture
+# launches Chromium against a user-supplied URL, so it is throttled per monitor.
+LIVE_PREVIEW_COOLDOWN_SECONDS = 60
+
+
+def _enqueue_live_preview(monitor_id: UUID, *, force: bool = False) -> bool:
+    """Queue a live page screenshot for the monitor banner. Never raises.
+
+    Returns True when a capture was queued, False when throttled or the queue
+    is unavailable.
+    """
+    try:
+        from app.services.domain_guard import _redis
+
+        claimed = _redis().set(
+            f"brand_preview_cooldown:{monitor_id}",
+            "1",
+            nx=True,
+            ex=LIVE_PREVIEW_COOLDOWN_SECONDS,
+        )
+        if not claimed and not force:
+            return False
+    except Exception as exc:  # noqa: BLE001 - cooldown is advisory
+        logger.debug("brand_preview_cooldown_unavailable error=%s", exc)
+    try:
+        enqueue_brand_preview.send(str(monitor_id))
+    except Exception as exc:  # noqa: BLE001 - preview is optional enrichment
+        logger.warning("brand_preview_enqueue_failed monitor_id=%s error=%s", monitor_id, exc)
+        return False
+    return True
+
+
+@router.post(
+    "/workspaces/{workspace_id}/monitors/{monitor_id}/brand/preview",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@limiter.limit("20/minute")
+def refresh_monitor_live_preview(
+    request: Request,
+    workspace_id: UUID,
+    monitor_id: UUID,
+    db: Db,
+    _workspace: MemberWs,
+) -> dict[str, bool]:
+    """Queue a fresh live screenshot of the monitored page for the banner.
+
+    The capture runs on the browser worker; clients re-fetch the monitor and
+    read ``brand.preview_path`` / ``brand.preview_at`` once it lands.
+    """
+    monitor = _get_monitor(db, workspace_id, monitor_id)
+    return {"queued": _enqueue_live_preview(monitor.id)}
 
 
 @router.patch(

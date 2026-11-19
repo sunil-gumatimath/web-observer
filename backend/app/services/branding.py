@@ -331,6 +331,11 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
         "logo_url": next(iter(meta.logo_candidates), None),
         "hero_url": next(iter(meta.hero_candidates), None),
     }
+    # Re-scraping logo/hero must not discard the live page preview.
+    previous = getattr(monitor, "brand", None) or {}
+    for preview_key in ("preview_path", "preview_at"):
+        if previous.get(preview_key):
+            brand[preview_key] = previous[preview_key]
 
     # Try each candidate in priority order until one succeeds (HTML guard
     # inside _download_image). Order encodes quality: extracted og:logo /
@@ -376,6 +381,22 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("brand_hero_store_failed error=%s", exc)
     return brand
+
+
+def store_live_preview(monitor_id: uuid.UUID, url: str) -> str:
+    """Render ``url`` in a real browser and store the above-the-fold screenshot.
+
+    Works for any site (no reliance on og:image / favicon). Only the visible
+    viewport is captured so the image matches the dashboard banner. Raises
+    ``FetchError`` (SSRF-blocked, bot challenge, timeout, ...) — callers decide
+    how to degrade; the UI keeps showing the hero/logo in that case.
+    """
+    from app.services.visual import capture_screenshot
+
+    capture = capture_screenshot(url, timeout_seconds=30, full_page=False)
+    key = _brand_object_key(monitor_id, "preview", "png")
+    put_bytes(key=key, data=capture.png_bytes, content_type="image/png")
+    return key
 
 
 def brand_asset_allowed(object_key: str | None) -> bool:

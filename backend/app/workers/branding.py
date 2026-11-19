@@ -28,6 +28,19 @@ def enrich_monitor_brand(monitor_id: str) -> None:
     monitor creation or surface as an error to the user. Every step that can
     fail logs and returns, leaving ``monitor.brand`` untouched.
     """
+    try:
+        _enrich_brand_meta(monitor_id)
+    finally:
+        # Live page preview is rendered by the browser worker, off this queue.
+        # Queued even when metadata discovery fails: a bot-walled or meta-less
+        # page can still be rendered, and that is what "any brand" needs.
+        try:
+            capture_brand_preview.send(monitor_id)
+        except Exception as exc:  # noqa: BLE001 - optional enrichment
+            logger.debug("brand_preview_enqueue_failed monitor_id=%s error=%s", monitor_id, exc)
+
+
+def _enrich_brand_meta(monitor_id: str) -> None:
     from app.services.branding import fetch_brand_info, store_brand_assets
 
     with SessionLocal() as db:
@@ -55,3 +68,48 @@ def enrich_monitor_brand(monitor_id: str) -> None:
             return
 
         logger.info("brand_enrich_done monitor_id=%s", monitor_id)
+
+
+@dramatiq.actor(queue_name="browser_checks", max_retries=1, time_limit=120_000)
+def capture_brand_preview(monitor_id: str) -> None:
+    """Capture a live screenshot of the monitored page for the dashboard banner.
+
+    Best-effort: bot-walled, slow or blocked pages log and return, leaving the
+    existing hero/logo preview in place.
+    """
+    from datetime import UTC, datetime
+
+    from app.services.branding import store_live_preview
+
+    try:
+        monitor_uuid = uuid.UUID(monitor_id)
+    except ValueError:
+        logger.warning("brand_preview_bad_id monitor_id=%s", monitor_id)
+        return
+
+    # Short session: don't hold a DB transaction open during the browser run.
+    with SessionLocal() as db:
+        monitor = db.get(Monitor, monitor_uuid)
+        if monitor is None:
+            logger.warning("brand_preview_missing monitor_id=%s", monitor_id)
+            return
+        url = monitor.url
+
+    try:
+        key = store_live_preview(monitor_uuid, url)
+    except Exception as exc:  # noqa: BLE001 - optional enrichment
+        logger.warning("brand_preview_capture_failed monitor_id=%s error=%s", monitor_id, exc)
+        return
+
+    with SessionLocal() as db:
+        monitor = db.get(Monitor, monitor_uuid)
+        if monitor is None:
+            return
+        # Assign a new dict so SQLAlchemy detects the JSONB change.
+        monitor.brand = {
+            **(monitor.brand or {}),
+            "preview_path": key,
+            "preview_at": datetime.now(UTC).isoformat(),
+        }
+        db.commit()
+    logger.info("brand_preview_done monitor_id=%s", monitor_id)

@@ -42,8 +42,13 @@ export type MonitorBrand = {
   hero_path?: string | null;
   logo_url?: string | null;
   hero_url?: string | null;
+  /** Live screenshot of the monitored page (re-hosted object key). */
+  preview_path?: string | null;
+  /** ISO timestamp of the last live preview capture. */
+  preview_at?: string | null;
 };
 
+export type AlertInboxItem
 export type BrandInfo = {
   title: string | null;
   description: string | null;
