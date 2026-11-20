@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test",
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@cloudflare/puppeteer": "^1.1.0"
+    "@cloudflare/puppeteer": "^2.0.1"
   },
   "devDependencies": {
     "wrangler": "^4"

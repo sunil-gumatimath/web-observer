@@ -149,3 +149,45 @@ jobs:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8002
           NEXT_PUBLIC_INTERNAL_API_TOKEN: dev-internal-token
           NEXT_PUBLIC_DEV_WORKSPACE_ID: ""
+
+  workers:
+    name: Cloudflare worker tests and config validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: workers/browser-failover/package-lock.json
+      - name: Install browser worker dependencies
+        working-directory: workers/browser-failover
+        run: npm ci
+      - name: Test browser failover worker
+        working-directory: workers/browser-failover
+        run: npm test
+      - name: Test share cache worker
+        working-directory: workers/share-cache
+        run: npm test
+      - name: Validate browser worker config
+        working-directory: workers/browser-failover
+        run: npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/browser-failover"
+      - name: Validate share cache worker config
+        working-directory: workers/share-cache
+        run: ../browser-failover/node_modules/.bin/wrangler deploy --dry-run --config wrangler.toml --outdir "$RUNNER_TEMP/share-cache"
+
+  container:
+    name: Docker image and Compose validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Validate Compose configuration
+        run: |
+          touch backend/.env frontend/.env.local
+          docker compose config --quiet
+      - name: Build application image
+        run: >-
+          docker buildx build --load --tag web-observer:ci
+          --build-arg NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8002
+          .
