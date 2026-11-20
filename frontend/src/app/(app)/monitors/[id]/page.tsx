@@ -20,7 +20,11 @@ import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
-import { brandPreviewKind, brandPreviewUrl, isLivePreviewStale } from "@/lib/brand";
+import {
+	brandHeroUrl,
+	brandLogoUrl,
+	livePreviewUrl,
+} from "@/lib/brand";
 import { api, ApiError, brandAssetUrl, screenshotUrl } from "@/lib/api";
 import { VALUE_HISTORY_MODES } from "@/lib/modes";
 import {
@@ -98,6 +102,8 @@ function MonitorDetailInner() {
 	const [sseConnected, setSseConnected] = useState(false);
 	const [heroImgFailed, setHeroImgFailed] = useState(false);
 	const [screenshotFailed, setScreenshotFailed] = useState(false);
+	// Brand image is the default; a page screenshot is opt-in per page view.
+	const [showPagePreview, setShowPagePreview] = useState(false);
 
 	const pollStartedAt = useRef<number | null>(null);
 	// Fingerprint of the last observed run list: any new run or status change
@@ -202,24 +208,8 @@ function MonitorDetailInner() {
 		}
 	}, []);
 
-	// Keep the banner live: capture on first open and whenever it is stale.
-	// Runs once per monitor (the guard ref) so polling can't retrigger it.
-	const autoPreviewFor = useRef<string | null>(null);
-	useEffect(() => {
-		if (loading || !workspaceId || !monitor) return;
-		if (autoPreviewFor.current === monitor.id) return;
-		autoPreviewFor.current = monitor.id;
-		if (!isLivePreviewStale(monitor.brand)) return;
-		const baseline = monitor.brand?.preview_at ?? null;
-		void (async () => {
-			try {
-				const res = await api.refreshLivePreview(workspaceId, monitor.id);
-				if (res.queued) await waitForLivePreview(workspaceId, baseline);
-			} catch {
-				// Optional enrichment; the existing hero/logo stays.
-			}
-		})();
-	}, [loading, workspaceId, monitor, waitForLivePreview]);
+	// Page screenshots are opt-in now (Brand / Page toggle), so opening a
+	// monitor no longer launches a Chromium capture in the background.
 
 	// Live updates: SSE primary with polling fallback.
 	// `polling` stays true while waiting (even past the stall budget) so the
@@ -522,8 +512,11 @@ function MonitorDetailInner() {
 	// Full result panel: after create (?fresh=1), or while any check is in flight.
 	const showResultCard =
 		showFreshBanner || polling || Boolean(latestRun && isActiveRun(latestRun));
-	const brandHero = brandPreviewUrl(monitor.brand);
-	const logoOnlyPreview = brandPreviewKind(monitor.brand) === "logo";
+	// Brand image is the default hero. A screenshot of the monitored page is
+	// available as an explicit opt-in via the Brand / Page toggle.
+	const brandHero = brandHeroUrl(monitor.brand);
+	const brandLogo = brandLogoUrl(monitor.brand);
+	const pageShot = livePreviewUrl(monitor.brand);
 	const screenshotFallback =
 		(latestOkRun && screenshotUrl(`screenshots/${monitor.id}/${latestOkRun.id}.png`)) ||
 		(changes[0]?.run_id && screenshotUrl(`screenshots/${monitor.id}/${changes[0].run_id}.png`)) ||
@@ -531,12 +524,13 @@ function MonitorDetailInner() {
 		(previewSnapshot?.content_type?.startsWith("image/") && previewSnapshot?.raw_download_url
 			? brandAssetUrl(previewSnapshot.raw_download_url)
 			: null);
-
-	const activeHero = !heroImgFailed && brandHero
-		? brandHero
-		: !screenshotFailed && screenshotFallback
-		? screenshotFallback
-		: null;
+	const hostname = (() => {
+		try {
+			return new URL(monitor.url).hostname.replace(/^www\./, "");
+		} catch {
+			return "";
+		}
+	})();
 
 	return (
 		<div>
@@ -544,29 +538,82 @@ function MonitorDetailInner() {
 			<div className="mb-8 overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--surface-1)]">
 				{/* Top Cover Hero Banner */}
 				<div className="group relative h-36 bg-[var(--surface-2)] sm:h-44 border-b border-[var(--hairline)] overflow-hidden">
-					{activeHero ? (
-						<>
+					{/* Brand image is the default. A page screenshot is opt-in via the Brand / Page toggle. */}
+					{showPagePreview && pageShot ? (
 							<img
-								src={activeHero}
-								alt={monitor.name ? `${monitor.name} preview` : "Preview"}
-								className={`absolute inset-0 size-full ${
-					logoOnlyPreview ? "object-contain p-6" : "object-cover object-top"
-				}`}
-								onError={() => {
-									if (!heroImgFailed && brandHero) {
-										setHeroImgFailed(true);
-									} else if (screenshotFallback) {
-										setScreenshotFailed(true);
-									}
-								}}
+								src={pageShot}
+								alt={`${monitor.name} page screenshot`}
+								className="absolute inset-0 size-full object-cover object-top"
+								onError={() => setScreenshotFailed(true)}
 							/>
-							<div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+						) : brandHero && !heroImgFailed ? (
+							<img
+								src={brandHero}
+								alt={`${monitor.name} brand preview`}
+								className="absolute inset-0 size-full object-cover object-top"
+								onError={() => setHeroImgFailed(true)}
+								referrerPolicy="no-referrer"
+							/>
+						) : (
+							<div className="absolute inset-0 flex items-center bg-[linear-gradient(135deg,#0f172a,#1d4ed8)] px-6 text-white">
+								<div
+									className="pointer-events-none absolute inset-0 opacity-20"
+									style={{
+										backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)",
+										backgroundSize: "22px 22px",
+									}}
+								/>
+								<div className="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-white/10 to-transparent" />
+								<div className="relative z-10 min-w-0">
+									<p className="truncate text-xl font-semibold tracking-tight drop-shadow sm:text-3xl">
+										{monitor.brand?.title || monitor.name}
+									</p>
+									<p className="mt-1 truncate font-mono text-xs text-white/70 sm:text-sm">
+										{hostname}
+									</p>
+								</div>
+							</div>
+						)}
+						<div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+						{/* Source label + controls */}
+						<div className="absolute bottom-3 left-3 rounded-full border border-white/20 bg-black/60 px-2.5 py-1 text-[10px] font-medium text-white/90 backdrop-blur-md">
+							{showPagePreview
+								? "page screenshot"
+								: brandHero
+								? "og:image"
+								: brandLogo
+								? "brand card"
+								: screenshotFallback
+								? "page screenshot"
+								: "no brand image"}
+						</div>
+						<div className="absolute top-3 right-3 flex items-center gap-2">
+							{pageShot && (
+								<div className="inline-flex items-center gap-0.5 rounded-full border border-white/20 bg-black/60 p-1 text-[11px] font-medium text-white backdrop-blur-md">
+									<button
+										type="button"
+										onClick={() => setShowPagePreview(false)}
+										className={`rounded-full px-2 py-0.5 transition ${showPagePreview ? "text-white/60 hover:text-white" : "bg-white/20 text-white"}`}
+										title="Show the brand image"
+									>
+										Brand
+									</button>
+									<button
+										type="button"
+										onClick={() => setShowPagePreview(true)}
+										className={`rounded-full px-2 py-0.5 transition ${showPagePreview ? "bg-white/20 text-white" : "text-white/60 hover:text-white"}`}
+										title="Show a screenshot of the monitored page"
+									>
+										Page
+									</button>
+								</div>
+							)}
 							<button
 								type="button"
 								onClick={handleRefreshBrand}
 								disabled={brandRefreshing || previewCapturing}
-								className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/60 backdrop-blur-md px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition shadow-sm"
-								title="Re-scrape page for product preview image"
+								className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/60 backdrop-blur-md px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition shadow-sm"
+								title="Re-scrape brand metadata and capture a new preview"
 							>
 								<svg
 									className={`size-3 ${brandRefreshing || previewCapturing ? "animate-spin" : ""}`}
@@ -584,68 +631,15 @@ function MonitorDetailInner() {
 								{brandRefreshing
 									? "Refreshing…"
 									: previewCapturing
-										? "Capturing live preview…"
-										: "Update preview"}
+									? "Capturing live preview…"
+									: "Update preview"}
 							</button>
-						</>
-					) : (
-						<div className="absolute inset-0 flex items-center justify-between px-6 bg-gradient-to-r from-[var(--surface-2)] via-[var(--surface-1)] to-[var(--surface-2)]">
-							<div
-								className="pointer-events-none absolute inset-0 opacity-[0.04] dark:opacity-[0.08]"
-								style={{
-									backgroundImage: "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
-									backgroundSize: "24px 24px",
-								}}
-							/>
-							<div className="relative z-10 flex items-center gap-2.5">
-								<div className="flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] bg-[color:color-mix(in_srgb,var(--surface-1)_90%,transparent)] px-3 py-1.5 shadow-sm backdrop-blur-sm">
-									<span
-										className={`size-2 rounded-full ${
-											brandRefreshing || previewCapturing
-												? "bg-[var(--primary)] animate-ping"
-												: "bg-[var(--ink-subtle)]"
-										}`}
-									/>
-									<span className="text-xs font-medium text-[var(--ink-muted)]">
-										{brandRefreshing || previewCapturing
-											? "Capturing live preview…"
-											: "No product preview image"}
-									</span>
-								</div>
-								{!brandRefreshing && !previewCapturing && (
-									<button
-										type="button"
-										onClick={handleRefreshBrand}
-										className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hairline)] bg-[color:color-mix(in_srgb,var(--surface-1)_80%,transparent)] px-3 py-1.5 text-xs font-medium text-[var(--ink-subtle)] transition hover:border-[var(--hairline-strong)] hover:text-[var(--ink)] hover:bg-[var(--surface-1)] shadow-sm"
-										title="Re-scrape page for product preview image"
-									>
-										<svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path
-												strokeLinecap="round"
-												strokeLinejoin="round"
-												strokeWidth={2}
-												d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-											/>
-										</svg>
-										Refresh preview
-									</button>
-								)}
 							</div>
-							<div className="pointer-events-none select-none text-right font-mono text-2xl font-black tracking-wider text-[color:color-mix(in_srgb,var(--ink)_5%,transparent)] dark:text-white/5 uppercase sm:text-4xl">
-								{(() => {
-									try {
-										return new URL(monitor.url).hostname.replace(/^www\./, "");
-									} catch {
-										return "";
-									}
-								})()}
 							</div>
-						</div>
-					)}
-				</div>
+							</div>
 
-				{/* Floating Header Content */}
-				<div className="relative px-5 pb-5 sm:px-6 sm:pb-6">
+							{/* Floating Header Content */}
+							<div className="relative px-5 pb-5 sm:px-6 sm:pb-6">
 					<div className="-mt-10 flex flex-wrap items-end justify-between gap-4">
 						<div className="flex size-[78px] sm:size-20 items-center justify-center overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-1.5">
 							<BrandLogo brand={monitor.brand} name={monitor.name} domain={monitor.url} size={64} />
@@ -766,10 +760,9 @@ function MonitorDetailInner() {
 							</p>
 						) : null}
 					</div>
-				</div>
-			</div>
+					</div>
 
-			{error ? <ErrorBox message={error} /> : null}
+					{error ? <ErrorBox message={error} /> : null}
 
 			{shareUrl ? (
 				<Card className="mb-8 border-[color:color-mix(in_srgb,var(--semantic-success)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--semantic-success)_5%,transparent)]">

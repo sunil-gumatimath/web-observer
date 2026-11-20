@@ -31,7 +31,7 @@ describe("brandPreviewUrl", () => {
     expect(brandPreviewUrl(brand)).toBe("https://example.com/logo.png");
   });
 
-  it("prefers the live page preview and versions the URL by capture time", () => {
+  it("prefers the site's og:image hero over a live screenshot, and versions the screenshot URL by capture time", () => {
     const brand: MonitorBrand = {
       preview_path: "brand-assets/a/preview.png",
       preview_at: "2026-01-01T00:00:00+00:00",
@@ -39,9 +39,13 @@ describe("brandPreviewUrl", () => {
       logo_path: "brand-assets/a/logo.svg",
     };
     const url = brandPreviewUrl(brand);
-    expect(url).toContain("brand-assets/a/preview.png?v=");
-    expect(url).toContain(encodeURIComponent("2026-01-01T00:00:00+00:00"));
-    expect(brandPreviewKind(brand)).toBe("live");
+    expect(url).toContain("brand-assets/a/hero.png");
+    expect(brandPreviewKind(brand)).toBe("hero");
+    // Without a hero, the live screenshot wins and is cache-busted by capture time.
+    const noHero = { ...brand, hero_path: null };
+    expect(brandPreviewUrl(noHero)).toContain("brand-assets/a/preview.png?v=");
+    expect(brandPreviewUrl(noHero)).toContain(encodeURIComponent("2026-01-01T00:00:00+00:00"));
+    expect(brandPreviewKind(noHero)).toBe("live");
   });
 
   it("classifies hero, logo and empty brands", () => {
