@@ -14,7 +14,11 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.security.ssrf import validate_url_for_fetch
+from app.security.ssrf import (
+    browser_host_resolver_arg,
+    is_same_browser_host,
+    validate_url_for_fetch,
+)
 from app.services.fetcher import FetchError, FetchResult, detect_bot_challenge
 
 logger = logging.getLogger(__name__)
@@ -144,10 +148,13 @@ _LAUNCH_ARGS = [
 ]
 
 
-def _launch_chromium(p):  # type: ignore[no-untyped-def]
-    """Launch Chromium with Windows-friendly options and a clear install error."""
+def _launch_chromium(p, validated):  # type: ignore[no-untyped-def]
+    """Launch Chromium pinned to the DNS result validated for this page."""
     try:
-        return p.chromium.launch(headless=True, args=_LAUNCH_ARGS)
+        return p.chromium.launch(
+            headless=True,
+            args=[*_LAUNCH_ARGS, browser_host_resolver_arg(validated)],
+        )
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)
         # NOTE: no boolean operators in this handler (no-boolean-in-except).
@@ -185,7 +192,7 @@ def _capture_screenshot_inline(
     png: bytes
     try:
         with sync_playwright() as p:
-            browser = _launch_chromium(p)
+            browser = _launch_chromium(p, validated)
             context = None
             try:
                 context = browser.new_context(
@@ -201,6 +208,8 @@ def _capture_screenshot_inline(
 
                 def _route_handler(route, request):  # type: ignore[no-untyped-def]
                     try:
+                        if not is_same_browser_host(request.url, validated.hostname):
+                            return route.abort()
                         validate_url_for_fetch(request.url, resolve_dns=True)
                     except Exception:
                         return route.abort()

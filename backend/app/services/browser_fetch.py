@@ -15,7 +15,12 @@ from typing import TYPE_CHECKING
 import httpx
 
 from app.config import get_settings
-from app.security.ssrf import SSRFError, validate_url_for_fetch
+from app.security.ssrf import (
+    SSRFError,
+    browser_host_resolver_arg,
+    is_same_browser_host,
+    validate_url_for_fetch,
+)
 from app.services.fetcher import FetchError, FetchResult, detect_bot_challenge
 
 if TYPE_CHECKING:
@@ -65,7 +70,10 @@ def _fetch_url_browser_inline(
     try:
         with sync_playwright() as p:
             try:
-                browser = p.chromium.launch(headless=True, args=_LAUNCH_ARGS)
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=[*_LAUNCH_ARGS, browser_host_resolver_arg(validated)],
+                )
             except Exception as launch_exc:  # noqa: BLE001
                 msg = str(launch_exc)
                 # NOTE: no boolean operators in this handler
@@ -106,9 +114,10 @@ def _fetch_url_browser_inline(
                     if request.resource_type in _BLOCKED_RESOURCE_TYPES:
                         return route.abort()
                     try:
-                        # Resolve every browser request, not just the initial URL.
-                        # This blocks private destinations reached through redirects,
-                        # scripts, iframes, and DNS changes.
+                        # Restrict the page to its pinned hostname; all other
+                        # origins are blocked so they cannot become SSRF pivots.
+                        if not is_same_browser_host(request.url, validated.hostname):
+                            return route.abort()
                         validate_url_for_fetch(request.url, resolve_dns=True)
                     except SSRFError:
                         return route.abort()

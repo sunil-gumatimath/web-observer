@@ -119,6 +119,29 @@ def validate_url_for_fetch(url: str, *, resolve_dns: bool = True) -> ValidatedUR
     return ValidatedURL(url=url, hostname=hostname, resolved_ips=resolved_ips)
 
 
+def browser_host_resolver_arg(validated: ValidatedURL) -> str:
+    """Pin Chromium's DNS lookup to the already-validated address.
+
+    Browser request interception happens before the connection, but Chromium
+    otherwise performs its own DNS lookup after validation. A host-resolver
+    rule removes that DNS-rebinding window. Browser route handlers must also
+    restrict navigation and subresources to ``validated.hostname``.
+    """
+    if not validated.resolved_ips:
+        raise SSRFError("dns_error", f"No validated addresses for {validated.hostname}")
+    ip = validated.resolved_ips[0]
+    hostname = validated.hostname.lower().rstrip(".")
+    return f"--host-resolver-rules=MAP {hostname} {ip},MAP * ~NOTFOUND"
+
+
+def is_same_browser_host(url: str, hostname: str) -> bool:
+    """Allow browser requests only to the hostname pinned for this page."""
+    request_hostname = urlparse(url).hostname
+    return bool(
+        request_hostname and request_hostname.lower().rstrip(".") == hostname.lower().rstrip(".")
+    )
+
+
 def validate_ip_address(ip_str: str) -> None:
     try:
         ip = ipaddress.ip_address(ip_str)

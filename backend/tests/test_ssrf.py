@@ -2,7 +2,14 @@ import ipaddress
 
 import pytest
 
-from app.security.ssrf import SSRFError, validate_ip_address, validate_url_for_fetch
+from app.security.ssrf import (
+    SSRFError,
+    ValidatedURL,
+    browser_host_resolver_arg,
+    is_same_browser_host,
+    validate_ip_address,
+    validate_url_for_fetch,
+)
 
 
 def test_rejects_non_http_schemes() -> None:
@@ -56,6 +63,27 @@ def test_allows_public_literal() -> None:
     # 1.1.1.1 is public Cloudflare DNS
     result = validate_url_for_fetch("https://1.1.1.1/", resolve_dns=False)
     assert result.resolved_ips == ["1.1.1.1"]
+
+
+def test_browser_host_resolver_pins_validated_address_and_denies_other_hosts() -> None:
+    validated = ValidatedURL(
+        url="https://example.com/",
+        hostname="example.com",
+        resolved_ips=["93.184.216.34"],
+    )
+
+    assert browser_host_resolver_arg(validated) == (
+        "--host-resolver-rules=MAP example.com 93.184.216.34,MAP * ~NOTFOUND"
+    )
+    assert is_same_browser_host("https://EXAMPLE.com./asset.js", "example.com")
+    assert not is_same_browser_host("http://169.254.169.254/latest", "example.com")
+    assert not is_same_browser_host("https://attacker.example/", "example.com")
+
+
+def test_browser_host_resolver_requires_validated_ip() -> None:
+    with pytest.raises(SSRFError) as exc:
+        browser_host_resolver_arg(ValidatedURL("https://example.com", "example.com", []))
+    assert exc.value.code == "dns_error"
 
 
 def test_validate_ip_blocks_link_local() -> None:

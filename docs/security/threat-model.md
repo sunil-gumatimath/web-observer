@@ -49,6 +49,7 @@ decision is recorded as an ADR.
 - Re-validate destination after **every** redirect  
 - Redirect count limit  
 - DNS rebinding defenses (pin resolved IP for request where possible)  
+- Playwright pins Chromium to the initially validated IP and blocks cross-origin requests; pages that require third-party assets may render without those assets
 - Restrict egress network where possible  
 - Same controls for future webhook destinations  
 
