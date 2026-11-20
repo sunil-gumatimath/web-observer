@@ -1,0 +1,39 @@
+# Everything the image installs or builds itself
+**/node_modules
+**/.next
+**/out
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.turbo
+**/.wrangler
+**/.playwright-mcp
+
+# Secrets — injected at runtime via env_file, never baked into a layer
+.env
+.env.local
+**/.env
+**/.env.local
+
+# Local data, logs and generated artefacts
+data
+**/data
+**/*.log
+dump.rdb
+
+# Not needed inside the image
+.git
+.github
+docs
+assets
+scripts
+README.md
+pyrightconfig.json
+.gitleaks.toml
+.gitleaksignore
+.neon

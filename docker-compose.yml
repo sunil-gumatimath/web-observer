@@ -1,0 +1,50 @@
+# Web Observer — the whole stack in ONE image / ONE container.
+#
+#   ./scripts/docker-up.sh              # build + run
+#   ./scripts/docker-up.sh down         # stop
+#   ./scripts/docker-up.sh logs -f      # follow all logs
+#
+# Inside the container supervisord runs: redis, api, worker-http,
+# worker-browser, scheduler, frontend.
+#
+# Postgres is not containerised — backend/.env points DATABASE_URL at Neon.
+
+name: web-observer
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* are baked into the bundle at build time.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://127.0.0.1:8002}
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_CF_BEACON_TOKEN: ${NEXT_PUBLIC_CF_BEACON_TOKEN:-}
+        NEXT_PUBLIC_SCREENSHOT_CDN_URL: ${NEXT_PUBLIC_SCREENSHOT_CDN_URL:-}
+    image: web-observer:local
+    container_name: web-observer
+    env_file:
+      - ./backend/.env
+      - ./frontend/.env.local
+    environment:
+      # Redis runs inside this same container.
+      REDIS_URL: redis://127.0.0.1:6379/0
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - redis-data:/data
+      - snapshot-data:/app/backend/data/snapshots
+    # Chromium crashes tabs on the default 64 MB /dev/shm.
+    shm_size: "1gb"
+    # Docker Desktop's internal DNS (127.0.0.11) returns NXDOMAIN for your
+    # Neon host, so containers get the public resolvers instead.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  snapshot-data:
