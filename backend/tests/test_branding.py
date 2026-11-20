@@ -87,7 +87,10 @@ def test_store_brand_assets_keeps_live_preview(monkeypatch):
     monkeypatch.setattr(branding, "_download_image", lambda *_a, **_k: None)
     monitor = SimpleNamespace(
         id=uuid4(),
-        brand={"preview_path": "brand-assets/x/preview.png", "preview_at": "2026-01-01T00:00:00+00:00"},
+        brand={
+            "preview_path": "brand-assets/x/preview.png",
+            "preview_at": "2026-01-01T00:00:00+00:00",
+        },
     )
 
     brand = branding.store_brand_assets(monitor, branding.BrandMeta(title="Example"))

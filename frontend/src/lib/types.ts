@@ -48,7 +48,6 @@ export type MonitorBrand = {
   preview_at?: string | null;
 };
 
-export type AlertInboxItem
 export type BrandInfo = {
   title: string | null;
   description: string | null;

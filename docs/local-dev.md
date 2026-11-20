@@ -68,7 +68,7 @@ DATABASE_URL=postgresql+psycopg://monitor:monitor@localhost:5432/web_observer
 
 Check the WSL side with `sudo grep -E '^\s*requirepass' /etc/redis/redis.conf`. If Windows→WSL forwarding breaks entirely, `wsl --shutdown` then `wsl` usually restores it.
 
-**Auto-start.** `scripts/restart-stack.ps1` probes `127.0.0.1:6379` before launching anything. If Redis is not answering it runs `sudo -n systemctl start redis-server` inside WSL2 and re-probes for ~10 s. On success it also leaves a **detached hold-open session** (`wsl.exe -d Ubuntu-26.04 --exec sleep infinity`) so the VM — and Windows' localhost forwarding — cannot idle out while the stack runs; the session exits with the machine, and `wsl --shutdown` clears it. `sudo -n` means passwordless sudo must already be configured, and the distro name is hard-coded: if yours is not `Ubuntu-26.04`, edit that line in `scripts/restart-stack.ps1` or start Redis yourself. A failed preflight is not fatal — workers and the rate limiter degrade rather than block.
+**Auto-start.** Nothing to do here: Redis runs **inside the Docker container** on `127.0.0.1:6379`, and the compose file starts it as part of `docker up`. (`redis-cli -h 127.0.0.1 -p 6379 ping` from WSL pokes it.) A failed start is surfaced by the container's health check.
 
 ---
 
@@ -98,25 +98,19 @@ Playwright Chromium is **required** for `js_required` monitors (checks routed to
 
 ---
 
-## 4. Start the stack (5 processes)
+## 4. Start the stack — Docker, one container
 
-Preferred on Windows — one command launches all 5 processes hidden (API :8002, HTTP+notifications worker, browser worker, scheduler, frontend :3000). It also preflights Redis and auto-starts it inside WSL2 when needed (see [§1](#redis)):
-
-```powershell
-powershell -File .\scripts\restart-stack.ps1
-```
-
-Relaunch stops the processes **this stack** started (tracked in `data\logs\our-processes.txt`, plus anything running from this repo) and frees ports `8002`/`3000`; per-process logs go to `data\logs` (`api.log`, `worker-http.log`, `worker-browser.log`, `scheduler.log`, `frontend.log`, plus `*_err.log`).
-
-**Port conflicts.** A port owned by *another* app is never killed — the stack moves to the next free port instead, and stays wired up: the API's `CORS_ORIGINS` gains the chosen frontend origin and the frontend's `NEXT_PUBLIC_API_BASE_URL` follows the API port. The script prints the URLs it actually bound.
+One image / one container runs all six processes (API :8002, HTTP+notifications worker, browser worker, scheduler, frontend :3000, Redis on `127.0.0.1:6379` inside the container):
 
 ```powershell
-powershell -File .\scripts\restart-stack.ps1                      # auto-shifts if 3000/8002 are taken
-powershell -File .\scripts\restart-stack.ps1 -FrontendPort 3100   # prefer a specific port
-powershell -File .\scripts\stop-stack.ps1                         # stop only our processes
+./scripts/docker-up.sh           # build + start (first run takes a few minutes)
+./scripts/docker-up.sh logs -f   # follow all logs
+./scripts/docker-up.sh down      # stop
 ```
 
-Note: Next.js auto-increments its port when the requested one is busy, so a *second* dev server on this machine can land on ours. The launcher detects that and retries on the next free port.
+Postgres is not containerised — `DATABASE_URL` in `backend/.env` points at a managed Neon database, so no second container is needed.
+
+`NEXT_PUBLIC_*` values in `frontend/.env.local` are baked into the bundle at build time, so changes there require a rebuild: `./scripts/docker-up.sh up -d --build --force-recreate`.
 
 Or start each process manually (working directory: `backend`, except frontend):
 

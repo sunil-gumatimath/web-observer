@@ -314,29 +314,13 @@ Use **`--threads 1`** on Windows. Playwright runs in a **subprocess** (`playwrig
 
 These are separate processes. Run them on a schedule/cron.
 
-**Helpers:**
-
-**Windows (PowerShell):**
-
-```powershell
-# Full stack (loads backend\.env, API :8002; launches background jobs, logs to data\logs)
-powershell -File .\scripts\restart-stack.ps1
-powershell -File .\scripts\stop-stack.ps1
-```
-
-**Linux / macOS (bash or zsh):** start the stack directly — no `wsl` prefix needed:
+**Helpers — Docker (one container, everything inside):**
 
 ```bash
-# Native processes (API :8002, workers, scheduler, frontend; logs to data/logs)
-bash scripts/restart-stack.sh
-bash scripts/stop-stack.sh
-```
-
-**WSL2 only** (requires systemd + passwordless sudo in the distro):
-
-```bash
-bash scripts/run-wsl-stack.sh        # transient systemd units, repo used in place
-bash scripts/install-wsl-units.sh    # persistent units, auto-restart on WSL boot
+./scripts/docker-up.sh              # build + start (API :8002, frontend :3000, workers, scheduler, redis)
+./scripts/docker-up.sh down         # stop
+./scripts/docker-up.sh logs -f      # follow logs
+./scripts/docker-up.sh ps           # container status
 ```
 
 | URL | What |

@@ -311,7 +311,7 @@ NEXT_PUBLIC_API_BASE_URL=https://api.your-domain.example
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,https://app.your-domain.example
 ```
 
-`restart-stack.ps1` loads both files, so a restart after the edit is enough.
+With the stack running in Docker, edits to `backend/.env` or `frontend/.env.local` take effect on `./scripts/docker-up.sh up -d --build --force-recreate`.
 
 Security note: a tunnel makes the dev machine reachable from the internet.
 The API keeps its normal auth (Clerk JWT / internal dev token) and
