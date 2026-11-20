@@ -20,12 +20,8 @@ import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
-import {
-	brandHeroUrl,
-	brandLogoUrl,
-	livePreviewUrl,
-} from "@/lib/brand";
-import { api, ApiError, brandAssetUrl, screenshotUrl } from "@/lib/api";
+import { brandHeroUrl, livePreviewUrl } from "@/lib/brand";
+import { api, ApiError, screenshotUrl } from "@/lib/api";
 import { VALUE_HISTORY_MODES } from "@/lib/modes";
 import {
   isActiveRun,
@@ -515,15 +511,7 @@ function MonitorDetailInner() {
 	// Brand image is the default hero. A screenshot of the monitored page is
 	// available as an explicit opt-in via the Brand / Page toggle.
 	const brandHero = brandHeroUrl(monitor.brand);
-	const brandLogo = brandLogoUrl(monitor.brand);
 	const pageShot = livePreviewUrl(monitor.brand);
-	const screenshotFallback =
-		(latestOkRun && screenshotUrl(`screenshots/${monitor.id}/${latestOkRun.id}.png`)) ||
-		(changes[0]?.run_id && screenshotUrl(`screenshots/${monitor.id}/${changes[0].run_id}.png`)) ||
-		(latestTerminal?.id && screenshotUrl(`screenshots/${monitor.id}/${latestTerminal.id}.png`)) ||
-		(previewSnapshot?.content_type?.startsWith("image/") && previewSnapshot?.raw_download_url
-			? brandAssetUrl(previewSnapshot.raw_download_url)
-			: null);
 	const hostname = (() => {
 		try {
 			return new URL(monitor.url).hostname.replace(/^www\./, "");
@@ -539,7 +527,7 @@ function MonitorDetailInner() {
 				{/* Top Cover Hero Banner */}
 				<div className="group relative h-36 bg-[var(--surface-2)] sm:h-44 border-b border-[var(--hairline)] overflow-hidden">
 					{/* Brand image is the default. A page screenshot is opt-in via the Brand / Page toggle. */}
-					{showPagePreview && pageShot ? (
+					{showPagePreview && pageShot && !screenshotFailed ? (
 							<img
 								src={pageShot}
 								alt={`${monitor.name} page screenshot`}
@@ -577,15 +565,11 @@ function MonitorDetailInner() {
 						<div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 						{/* Source label + controls */}
 						<div className="absolute bottom-3 left-3 rounded-full border border-white/20 bg-black/60 px-2.5 py-1 text-[10px] font-medium text-white/90 backdrop-blur-md">
-							{showPagePreview
+							{showPagePreview && pageShot && !screenshotFailed
 								? "page screenshot"
-								: brandHero
+								: brandHero && !heroImgFailed
 								? "og:image"
-								: brandLogo
-								? "brand card"
-								: screenshotFallback
-								? "page screenshot"
-								: "no brand image"}
+								: "brand card"}
 						</div>
 						<div className="absolute top-3 right-3 flex items-center gap-2">
 							{pageShot && (
@@ -634,7 +618,6 @@ function MonitorDetailInner() {
 									? "Capturing live preview…"
 									: "Update preview"}
 							</button>
-							</div>
 							</div>
 							</div>
 
@@ -759,6 +742,7 @@ function MonitorDetailInner() {
 								{monitor.brand.description}
 							</p>
 						) : null}
+					</div>
 					</div>
 					</div>
 

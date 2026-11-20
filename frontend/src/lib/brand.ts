@@ -4,7 +4,7 @@ import type { MonitorBrand } from "@/lib/types";
 /** A live preview older than this is re-captured when the monitor page opens. */
 export const LIVE_PREVIEW_MAX_AGE_MS = 60 * 60 * 1000;
 
-export type BrandPreviewKind = "live" | "hero" | "logo";
+export type BrandPreviewKind = "hero" | "live";
 
 export function livePreviewUrl(brand: MonitorBrand | null | undefined): string | null {
   const url = brandAssetUrl(brand?.preview_path);
@@ -19,18 +19,17 @@ export function brandHeroUrl(brand: MonitorBrand | null | undefined): string | n
   return brandAssetUrl(brand?.hero_path) || brand?.hero_url || null;
 }
 
-/** The brand mark, used for the fallback brand card when there is no hero. */
+/** The brand mark (shown in the header, never used as the banner preview). */
 export function brandLogoUrl(brand: MonitorBrand | null | undefined): string | null {
   return brandAssetUrl(brand?.logo_path) || brand?.logo_url || null;
 }
 
-/** Which kind of image `brandPreviewUrl` resolves to (hero > live > logo). */
+/** Which kind of image `brandPreviewUrl` resolves to (hero > live). */
 export function brandPreviewKind(
   brand: MonitorBrand | null | undefined,
 ): BrandPreviewKind | null {
   if (brandHeroUrl(brand)) return "hero";
   if (livePreviewUrl(brand)) return "live";
-  if (brandLogoUrl(brand)) return "logo";
   return null;
 }
 
@@ -49,13 +48,13 @@ export function isLivePreviewStale(
  * Best available image for a monitor's hero banner.
  *
  * Prefers the page's own og:image (a real brand/social image), then a live
- * screenshot of the page, then the logo. Sites that publish no og:image (e.g.
- * Hacker News) still get a useful banner from the screenshot or logo.
+ * screenshot of the page. A logo is never used as the banner; sites with no
+ * hero or screenshot get a brand card (title + hostname) instead.
  */
 export function brandPreviewUrl(brand: MonitorBrand | null | undefined): string | null {
   const hero = brandHeroUrl(brand);
   if (hero) return hero;
   const live = livePreviewUrl(brand);
   if (live) return live;
-  return brandLogoUrl(brand);
+  return null;
 }
