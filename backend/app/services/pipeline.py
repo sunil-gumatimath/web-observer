@@ -158,6 +158,12 @@ def extract_normalized(
         facts = [line.strip() for line in (result.text or "").splitlines() if line.strip()]
         return list_to_normalized(facts), facts
 
+    if mode == MonitorMode.HTML_META.value:
+        from app.services.html_meta import extract_html_meta_items
+
+        items = extract_html_meta_items(result.text, result.final_url or monitor.url)
+        return list_to_normalized(items), items
+
     # page_content (default): main content as markdown when detectable
     # (webdog `useMainContentOnly` parity — strips nav/boilerplate), falling
     # back to whole-body markdown for pages where detection fails.

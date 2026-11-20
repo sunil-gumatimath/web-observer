@@ -400,7 +400,10 @@ export default function NewMonitorPage() {
 								<option value="visual">
 									Visual diff (screenshot comparison)
 								</option>
-								</Select>
+								<option value="html_meta">
+									HTML / meta (tags, canonical, scripts)
+								</option>
+							</Select>
 								{mode === "list_items" ? (
 								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
 								List items: watches a list of elements (headlines, posts, entries) and reports what was added or removed as clickable links. Set the target CSS selector below.
@@ -433,7 +436,12 @@ export default function NewMonitorPage() {
 								) : null}
 								{mode === "security_scan" ? (
 								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
-								Security scan: checks the Cloudflare URL Scanner verdict and detected technologies. Requires a Cloudflare account ID and URL Scanner token on the server; run daily or less often.
+									Security scan: checks the Cloudflare URL Scanner verdict and detected technologies. Requires a Cloudflare account ID and URL Scanner token on the server; run daily or less often.
+								</p>
+								) : null}
+								{mode === "html_meta" ? (
+								<p className="mt-1.5 text-xs text-[var(--ink-subtle)]">
+									HTML / meta: watches title, meta tags, canonical links, structured-data types and script URLs — code-level changes that page content ignores.
 								</p>
 								) : null}
 						</div>
@@ -497,10 +505,15 @@ export default function NewMonitorPage() {
 								Site links mode reads the sitemap over HTTP and watches for
 								added or removed URLs.
 							</p>
-						) : mode === "security_scan" ? null : (
-							<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
-								RSS mode reads the feed over HTTP and watches for added or removed entries.
-							</p>
+						) : mode === "security_scan" ? null : mode === "html_meta" ? (
+						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
+							HTML / meta mode reads the raw HTML over HTTP and watches
+							code-level facts. JavaScript is not needed.
+						</p>
+						) : (
+						<p className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--ink-subtle)]">
+							RSS mode reads the feed over HTTP and watches for added or removed entries.
+						</p>
 						)}
 						{showsSelector(mode) ? (
 							<div>

@@ -75,6 +75,12 @@ export const MONITOR_MODE_OPTIONS: MonitorModeOption[] = [
 		optionLabel: "Security scan (Cloudflare URL Scanner)",
 		hint: "Security scan: renders the URL on Cloudflare's edge and reports verdict/category/technology changes. Needs a free Cloudflare token on the server; keep the interval daily or slower.",
 	},
+	{
+		value: "html_meta",
+		label: "HTML / meta",
+		optionLabel: "HTML / meta (tags, canonical, scripts)",
+		hint: "HTML / meta: watches title, meta tags, canonical links, structured-data types and external script URLs — the code-level changes page content ignores.",
+	},
 ];
 
 /** Short human label for a mode (badges, filters, share pages). */
@@ -87,10 +93,21 @@ export function modeLabel(mode: string): string {
  * the wrong content for them, so the JS checkbox is hidden and the backend
  * rejects `js_required` for these modes.
  */
-export const PLAIN_HTTP_MODES: MonitorMode[] = ["site_links", "rss_feed", "readme", "security_scan"];
+export const PLAIN_HTTP_MODES: MonitorMode[] = [
+	"site_links",
+	"rss_feed",
+	"readme",
+	"security_scan",
+	"html_meta",
+];
 
-/** Modes whose diff is an item list (added / removed) rather than text lines. */
-export const LIST_DIFF_MODES: MonitorMode[] = ["site_links", "list_items", "rss_feed", "security_scan"];
+export const LIST_DIFF_MODES: MonitorMode[] = [
+	"site_links",
+	"list_items",
+	"rss_feed",
+	"security_scan",
+	"html_meta",
+];
 
 /** Modes that expose a value history chart. */
 export const VALUE_HISTORY_MODES: MonitorMode[] = ["product_price", "json_field"];
@@ -108,6 +125,7 @@ export const SITEMAP_IMPORT_MODES: MonitorMode[] = [
 	"list_items",
 	"json_field",
 	"visual",
+	"html_meta",
 ];
 
 export function needsJs(mode: MonitorMode): boolean {

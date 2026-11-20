@@ -1,6 +1,6 @@
 # Monitoring modes
 
-Web Observer supports **9 monitoring modes**. The authoritative list lives in
+Web Observer supports **10 monitoring modes**. The authoritative list lives in
 `backend/app/models/entities.py` (`MonitorMode` / `MONITOR_MODES`); the UI
 mirror is `frontend/src/lib/modes.ts` (`MONITOR_MODE_OPTIONS`). A unit test
 (`backend/tests/test_monitor_modes_regression.py` and
@@ -25,6 +25,7 @@ differently.
 | `readme` | `README.md` of a GitHub repo (default branch or `/tree/<branch>`) | Line-by-line markdown diff | **plain HTTP only** | no | no | common only |
 | `visual` | Full-page screenshot, perceptual hash | Screenshot similarity (pHash) | **browser only** | optional (clip region) | no | common only (no regex filters) |
 | `security_scan` | Cloudflare URL Scanner verdict + technology inventory | Item set (added / removed facts) | **Cloudflare edge only** | no | no | common + `list_min_added`, `list_min_removed` |
+| `html_meta` | Title, allow-listed meta tags, canonical/alternate links, JSON-LD types, external script URLs | Item set (added / removed facts) | **plain HTTP only** | no | no | common + `list_min_added`, `list_min_removed` |
 
 **"plain HTTP only"** means `js_required` is rejected at the schema layer
 (`backend/app/schemas.py`) and the workers bounce the job back onto the HTTP
@@ -163,6 +164,23 @@ watches the security verdict.
   deliberately excluded so an unchanged page does not alert on noise.
 - `js_required` is rejected — the scan happens on Cloudflare's edge.
 - Keep the interval **daily or slower**: each check is a real edge scan.
+
+### `html_meta`
+
+Watches the **code-level** facts that `page_content` deliberately ignores.
+
+- Extracts `<title>`, `html lang`, a small allow-list of meta tags (description,
+  robots, OpenGraph, Twitter cards, theme colour, etc.), canonical and hreflang
+  links, schema.org `@type` values from JSON-LD, and external `<script src>`
+  URLs.
+- Each fact is one `key: value` line, diffed as an item set, so alerts read
+  "meta robots removed" or "script src added" instead of a wall of HTML.
+- Query strings and fragments are stripped from URLs so analytics tokens,
+  cache-busting parameters and build ids do not cause false alerts.
+- Unlisted meta tags (CSRF tokens, build ids, arbitrary vendor tags) are
+  ignored by design.
+- Fetched over plain HTTP; `js_required` is rejected. Use it for SEO checks,
+  tracking-script changes and compliance pages.
 
 ---
 

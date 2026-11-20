@@ -33,7 +33,13 @@ describe("keysForMode", () => {
 	});
 
 	it("gives list minimums to list-like modes", () => {
-		for (const mode of ["list_items", "site_links", "rss_feed"] as const) {
+		for (const mode of [
+			"list_items",
+			"site_links",
+			"rss_feed",
+			"security_scan",
+			"html_meta",
+		] as const) {
 			const keys = keysForMode(mode);
 			expect(keys).toContain("list_min_added");
 			expect(keys).toContain("list_min_removed");

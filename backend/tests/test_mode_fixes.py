@@ -88,6 +88,7 @@ def test_monitor_modes_derived_from_enum() -> None:
         "readme",
         "visual",
         "security_scan",
+        "html_meta",
     }
 
 

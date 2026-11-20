@@ -178,7 +178,7 @@ def classify_heuristic(diff_text: str, mode: str | None = None) -> str:
             if rx.search(text):
                 return cat
         return "api"
-    if mode in ("rss_feed", "readme", "list_items"):
+    if mode in ("rss_feed", "readme", "list_items", "html_meta"):
         # These modes have a fixed shape (added/removed entries, doc edits) —
         # classify by mode instead of scanning the text for keywords, so a
         # feed post mentioning "$" is not reported as a pricing change.
