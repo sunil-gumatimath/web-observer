@@ -33,7 +33,7 @@ def average_hash(image_bytes: bytes, *, hash_size: int = 8) -> str:
 
     img = Image.open(io.BytesIO(image_bytes)).convert("L")
     img = img.resize((hash_size, hash_size), Image.Resampling.LANCZOS)
-    pixels = list(img.getdata())
+    pixels = list(img.tobytes())
     avg = sum(pixels) / len(pixels)
     bits = "".join("1" if p >= avg else "0" for p in pixels)
     # pack to hex
@@ -107,7 +107,7 @@ def perceptual_hash(
 
     img = Image.open(io.BytesIO(image_bytes)).convert("L")
     img = img.resize((input_size, input_size), Image.Resampling.LANCZOS)
-    pixels = list(img.getdata())
+    pixels = list(img.tobytes())
     low = _dct_2d_low_freq(pixels, input_size, low_freq)
     # Median of the AC coefficients decides which blocks are "darker" than
     # the average — the standard pHash construction.

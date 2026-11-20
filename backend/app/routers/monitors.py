@@ -1957,7 +1957,14 @@ def get_snapshot_raw(
     return Response(
         content=data,
         media_type=snap.content_type or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="snapshot-{snap.id}"'},
+        # The bytes came from an arbitrary monitored site and may be HTML with
+        # active content. Never let them run in the app origin: force a
+        # download, block MIME sniffing, and sandbox the document.
+        headers={
+            "Content-Disposition": f'attachment; filename="snapshot-{snap.id}"',
+            "Content-Security-Policy": "sandbox; default-src 'none'; base-uri 'none'",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

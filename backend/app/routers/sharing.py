@@ -463,8 +463,18 @@ def get_public_brand_asset(request: Request, object_key: str) -> Response:
     # labelled image/png, so SVG/ICO logos (Hacker News ships an SVG favicon)
     # returned 200 but rendered as a broken image in the browser.
     _ext, media_type = sniff_image_type(data)
+    # Brand assets come from arbitrary third-party pages. An SVG is an active
+    # document when navigated directly, so serve every asset as a download and
+    # under a locked-down CSP: a script smuggled into a re-hosted SVG cannot
+    # execute in the application origin. Browsers ignore Content-Disposition
+    # for <img src>, so dashboard/share-page rendering is unaffected.
     return Response(
         content=data,
         media_type=media_type,
-        headers={"Cache-Control": "public, max-age=86400"},
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Content-Disposition": "attachment",
+            "Content-Security-Policy": "sandbox; default-src 'none'; base-uri 'none'",
+            "X-Content-Type-Options": "nosniff",
+        },
     )

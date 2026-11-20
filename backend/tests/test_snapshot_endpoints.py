@@ -116,6 +116,11 @@ def test_get_snapshot_raw_endpoint_serves_bytes():
 
     assert response.body == b"<html></html>"
     assert response.media_type == "text/html; charset=utf-8"
+    # Upstream HTML must never execute in the app origin.
+    assert response.headers["content-disposition"] == f'attachment; filename="snapshot-{snap_id}"'
+    assert "sandbox" in response.headers["content-security-policy"]
+    assert "default-src 'none'" in response.headers["content-security-policy"]
+    assert response.headers["x-content-type-options"] == "nosniff"
 
 
 def test_get_snapshot_raw_endpoint_404_when_missing():
