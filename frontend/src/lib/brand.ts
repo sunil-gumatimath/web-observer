@@ -4,9 +4,9 @@ import type { MonitorBrand } from "@/lib/types";
 /** A live preview older than this is re-captured when the monitor page opens. */
 export const LIVE_PREVIEW_MAX_AGE_MS = 60 * 60 * 1000;
 
-export type BrandPreviewKind = "live" | "hero" | "logo";
+export type BrandPreviewKind = "hero" | "live";
 
-function livePreviewUrl(brand: MonitorBrand | null | undefined): string | null {
+export function livePreviewUrl(brand: MonitorBrand | null | undefined): string | null {
   const url = brandAssetUrl(brand?.preview_path);
   if (!url) return null;
   // The object key is stable across captures; version the URL so browsers and
@@ -14,13 +14,22 @@ function livePreviewUrl(brand: MonitorBrand | null | undefined): string | null {
   return brand?.preview_at ? `${url}?v=${encodeURIComponent(brand.preview_at)}` : url;
 }
 
-/** Which kind of image `brandPreviewUrl` resolves to (live > hero > logo). */
+/** The site's own social/brand image (og:image) — the best brand preview. */
+export function brandHeroUrl(brand: MonitorBrand | null | undefined): string | null {
+  return brandAssetUrl(brand?.hero_path) || brand?.hero_url || null;
+}
+
+/** The brand mark (shown in the header, never used as the banner preview). */
+export function brandLogoUrl(brand: MonitorBrand | null | undefined): string | null {
+  return brandAssetUrl(brand?.logo_path) || brand?.logo_url || null;
+}
+
+/** Which kind of image `brandPreviewUrl` resolves to (hero > live). */
 export function brandPreviewKind(
   brand: MonitorBrand | null | undefined,
 ): BrandPreviewKind | null {
+  if (brandHeroUrl(brand)) return "hero";
   if (livePreviewUrl(brand)) return "live";
-  if (brandAssetUrl(brand?.hero_path) || brand?.hero_url) return "hero";
-  if (brandAssetUrl(brand?.logo_path) || brand?.logo_url) return "logo";
   return null;
 }
 
@@ -38,17 +47,14 @@ export function isLivePreviewStale(
 /**
  * Best available image for a monitor's hero banner.
  *
- * Prefers a live screenshot of the page itself (works for any site), then the
- * page's og:image hero, then its logo.
- *
- * Some pages (e.g. Hacker News) publish a logo but no og:image/twitter:image.
- * Falling back to the logo keeps the preview useful instead of showing a dead
- * "No product preview image" placeholder.
+ * Prefers the page's own og:image (a real brand/social image), then a live
+ * screenshot of the page. A logo is never used as the banner; sites with no
+ * hero or screenshot get a brand card (title + hostname) instead.
  */
 export function brandPreviewUrl(brand: MonitorBrand | null | undefined): string | null {
+  const hero = brandHeroUrl(brand);
+  if (hero) return hero;
   const live = livePreviewUrl(brand);
   if (live) return live;
-  const hero = brandAssetUrl(brand?.hero_path) || brand?.hero_url;
-  if (hero) return hero;
-  return brandAssetUrl(brand?.logo_path) || brand?.logo_url || null;
+  return null;
 }

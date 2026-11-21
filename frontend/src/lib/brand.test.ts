@@ -13,25 +13,25 @@ describe("brandPreviewUrl", () => {
     expect(brandPreviewUrl(brand)).toContain("brand-assets/a/hero.png");
   });
 
-  it("falls back to the logo when a page has no hero image", () => {
+  it("does not use the logo as a preview when a page has no hero image", () => {
     const brand: MonitorBrand = {
       hero_path: null,
       hero_url: null,
       logo_path: "brand-assets/a/logo.svg",
       logo_url: "https://example.com/logo.svg",
     };
-    expect(brandPreviewUrl(brand)).toContain("brand-assets/a/logo.svg");
+    expect(brandPreviewUrl(brand)).toBeNull();
   });
 
-  it("uses the external logo URL when there is no re-hosted logo", () => {
+  it("does not use an external logo URL as a preview", () => {
     const brand: MonitorBrand = {
       logo_path: null,
       logo_url: "https://example.com/logo.png",
     };
-    expect(brandPreviewUrl(brand)).toBe("https://example.com/logo.png");
+    expect(brandPreviewUrl(brand)).toBeNull();
   });
 
-  it("prefers the live page preview and versions the URL by capture time", () => {
+  it("prefers the site's og:image hero over a live screenshot, and versions the screenshot URL by capture time", () => {
     const brand: MonitorBrand = {
       preview_path: "brand-assets/a/preview.png",
       preview_at: "2026-01-01T00:00:00+00:00",
@@ -39,14 +39,18 @@ describe("brandPreviewUrl", () => {
       logo_path: "brand-assets/a/logo.svg",
     };
     const url = brandPreviewUrl(brand);
-    expect(url).toContain("brand-assets/a/preview.png?v=");
-    expect(url).toContain(encodeURIComponent("2026-01-01T00:00:00+00:00"));
-    expect(brandPreviewKind(brand)).toBe("live");
+    expect(url).toContain("brand-assets/a/hero.png");
+    expect(brandPreviewKind(brand)).toBe("hero");
+    // Without a hero, the live screenshot wins and is cache-busted by capture time.
+    const noHero = { ...brand, hero_path: null };
+    expect(brandPreviewUrl(noHero)).toContain("brand-assets/a/preview.png?v=");
+    expect(brandPreviewUrl(noHero)).toContain(encodeURIComponent("2026-01-01T00:00:00+00:00"));
+    expect(brandPreviewKind(noHero)).toBe("live");
   });
 
-  it("classifies hero, logo and empty brands", () => {
+  it("classifies hero and non-preview brands", () => {
     expect(brandPreviewKind({ hero_url: "https://example.com/h.png" })).toBe("hero");
-    expect(brandPreviewKind({ logo_url: "https://example.com/l.png" })).toBe("logo");
+    expect(brandPreviewKind({ logo_url: "https://example.com/l.png" })).toBeNull();
     expect(brandPreviewKind(null)).toBeNull();
   });
 
