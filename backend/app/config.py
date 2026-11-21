@@ -242,7 +242,9 @@ def _assert_browser_token_is_not_internal(settings: Settings) -> None:
     for name, value in os.environ.items():
         if not name.startswith("NEXT_PUBLIC_") or not value:
             continue
-        if hmac.compare_digest(value.strip(), token):
+        # Compare bytes: compare_digest raises on non-ASCII str values, and a
+        # unicode NEXT_PUBLIC_* value must not crash startup.
+        if hmac.compare_digest(value.strip().encode(), token.encode()):
             raise RuntimeError(
                 f"{name} is identical to INTERNAL_API_TOKEN. NEXT_PUBLIC_* values are "
                 "bundled into the browser, so this would publish an owner-equivalent "
