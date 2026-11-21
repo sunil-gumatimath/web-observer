@@ -27,6 +27,7 @@ from app.models.entities import (
     OutboxStatus,
     RunStatus,
 )
+from app.services import context_dev
 from app.services.ai_summary import (
     AIEnrichment,
     apply_triage_reason,
@@ -101,6 +102,21 @@ def extract_normalized(
     ignore_regexes = [str(s) for s in (monitor.ignore_regexes or [])]
 
     if mode == MODE_PRODUCT_PRICE:
+        if context_dev.is_configured():
+            try:
+                return (
+                    context_dev.scrape_product_price(
+                        monitor.url,
+                        timeout_seconds=monitor.timeout_seconds,
+                    ),
+                    None,
+                )
+            except Exception as exc:  # noqa: BLE001 - provider is best-effort
+                logger.warning(
+                    "product_price_provider_failed monitor_id=%s error=%s; using local extraction",
+                    monitor.id,
+                    exc,
+                )
         return (
             extract_price(
                 result.text,
@@ -163,6 +179,20 @@ def extract_normalized(
 
         items = extract_html_meta_items(result.text, result.final_url or monitor.url)
         return list_to_normalized(items), items
+
+    # page_content (default): a provider-fetched page is already cleaned
+    # Markdown — re-parsing it as HTML would collapse its block structure.
+    if mode == "page_content" and result.provider_markdown is not None:
+        from app.services.extract import apply_ignore_regexes, normalize_markdown_text
+
+        return (
+            apply_ignore_regexes(
+                normalize_markdown_text(result.provider_markdown),
+                ignore_regexes,
+                preserve_markdown=True,
+            ),
+            None,
+        )
 
     # page_content (default): main content as markdown when detectable
     # (webdog `useMainContentOnly` parity — strips nav/boilerplate), falling

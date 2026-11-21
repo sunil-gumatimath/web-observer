@@ -107,12 +107,11 @@ def run_browser_check(run_id: str) -> None:
 
     def _fetch(monitor: Monitor, db):
         if monitor.mode == "visual":
-            from app.services.visual import capture_screenshot, visual_to_fetch_result
+            from app.services.visual import capture_with_provider_fallback, visual_to_fetch_result
 
-            capture = capture_screenshot(
+            capture = capture_with_provider_fallback(
                 monitor.url,
                 timeout_seconds=max(monitor.timeout_seconds, 45),
-                full_page=True,
                 clip_selector=monitor.css_selector,
             )
             try:
@@ -128,10 +127,15 @@ def run_browser_check(run_id: str) -> None:
 
             result = visual_to_fetch_result(capture, url=monitor.url)
         else:
-            result = fetch_url_browser(
+            from app.workers.checks import fetch_page_with_provider_fallback
+
+            result = fetch_page_with_provider_fallback(
                 monitor.url,
+                monitor_mode=monitor.mode,
                 timeout_seconds=max(monitor.timeout_seconds, 45),
                 max_response_bytes=monitor.max_response_bytes,
+                respect_robots=False,
+                primary=fetch_url_browser,
             )
         # Quota was reserved once for this run in _pre_run_hook (receipt key);
         # just refresh expiry — advisory housekeeping only.

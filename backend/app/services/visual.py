@@ -282,32 +282,7 @@ def _capture_screenshot_inline(
             ) from exc
         raise FetchError("internal_error", f"Screenshot failed: {exc}") from exc
 
-    ahash = average_hash(png)
-    sha = hashlib.sha256(png).hexdigest()
-
-    try:
-        phash = perceptual_hash(png)
-    except Exception as phash_exc:  # noqa: BLE001 - degrade to the legacy aHash
-        logger.warning("phash_failed error=%s", phash_exc)
-        phash = ""
-
-    width, height = 0, 0
-    try:
-        from PIL import Image
-
-        with Image.open(io.BytesIO(png)) as im:
-            width, height = im.size
-    except Exception as dim_exc:  # noqa: BLE001 - dimensions are metadata
-        logger.debug("image_dimensions_unavailable error=%s", dim_exc)
-
-    return VisualCapture(
-        png_bytes=png,
-        ahash=ahash,
-        sha256=sha,
-        width=width,
-        height=height,
-        phash=phash,
-    )
+    return _capture_from_png(png)
 
 
 def _capture_screenshot_subprocess(
@@ -444,6 +419,65 @@ def capture_screenshot(
         full_page=full_page,
         clip_selector=clip_selector,
     )
+
+
+def _capture_from_png(png: bytes) -> VisualCapture:
+    """Build a VisualCapture with hashes from already-captured PNG bytes."""
+    ahash = average_hash(png)
+    sha = hashlib.sha256(png).hexdigest()
+    try:
+        phash = perceptual_hash(png)
+    except Exception as phash_exc:  # noqa: BLE001 - degrade to aHash
+        logger.warning("phash_failed error=%s", phash_exc)
+        phash = ""
+    width, height = 0, 0
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(png)) as im:
+            width, height = im.size
+    except Exception as dim_exc:  # noqa: BLE001 - dimensions are metadata
+        logger.debug("image_dimensions_unavailable error=%s", dim_exc)
+    return VisualCapture(
+        png_bytes=png,
+        ahash=ahash,
+        sha256=sha,
+        width=width,
+        height=height,
+        phash=phash,
+    )
+
+
+def capture_with_provider_fallback(
+    url: str,
+    *,
+    timeout_seconds: int = 45,
+    clip_selector: str | None = None,
+) -> VisualCapture:
+    """Capture locally via Playwright, falling back to Context.dev on failure."""
+    try:
+        return capture_screenshot(
+            url,
+            timeout_seconds=timeout_seconds,
+            full_page=True,
+            clip_selector=clip_selector,
+        )
+    except FetchError as exc:
+        from app.services import context_dev
+
+        if not context_dev.is_configured():
+            raise
+        try:
+            png = context_dev.scrape_screenshot_png(
+                url,
+                timeout_seconds=timeout_seconds,
+                clip_selector=clip_selector,
+            )
+        except Exception as provider_exc:  # noqa: BLE001 - never mask the original
+            logger.warning("visual_provider_fallback_failed url=%s error=%s", url, provider_exc)
+            raise exc from provider_exc
+        logger.info("visual_provider_fallback_used url=%s bytes=%s", url, len(png))
+        return _capture_from_png(png)
 
 
 def visual_to_fetch_result(capture: VisualCapture, *, url: str) -> FetchResult:

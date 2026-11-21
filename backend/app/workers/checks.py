@@ -10,6 +10,7 @@ import dramatiq
 from app.config import get_settings
 from app.models import Monitor
 from app.models.entities import PLAIN_HTTP_MODES, RunStatus
+from app.services import context_dev
 from app.services.fetcher import FetchError, FetchResult, fetch_url
 from app.services.sitemap import SitemapError, sitemap_monitor_text
 from app.workers.broker import redis_broker  # noqa: F401
@@ -21,6 +22,58 @@ settings = get_settings()
 MODE_SITE_LINKS = "site_links"
 MODE_README = "readme"
 MODE_SECURITY_SCAN = "security_scan"
+
+# Only retry through the paid provider when the local fetch was plausibly
+# blocked or timed out. A 404 is a real result, never a reason to spend credits.
+_PROVIDER_FAILOVER_CODES = frozenset({"bot_challenge", "http_error", "read_timeout"})
+_PROVIDER_HTTP_STATUSES = frozenset({401, 403, 429})
+
+
+def fetch_page_with_provider_fallback(
+    url: str,
+    *,
+    monitor_mode: str,
+    timeout_seconds: int,
+    max_response_bytes: int,
+    respect_robots: bool = True,
+    primary=None,
+    primary_kwargs: dict | None = None,
+) -> FetchResult:
+    """Fetch a page locally; retry via Context.dev only when it looks blocked."""
+    fetch = primary or fetch_url
+    kwargs: dict = {
+        "timeout_seconds": timeout_seconds,
+        "max_response_bytes": max_response_bytes,
+    }
+    if respect_robots:
+        kwargs["respect_robots"] = True
+    if primary_kwargs:
+        kwargs.update(primary_kwargs)
+    try:
+        return fetch(url, **kwargs)
+    except FetchError as exc:
+        if monitor_mode != "page_content" or not context_dev.is_configured():
+            raise
+        if exc.code not in _PROVIDER_FAILOVER_CODES:
+            raise
+        if exc.code == "http_error" and exc.http_status not in _PROVIDER_HTTP_STATUSES:
+            raise
+        try:
+            markdown = context_dev.scrape_markdown(url, timeout_seconds=timeout_seconds)
+        except Exception as provider_exc:  # noqa: BLE001 - never mask the original
+            logger.warning("page_provider_fallback_failed url=%s error=%s", url, provider_exc)
+            raise exc from provider_exc
+        started = time.perf_counter()
+        logger.info("page_provider_fallback_used url=%s chars=%s", url, len(markdown))
+        return FetchResult(
+            final_url=url,
+            status_code=200,
+            content=markdown.encode("utf-8"),
+            text=markdown,
+            content_type="text/markdown; charset=utf-8",
+            latency_ms=round((time.perf_counter() - started) * 1000),
+            provider_markdown=markdown,
+        )
 
 
 @dramatiq.actor(queue_name="http_checks", max_retries=3, time_limit=120_000)
@@ -112,6 +165,13 @@ def run_http_check(run_id: str) -> None:
                 started_delta = time.perf_counter() - started
                 logger.debug("security_scan_fetch_failed latency=%.2fs", started_delta)
                 raise
+        if monitor.mode == "page_content":
+            return fetch_page_with_provider_fallback(
+                monitor.url,
+                monitor_mode=monitor.mode,
+                timeout_seconds=monitor.timeout_seconds,
+                max_response_bytes=monitor.max_response_bytes,
+            )
         return fetch_url(
             monitor.url,
             timeout_seconds=monitor.timeout_seconds,
