@@ -1,3 +1,4 @@
+import hmac
 import logging
 import os
 import secrets
@@ -224,10 +225,38 @@ class Settings(BaseSettings):
         return "internal_api_token" not in self.model_fields_set
 
 
+_DEV_INTERNAL_TOKEN = "dev-internal-token"
+
+
+def _assert_browser_token_is_not_internal(settings: Settings) -> None:
+    """Fail closed if an owner-equivalent token is bundled into the browser.
+
+    ``NEXT_PUBLIC_*`` variables are inlined into the Next.js client bundle. If
+    one of them equals the API's ``INTERNAL_API_TOKEN``, anyone who loads the
+    page can read a credential that grants owner access to every workspace.
+    The documented dev placeholder is exempt so local development still works.
+    """
+    token = (settings.internal_api_token or "").strip()
+    if not token or token == _DEV_INTERNAL_TOKEN:
+        return
+    for name, value in os.environ.items():
+        if not name.startswith("NEXT_PUBLIC_") or not value:
+            continue
+        # Compare bytes: compare_digest raises on non-ASCII str values, and a
+        # unicode NEXT_PUBLIC_* value must not crash startup.
+        if hmac.compare_digest(value.strip().encode(), token.encode()):
+            raise RuntimeError(
+                f"{name} is identical to INTERNAL_API_TOKEN. NEXT_PUBLIC_* values are "
+                "bundled into the browser, so this would publish an owner-equivalent "
+                "credential. Remove the variable from the frontend build environment."
+            )
+
+
 @lru_cache
 def get_settings() -> Settings:
     _warn_env_overrides()
     settings = Settings()
+    _assert_browser_token_is_not_internal(settings)
 
     if "app_env" not in settings.model_fields_set:
         # Not fatal on its own - every guard below still applies - but this is
@@ -269,7 +298,7 @@ def get_settings() -> Settings:
             "every workspace, so an empty value disables authentication entirely. "
             "Set it to a real secret."
         )
-    if settings.internal_api_token == "dev-internal-token":
+    if settings.internal_api_token == _DEV_INTERNAL_TOKEN:
         raise RuntimeError(
             "INTERNAL_API_TOKEN must be set to a non-default value outside development"
         )

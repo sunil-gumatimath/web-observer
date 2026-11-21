@@ -14,6 +14,7 @@ deliberately scoped to the ``brand-assets/`` object-key prefix.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from urllib.parse import urljoin
@@ -252,6 +253,38 @@ def fetch_brand_info(url: str, *, timeout_seconds: int = 5) -> BrandMeta:
     return meta
 
 
+# An SVG is an active document when opened directly. Re-hosting one from an
+# arbitrary monitored page must not smuggle scripts, event handlers or external
+# entities into our storage, even though the asset endpoint also hardens the
+# response headers. Reject the candidate instead of trying to repair it.
+_UNSAFE_SVG_RE = re.compile(
+    r"<\s*script\b"
+    r"|<\s*foreignObject\b"
+    r"|<\s*iframe\b"
+    r"|<\s*object\b"
+    r"|<\s*embed\b"
+    r"|<\s*handler\b"
+    r"|<\s*listener\b"
+    r"|<!\s*ENTITY\b"
+    r"|<!\s*DOCTYPE\b"
+    r"|<\?xml-stylesheet\b"
+    r"|javascript\s*:"
+    r"|\bon[a-z]+\s*=",
+    re.IGNORECASE,
+)
+
+
+def is_unsafe_svg(data: bytes) -> bool:
+    """True for SVG bytes containing script-capable constructs."""
+    text = data[:65536].decode("utf-8", errors="replace")
+    looks_like_svg = sniff_image_type(data)[1] == "image/svg+xml" or re.search(
+        r"<\s*svg\b", text, re.IGNORECASE
+    )
+    if not looks_like_svg:
+        return False
+    return bool(_UNSAFE_SVG_RE.search(text))
+
+
 def _download_image(url: str, *, max_bytes: int = MAX_IMAGE_BYTES) -> bytes | None:
     try:
         result = fetch_binary(
@@ -268,6 +301,9 @@ def _download_image(url: str, *, max_bytes: int = MAX_IMAGE_BYTES) -> bytes | No
             return None
         head = result.content[:512].lstrip().lower()
         if head.startswith(b"<!doctype") or head.startswith(b"<html"):
+            return None
+        if is_unsafe_svg(result.content):
+            logger.debug("brand_asset_unsafe_svg_rejected")
             return None
         return result.content
     except FetchError as exc:  # noqa: BLE001

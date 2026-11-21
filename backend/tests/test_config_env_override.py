@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from app.config import _warn_env_overrides
 
 
@@ -64,3 +66,34 @@ def test_missing_env_file_is_not_an_error(tmp_path, caplog) -> None:
     with caplog.at_level(logging.WARNING, logger="app.config"):
         assert _warn_env_overrides(tmp_path / "absent.env") == []
     assert caplog.text == ""
+
+
+def test_public_bundle_variable_cannot_equal_internal_token(monkeypatch) -> None:
+    """A NEXT_PUBLIC_* value is in the browser bundle; it cannot be the owner token."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "stable-test-secret-key-123456")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-secret-token-987654")
+    monkeypatch.setenv("NEXT_PUBLIC_INTERNAL_API_TOKEN", "owner-secret-token-987654")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match="bundled into the browser"):
+            get_settings()
+    finally:
+        get_settings.cache_clear()
+
+
+def test_non_ascii_public_variable_does_not_crash_the_guard(monkeypatch) -> None:
+    """A unicode NEXT_PUBLIC_* value must not break startup token comparison."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "stable-test-secret-key-123456")
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-secret-token-987654")
+    monkeypatch.setenv("NEXT_PUBLIC_SITE_NAME", "Café — Observateur")
+    get_settings.cache_clear()
+    try:
+        assert get_settings().internal_api_token == "owner-secret-token-987654"
+    finally:
+        get_settings.cache_clear()

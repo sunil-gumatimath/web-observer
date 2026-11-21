@@ -79,6 +79,38 @@ def test_fetch_brand_info_uses_logo_fallbacks_when_page_fetch_fails(monkeypatch)
     assert "https://openai.com/favicon.ico" in meta.logo_candidates
 
 
+def test_is_unsafe_svg_and_download_reject_active_svg(monkeypatch):
+    from types import SimpleNamespace
+
+    safe = b'<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>'
+    unsafe = (
+        b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.domain)</script></svg>'
+    )
+    entity = b'<!DOCTYPE svg [<!ENTITY x SYSTEM "file:///etc/passwd">]><svg/>'
+
+    assert not branding.is_unsafe_svg(safe)
+    assert branding.is_unsafe_svg(unsafe)
+    assert branding.is_unsafe_svg(entity)
+    assert branding.is_unsafe_svg(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)">x</a></svg>'
+    )
+    assert branding.is_unsafe_svg(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><circle onload="evil()"/></svg>'
+    )
+    assert not branding.is_unsafe_svg(b"\x89PNG\r\n\x1a\nnot-svg-bytes")
+
+    monkeypatch.setattr(
+        branding,
+        "fetch_binary",
+        lambda *_a, **_k: SimpleNamespace(
+            status_code=200,
+            content=unsafe,
+            content_type="image/svg+xml",
+        ),
+    )
+    assert branding._download_image("https://example.com/logo.svg") is None
+
+
 def test_store_brand_assets_keeps_live_preview(monkeypatch):
     """Re-scraping logo/hero must not drop the captured live page preview."""
     from types import SimpleNamespace
