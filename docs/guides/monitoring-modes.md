@@ -184,6 +184,23 @@ Watches the **code-level** facts that `page_content` deliberately ignores.
 
 ---
 
+## Optional Context.dev provider (fetch failover)
+
+Set `CONTEXT_DEV_API_KEY` in `backend/.env` (server-side only) to enable three
+opt-in upgrades. With no key, every mode behaves exactly as documented above.
+
+| Mode | Upgrade | Trigger |
+| ---- | ------- | ------- |
+| `product_price` | Structured price/currency from Context.dev `formats.product` instead of the first price-like regex match | Every check when the key is set; falls back to local regex on any provider error |
+| `site_links` | URL inventory from the Map URLs endpoint when no sitemap exists | Only after the normal sitemap discovery fails; a non-empty result replaces the `no_sitemap` error |
+| `page_content` / `visual` | Markdown or screenshot capture from Context.dev | Only when the local fetch/capture fails with `bot_challenge`, `http_error` (401/403/429), `read_timeout`, or a Playwright error |
+
+The provider is best-effort: failures never fail a check that would have worked
+locally, and the original local error is preserved when the fallback also fails.
+Each successful fallback spends Context.dev credits (1 per scrape / screenshot,
+plus 1 when the product extraction succeeds), so keep schedules sane — a
+hourly monitor is roughly 720 credits/month.
+
 ## Fetch reliability and previews
 
 You can add any public `http(s)` URL as a monitor, but a monitor only produces a preview after a

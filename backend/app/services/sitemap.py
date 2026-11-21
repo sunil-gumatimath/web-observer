@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from urllib.parse import urldefrag, urlparse
 
 from app.config import get_settings
+from app.services import context_dev
 from app.services.fetcher import FetchError, fetch_url
 
 logger = logging.getLogger(__name__)
@@ -248,12 +249,37 @@ def sitemap_monitor_urls(
     sitemap-index recursion). Raises :class:`SitemapError` if no sitemap is
     found.
     """
-    return discover_sitemap_urls(
-        base_url,
-        timeout_seconds=timeout_seconds,
-        max_response_bytes=max_response_bytes,
-        max_urls=max_urls,
-    )
+    try:
+        return discover_sitemap_urls(
+            base_url,
+            timeout_seconds=timeout_seconds,
+            max_response_bytes=max_response_bytes,
+            max_urls=max_urls,
+        )
+    except SitemapError as exc:
+        if not context_dev.is_configured():
+            raise
+        settings = get_settings()
+        timeout = timeout_seconds or settings.default_timeout_seconds
+        try:
+            mapped = context_dev.map_urls(
+                base_url,
+                max_links=max_urls,
+                timeout_seconds=timeout,
+            )
+        except Exception as map_exc:  # noqa: BLE001 - provider is best-effort
+            logger.warning("sitemap_map_fallback_failed url=%s error=%s", base_url, map_exc)
+            raise exc from map_exc
+        clean: list[str] = []
+        for candidate in mapped:
+            if candidate not in clean:
+                clean.append(candidate)
+            if len(clean) >= max_urls:
+                break
+        if not clean:
+            raise
+        logger.info("sitemap_map_fallback_used url=%s urls=%s", base_url, len(clean))
+        return clean
 
 
 def sitemap_monitor_text(

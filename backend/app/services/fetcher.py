@@ -87,6 +87,9 @@ class FetchResult:
     text: str
     content_type: str
     latency_ms: int
+    # Set only when a page was fetched by the optional Context.dev fallback.
+    # The pipeline consumes it verbatim instead of re-converting Markdown.
+    provider_markdown: str | None = None
 
 
 def _check_robots(url: str, user_agent: str, client: httpx.Client) -> None:

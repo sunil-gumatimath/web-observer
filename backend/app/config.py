@@ -17,7 +17,7 @@ _DEV_ENV_NAMES = frozenset({"development", "dev", "local", "test", "testing"})
 
 #: Fields whose value in the OS environment silently wins over ``.env``.
 #: Keys are fingerprinted in the warning; everything else is safe to print.
-_SECRET_FIELDS = frozenset({"LLM_API_KEY", "SUBQ_API_KEY"})
+_SECRET_FIELDS = frozenset({"LLM_API_KEY", "SUBQ_API_KEY", "CONTEXT_DEV_API_KEY"})
 _OVERRIDE_CHECKED_FIELDS = (
     "LLM_API_KEY",
     "LLM_MODEL",
@@ -25,6 +25,7 @@ _OVERRIDE_CHECKED_FIELDS = (
     "SUBQ_API_KEY",
     "SUBQ_MODEL",
     "SUBQ_API_BASE",
+    "CONTEXT_DEV_API_KEY",
 )
 
 
@@ -167,6 +168,10 @@ class Settings(BaseSettings):
     subq_api_base: str = "https://api.subq.ai/v1"
     subq_model: str = "subq-snap-preview"
     subq_noise_threshold: float = 0.70
+
+    # Optional Context.dev provider: fetch failover + structured enrichment.
+    # Empty string keeps every existing mode on its current fetch path.
+    context_dev_api_key: str = ""
 
     scheduler_poll_seconds: float = 5.0
     scheduler_batch_size: int = 50

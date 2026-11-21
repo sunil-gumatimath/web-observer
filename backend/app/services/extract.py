@@ -72,7 +72,7 @@ _MAX_IGNORE_REGEX_PATTERN_LEN = 256
 _MAX_IGNORE_REGEX_TEXT_CHARS = 1_000_000
 
 
-def apply_ignore_regexes(text: str, patterns: list[str]) -> str:
+def apply_ignore_regexes(text: str, patterns: list[str], *, preserve_markdown: bool = False) -> str:
     if len(patterns) > _MAX_IGNORE_REGEX_PATTERNS:
         raise ExtractionError(
             "normalization_failed",
@@ -85,7 +85,7 @@ def apply_ignore_regexes(text: str, patterns: list[str]) -> str:
         logger.warning(
             "ignore_regexes_skipped len=%d cap=%d", len(text), _MAX_IGNORE_REGEX_TEXT_CHARS
         )
-        return normalize_text(text)
+        return normalize_markdown_text(text) if preserve_markdown else normalize_text(text)
     for pattern in patterns:
         if not pattern:
             continue
@@ -102,7 +102,7 @@ def apply_ignore_regexes(text: str, patterns: list[str]) -> str:
                 "normalization_failed", f"Invalid ignore regex: {pattern}"
             ) from exc
         text = rx.sub("", text)
-    return normalize_text(text)
+    return normalize_markdown_text(text) if preserve_markdown else normalize_text(text)
 
 
 def extract_markdown(
