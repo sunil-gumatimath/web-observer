@@ -42,9 +42,7 @@ def enrich_monitor_brand(monitor_id: str, capture_preview: bool = True) -> None:
             try:
                 capture_brand_preview.send(monitor_id)
             except Exception as exc:  # noqa: BLE001 - optional enrichment
-                logger.debug(
-                    "brand_preview_enqueue_failed monitor_id=%s error=%s", monitor_id, exc
-                )
+                logger.debug("brand_preview_enqueue_failed monitor_id=%s error=%s", monitor_id, exc)
 
 
 def enqueue_brand_enrichment_for(monitor_ids: list[str], *, capture_preview: bool = True) -> None:
