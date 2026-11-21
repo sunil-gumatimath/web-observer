@@ -43,6 +43,7 @@ META_KEYS: frozenset[str] = frozenset(
 
 MAX_VALUE_CHARS = 300
 MAX_SCRIPT_URLS = 50
+MAX_ALTERNATE_LINKS = 40
 MAX_TOTAL_ITEMS = 120
 
 # Meta values that are URLs: normalize them like canonical/script links so a
@@ -91,7 +92,7 @@ def _jsonld_types(html: str) -> list[str]:
             continue
         try:
             walk(json.loads(raw))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, RecursionError):
             continue
     return sorted(found)[:20]
 
@@ -114,10 +115,12 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
     if title:
         items.append(f"title: {title}")
 
+    head_facts: list[str] = []
+
     html_node = tree.css_first("html")
     lang = _clean(html_node.attributes.get("lang") if html_node else None)
     if lang:
-        items.append(f"html lang: {lang}")
+        head_facts.append(f"html lang: {lang}")
 
     meta_values: dict[str, str] = {}
     for node in tree.css("meta"):
@@ -127,6 +130,8 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
             .strip()
             .lower()
         )
+        if not key and attrs.get("charset"):
+            key = "charset"
         if key == "charset":
             value = _clean(attrs.get("content") or attrs.get("charset"))
         elif key in META_KEYS:
@@ -136,8 +141,9 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
         if value and key not in meta_values:
             meta_values[key] = _stable_url(value, final_url) if key in URL_META_KEYS else value
     for key in sorted(meta_values):
-        items.append(f"meta {key}: {meta_values[key]}")
+        head_facts.append(f"meta {key}: {meta_values[key]}")
 
+    alternate_links = 0
     for node in tree.css("link"):
         attrs = node.attributes
         rel = (attrs.get("rel") or "").lower().split()
@@ -145,13 +151,17 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
         if not href:
             continue
         if "canonical" in rel:
-            items.append(f"canonical: {_stable_url(href, final_url)}")
+            head_facts.append(f"canonical: {_stable_url(href, final_url)}")
         elif "alternate" in rel and attrs.get("hreflang"):
+            if alternate_links >= MAX_ALTERNATE_LINKS:
+                continue
             hreflang = _clean(attrs.get("hreflang"))
             if hreflang:
-                items.append(f"alternate {hreflang}: {_stable_url(href, final_url)}")
-    # Canonical/alternate links are few; keep the list deterministic.
-    items = sorted(set(items[:1] + items[1:]))
+                head_facts.append(f"alternate {hreflang}: {_stable_url(href, final_url)}")
+                alternate_links += 1
+    # Sort the remaining head facts deterministically; document and title stay
+    # pinned first so the total cap never evicts them.
+    items.extend(sorted(set(head_facts)))
 
     for schema_type in _jsonld_types(html):
         items.append(f"jsonld type: {schema_type}")

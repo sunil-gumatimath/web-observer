@@ -127,3 +127,32 @@ def test_html_meta_rejects_js_required(model) -> None:
             mode="html_meta",
             js_required=True,
         )
+
+
+def test_extract_html_meta_items_reads_standard_charset_attribute() -> None:
+    html = '<html><head><meta charset="utf-8"><title>T</title></head></html>'
+    items = extract_html_meta_items(html, "https://example.com/")
+    assert "meta charset: utf-8" in items
+    named = '<html><head><meta name="charset" content="utf-8"></head></html>'
+    assert "meta charset: utf-8" in extract_html_meta_items(named, "https://example.com/")
+
+
+def test_extract_html_meta_items_caps_alternates_and_keeps_key_facts() -> None:
+    alternates = "".join(
+        f'<link rel="alternate" hreflang="x{i}" href="/page{i}">' for i in range(130)
+    )
+    scripts = "".join(f'<script src="/static/s{i}.js"></script>' for i in range(50))
+    html = f"<html><head><title>T</title>{alternates}{scripts}</head></html>"
+    items = extract_html_meta_items(html, "https://example.com/")
+    assert "document: https://example.com/" in items
+    assert "title: T" in items
+    assert any(item.startswith("script src:") for item in items)
+    assert sum(item.startswith("alternate ") for item in items) <= 40
+    assert len(items) <= 120
+
+
+def test_extract_html_meta_items_survives_deeply_nested_jsonld() -> None:
+    blob = '{"@type":"X","a":' * 2000 + "1" + "}" * 2000
+    html = f'<html><head><script type="application/ld+json">{blob}</script></head></html>'
+    items = extract_html_meta_items(html, "https://example.com/")
+    assert "document: https://example.com/" in items
