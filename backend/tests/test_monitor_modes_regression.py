@@ -105,7 +105,13 @@ def test_rss_feed_is_a_list_diff_mode() -> None:
     assert MonitorMode.RSS_FEED.value in LIST_DIFF_MODES
     # Every list-diff mode must also be a threshold-aware list mode, otherwise
     # the same mode would get item-level thresholds but a text diff.
-    assert LIST_DIFF_MODES <= {"site_links", "list_items", "rss_feed", "security_scan"}
+    assert LIST_DIFF_MODES <= {
+        "site_links",
+        "list_items",
+        "rss_feed",
+        "security_scan",
+        "html_meta",
+    }
 
 
 def test_rss_feed_diff_is_item_level_not_double_prefixed() -> None:
@@ -345,7 +351,13 @@ def test_json_field_value_bounds() -> None:
 
 
 def test_plain_http_modes_cover_every_http_only_mode() -> None:
-    assert PLAIN_HTTP_MODES == {"site_links", "rss_feed", "readme", "security_scan"}
+    assert PLAIN_HTTP_MODES == {
+        "site_links",
+        "rss_feed",
+        "readme",
+        "security_scan",
+        "html_meta",
+    }
 
 
 def test_value_modes_cover_the_chartable_modes() -> None:
@@ -363,10 +375,11 @@ def test_monitor_modes_unchanged() -> None:
         "readme",
         "visual",
         "security_scan",
+        "html_meta",
     }
 
 
-def test_extract_normalized_covers_all_nine_modes() -> None:
+def test_extract_normalized_covers_all_ten_modes() -> None:
     # 1. page_content
     res, _ = extract_normalized(
         _monitor("page_content"),
@@ -433,3 +446,16 @@ def test_extract_normalized_covers_all_nine_modes() -> None:
     )
     assert items == ["malicious=false", "categories=", "tags=", "tech=nginx"]
     assert "- malicious=false" in res
+
+    # 10. html_meta
+    res, items = extract_normalized(
+        _monitor("html_meta"),
+        _fetch(
+            '<html><head><title>Ten</title><meta name="description" content="Desc"></head></html>',
+            "text/html",
+        ),
+    )
+    assert items is not None
+    assert "title: Ten" in items
+    assert "meta description: Desc" in items
+    assert "- title: Ten" in res

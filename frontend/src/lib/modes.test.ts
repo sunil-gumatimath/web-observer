@@ -23,6 +23,7 @@ const ALL_MODES: MonitorMode[] = [
 	"readme",
 	"visual",
 	"security_scan",
+	"html_meta",
 ];
 
 describe("MONITOR_MODE_OPTIONS", () => {
@@ -58,6 +59,8 @@ describe("needsJs", () => {
 		expect(needsJs("site_links")).toBe(false);
 		expect(needsJs("rss_feed")).toBe(false);
 		expect(needsJs("readme")).toBe(false);
+		expect(needsJs("security_scan")).toBe(false);
+		expect(needsJs("html_meta")).toBe(false);
 		expect(needsJs("page_content")).toBe(true);
 		expect(needsJs("product_price")).toBe(true);
 		expect(needsJs("list_items")).toBe(true);
@@ -102,6 +105,7 @@ describe("mode sets", () => {
 		expect(LIST_DIFF_MODES).toContain("rss_feed");
 		expect(LIST_DIFF_MODES).toContain("site_links");
 		expect(LIST_DIFF_MODES).toContain("list_items");
+		expect(LIST_DIFF_MODES).toContain("html_meta");
 	});
 
 	it("exposes a value history only for the numeric modes", () => {

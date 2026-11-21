@@ -7,7 +7,8 @@ export type MonitorMode =
   | "rss_feed"
   | "readme"
   | "visual"
-  | "security_scan";
+  | "security_scan"
+  | "html_meta";
 
 export type Monitor = {
   id: string;

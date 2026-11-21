@@ -44,6 +44,9 @@ class MonitorMode(enum.StrEnum):
     ``SECURITY_SCAN`` Cloudflare URL Scanner verdict/technology inventory;
                       diffed like a set of items (malicious flag, categories,
                       tech stack, certificate facts).
+    ``HTML_META``     Stable code-level facts: title, allow-listed meta tags,
+                      canonical/alternate links, JSON-LD types and external
+                      script URLs; diffed like a set of items.
     """
 
     PAGE_CONTENT = "page_content"
@@ -55,6 +58,7 @@ class MonitorMode(enum.StrEnum):
     README = "readme"
     VISUAL = "visual"
     SECURITY_SCAN = "security_scan"
+    HTML_META = "html_meta"
 
 
 # Single source of truth for valid mode strings. API schemas, bulk import,
@@ -69,6 +73,7 @@ LIST_DIFF_MODES: frozenset[str] = frozenset(
         MonitorMode.LIST_ITEMS.value,
         MonitorMode.RSS_FEED.value,
         MonitorMode.SECURITY_SCAN.value,
+        MonitorMode.HTML_META.value,
     )
 )
 
@@ -83,6 +88,7 @@ PLAIN_HTTP_MODES: frozenset[str] = frozenset(
         MonitorMode.RSS_FEED.value,
         MonitorMode.README.value,
         MonitorMode.SECURITY_SCAN.value,
+        MonitorMode.HTML_META.value,
     )
 )
 

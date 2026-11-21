@@ -16,7 +16,7 @@ project overview and quickstart.
 | [guides/clerk.md](./guides/clerk.md) | Clerk auth (dev setup + production hardening) |
 | [guides/resend-setup.md](./guides/resend-setup.md) | Email alerts (Resend) |
 | [guides/cloudflare-free-features.md](./guides/cloudflare-free-features.md) | Cloudflare free tier end-to-end (R2, screenshots CDN, Tunnel, Browser Rendering failover, URL Scanner, Workers, Web Analytics) |
-| [guides/monitoring-modes.md](./guides/monitoring-modes.md) | The 9 monitoring modes, their options and their limits |
+| [guides/monitoring-modes.md](./guides/monitoring-modes.md) | The 10 monitoring modes, their options and their limits |
 | [integrations/n8n-zapier.md](./integrations/n8n-zapier.md) | n8n / Zapier automation |
 
 ## Reference

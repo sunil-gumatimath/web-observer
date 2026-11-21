@@ -8,7 +8,7 @@ Web change-detection and alerting platform.
 
 > Tell me when the web pages I care about change and clearly explain what changed.
 
-- **9 monitoring modes** — page text, sitemaps, RSS/Atom, GitHub READMEs, prices, CSS-selector lists, JSON values, visual screenshots, and Cloudflare security scans.
+- **10 monitoring modes** — page text, sitemaps, RSS/Atom, GitHub READMEs, prices, CSS-selector lists, JSON values, visual screenshots, Cloudflare security scans, and HTML/meta/code facts.
 - **Intelligence, not spam** — content-hashing diffs, conditional thresholds, watch-note AI triage, and noise marking mean you only get told when something matters.
 - **Reliable delivery** — email (Resend), Slack, Discord, HMAC-signed webhooks, and an in-app alerts inbox, all driven by an outbox with bounded retries.
 - **Runs anywhere** — local processes (Windows/Linux/macOS) against a hosted Neon Postgres + local Redis, with optional, opt-in `$0` Cloudflare edge workers for failover fetching and scan verdicts; share-page caching needs a configured public hostname.
@@ -33,7 +33,7 @@ Verified end-to-end: backend unit tests (`pytest -q -m "not integration"`) and t
 | [docs/guides/clerk.md](docs/guides/clerk.md) | Clerk auth (dev setup + production hardening) |
 | [docs/guides/resend-setup.md](docs/guides/resend-setup.md) | Email alerts |
 | [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md) | Cloudflare free tier end-to-end (R2 snapshots, R2 screenshot CDN, Web Analytics, Tunnel, Browser Rendering failover, URL Scanner, Workers) |
-| [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) | The 9 monitoring modes, their options and limits |
+| [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) | The 10 monitoring modes, their options and limits |
 | [docs/roadmap.md](docs/roadmap.md) | Feature roadmap (Phases 8–10) |
 | [docs/security/threat-model.md](docs/security/threat-model.md) | Security policy: SSRF, tenant isolation, out-of-scope rules |
 | [docs/adrs/](docs/adrs/) | Architecture decision records |
