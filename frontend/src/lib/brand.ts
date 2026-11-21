@@ -24,6 +24,19 @@ export function brandLogoUrl(brand: MonitorBrand | null | undefined): string | n
   return brandAssetUrl(brand?.logo_path) || brand?.logo_url || null;
 }
 
+/** True once brand discovery has produced anything usable for this monitor. */
+export function hasBrandData(brand: MonitorBrand | null | undefined): boolean {
+  return Boolean(
+    brand &&
+      (brand.title ||
+        brand.logo_path ||
+        brand.logo_url ||
+        brand.hero_path ||
+        brand.hero_url ||
+        brand.preview_path),
+  );
+}
+
 /** Which kind of image `brandPreviewUrl` resolves to (hero > live). */
 export function brandPreviewKind(
   brand: MonitorBrand | null | undefined,

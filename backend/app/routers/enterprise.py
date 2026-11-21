@@ -36,6 +36,7 @@ from app.services.bulk_import import import_monitors, parse_csv
 from app.services.plans import PLANS, get_plan, plans_public
 from app.services.run_logs import change_ids_for_runs, fetch_run_log_rows
 from app.services.webhooks import new_webhook_secret
+from app.workers.branding import enqueue_brand_enrichment_for
 
 router = APIRouter(prefix="/api/v1", tags=["enterprise"])
 Db = Annotated[Session, Depends(get_db)]
@@ -168,6 +169,9 @@ def bulk_import_monitors(
         meta={"created": len(result.created), "errors": len(result.errors)},
     )
     db.commit()
+    # No per-row Chromium capture for bulk creates; the monitor page captures
+    # a screenshot on demand when a site has no usable brand image.
+    enqueue_brand_enrichment_for(result.created, capture_preview=False)
     return {
         "created": result.created,
         "skipped": result.skipped,

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { brandPreviewKind, brandPreviewUrl, isLivePreviewStale } from "@/lib/brand";
+import {
+  brandPreviewKind,
+  brandPreviewUrl,
+  hasBrandData,
+  isLivePreviewStale,
+} from "@/lib/brand";
 import type { MonitorBrand } from "@/lib/types";
 
 describe("brandPreviewUrl", () => {
@@ -62,6 +67,15 @@ describe("brandPreviewUrl", () => {
     const old = { preview_path: "k", preview_at: "2026-01-01T09:00:00Z" };
     expect(isLivePreviewStale(fresh, now)).toBe(false);
     expect(isLivePreviewStale(old, now)).toBe(true);
+  });
+
+  it("detects whether brand discovery produced anything", () => {
+    expect(hasBrandData(null)).toBe(false);
+    expect(hasBrandData({})).toBe(false);
+    expect(hasBrandData({ title: null, logo_url: null, hero_url: null })).toBe(false);
+    expect(hasBrandData({ title: "Example" })).toBe(true);
+    expect(hasBrandData({ logo_url: "https://example.com/l.png" })).toBe(true);
+    expect(hasBrandData({ preview_path: "brand-assets/a/preview.png" })).toBe(true);
   });
 
   it("returns null when there is no preview asset at all", () => {

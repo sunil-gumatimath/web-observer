@@ -21,12 +21,16 @@ logger = logging.getLogger(__name__)
 
 
 @dramatiq.actor(queue_name="http_checks", max_retries=2, time_limit=120_000)
-def enrich_monitor_brand(monitor_id: str) -> None:
+def enrich_monitor_brand(monitor_id: str, capture_preview: bool = True) -> None:
     """Discover and re-host brand assets (logo/hero/title/description).
 
     Non-fatal by design: a slow, broken, or bot-walled page must never fail
     monitor creation or surface as an error to the user. Every step that can
     fail logs and returns, leaving ``monitor.brand`` untouched.
+
+    ``capture_preview=False`` skips the Chromium screenshot (bulk imports would
+    otherwise queue one browser launch per row); the monitor page captures one
+    on demand when a site has no usable brand image.
     """
     try:
         _enrich_brand_meta(monitor_id)
@@ -34,10 +38,22 @@ def enrich_monitor_brand(monitor_id: str) -> None:
         # Live page preview is rendered by the browser worker, off this queue.
         # Queued even when metadata discovery fails: a bot-walled or meta-less
         # page can still be rendered, and that is what "any brand" needs.
+        if capture_preview:
+            try:
+                capture_brand_preview.send(monitor_id)
+            except Exception as exc:  # noqa: BLE001 - optional enrichment
+                logger.debug(
+                    "brand_preview_enqueue_failed monitor_id=%s error=%s", monitor_id, exc
+                )
+
+
+def enqueue_brand_enrichment_for(monitor_ids: list[str], *, capture_preview: bool = True) -> None:
+    """Queue brand enrichment for freshly created/re-pointed monitors. Never raises."""
+    for monitor_id in monitor_ids:
         try:
-            capture_brand_preview.send(monitor_id)
-        except Exception as exc:  # noqa: BLE001 - optional enrichment
-            logger.debug("brand_preview_enqueue_failed monitor_id=%s error=%s", monitor_id, exc)
+            enrich_monitor_brand.send(str(monitor_id), capture_preview)
+        except Exception as exc:  # noqa: BLE001 - brand is optional enrichment
+            logger.warning("brand_enrich_enqueue_failed monitor_id=%s error=%s", monitor_id, exc)
 
 
 def _enrich_brand_meta(monitor_id: str) -> None:

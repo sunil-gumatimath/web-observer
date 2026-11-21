@@ -1,13 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180" fill="none" role="img" aria-label="Web Observer">
-  <rect width="180" height="180" rx="40" fill="#0f172a"/>
-  <g transform="translate(42 42) scale(3)">
-    <rect x="0.5" y="0.5" width="31" height="31" rx="9.5" fill="#0f172a"/>
-    <rect x="0.5" y="0.5" width="31" height="31" rx="9.5" stroke="white" stroke-opacity="0.08"/>
-    <circle cx="16" cy="16" r="9.5" stroke="white" stroke-opacity="0.14" stroke-width="0.95"/>
-    <path d="M 16 6.5 A 9.5 9.5 0 0 1 24.25 9.75" stroke="#38bdf8" stroke-width="1.55" stroke-linecap="round"/>
-    <circle cx="24.25" cy="9.75" r="1.35" fill="#38bdf8" stroke="#0f172a" stroke-width="0.9"/>
-    <circle cx="24.25" cy="9.75" r="2.45" fill="#38bdf8" fill-opacity="0.18"/>
-    <circle cx="16" cy="16" r="5.9" stroke="white" stroke-width="1.35" stroke-opacity="0.95"/>
-    <circle cx="16" cy="16" r="2.35" fill="white"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Web Observer"><title>Web Observer</title><rect x="2" y="2" width="60" height="60" rx="17" fill="#111827"/><rect x="2.5" y="2.5" width="59" height="59" rx="16.5" stroke="#fff" stroke-opacity=".12"/><path d="M20 14h15l9 9v27H20z" fill="#1f2937" stroke="#f3f4f6" stroke-width="2.5" stroke-linejoin="round"/><path d="M35 14v9h9" stroke="#f3f4f6" stroke-width="2.5" stroke-linejoin="round"/><path d="M25 41h5l3.5-8 4.5 13 3-5h4" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>

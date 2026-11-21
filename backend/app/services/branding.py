@@ -98,7 +98,10 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
             # Also support itemprop="image" via property fallback
             itemprop = (attrs.get("itemprop") or "").lower()
             if prop == attr_value or itemprop == attr_value:
-                return (attrs.get("content") or "").strip() or None
+                content = (attrs.get("content") or "").strip()
+                # An empty duplicate tag must not hide a later populated one.
+                if content:
+                    return content
         return None
 
     title = _content_for("og:title") or _content_for("twitter:title")
@@ -244,11 +247,18 @@ def fetch_brand_info(url: str, *, timeout_seconds: int = 5) -> BrandMeta:
     except FetchError as exc:  # noqa: BLE001
         logger.info("brand_fetch_failed url=%s error=%s", url, exc)
         return BrandMeta(logo_candidates=_logo_fallback_candidates(url))
+    except Exception as exc:  # noqa: BLE001 - brand lookup must never raise
+        logger.warning("brand_fetch_error url=%s error=%s", url, exc)
+        return BrandMeta(logo_candidates=_logo_fallback_candidates(url))
     if result.status_code >= 400:
         return BrandMeta(logo_candidates=_logo_fallback_candidates(result.final_url or url))
 
     # Resolve relative URLs against the final URL after redirects
-    meta = parse_brand_meta(result.text or "", result.final_url or url)
+    try:
+        meta = parse_brand_meta(result.text or "", result.final_url or url)
+    except Exception as exc:  # noqa: BLE001 - malformed HTML must not break the brand
+        logger.warning("brand_parse_failed url=%s error=%s", url, exc)
+        meta = BrandMeta()
     meta.logo_candidates = _merge_logo_fallbacks(meta.logo_candidates, result.final_url or url)
     return meta
 
@@ -416,6 +426,11 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.debug("brand_hero_store_failed error=%s", exc)
+    # A degraded re-discovery (e.g. only fallback logos) can clear a
+    # previously stored hero; keep the old hero when nothing new was found.
+    if not meta.hero_candidates and previous.get("hero_path"):
+        brand["hero_path"] = previous["hero_path"]
+        brand["hero_url"] = previous.get("hero_url")
     return brand
 
 

@@ -79,6 +79,54 @@ def test_fetch_brand_info_uses_logo_fallbacks_when_page_fetch_fails(monkeypatch)
     assert "https://openai.com/favicon.ico" in meta.logo_candidates
 
 
+def test_parse_brand_meta_skips_empty_duplicate_meta():
+    html = (
+        "<html><head>"
+        '<meta property="og:image" content="">'
+        '<meta property="og:image" content="https://example.com/real.png">'
+        "</head></html>"
+    )
+    meta = parse_brand_meta(html, "https://example.com")
+    assert meta.hero_candidates == ["https://example.com/real.png"]
+
+
+def test_fetch_brand_info_never_raises_on_unexpected_errors(monkeypatch):
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(branding, "fetch_url", boom)
+    meta = fetch_brand_info("https://example.com/")
+    assert "https://example.com/favicon.ico" in meta.logo_candidates
+
+
+def test_enrich_worker_skips_preview_capture_when_disabled(monkeypatch):
+    from app.workers import branding as worker
+
+    sent: list[str] = []
+    monkeypatch.setattr(worker, "_enrich_brand_meta", lambda _id: None)
+    monkeypatch.setattr(worker.capture_brand_preview, "send", lambda mid: sent.append(mid))
+
+    worker.enrich_monitor_brand.fn("m1", capture_preview=False)
+    assert sent == []
+    worker.enrich_monitor_brand.fn("m2")
+    assert sent == ["m2"]
+
+
+def test_enqueue_brand_enrichment_for_is_best_effort(monkeypatch):
+    from app.workers import branding as worker
+
+    calls: list[tuple] = []
+
+    def send(*args):
+        calls.append(args)
+        if args[0] == "bad":
+            raise RuntimeError("redis down")
+
+    monkeypatch.setattr(worker.enrich_monitor_brand, "send", send)
+    worker.enqueue_brand_enrichment_for(["bad", "ok"], capture_preview=False)
+    assert calls == [("bad", False), ("ok", False)]
+
+
 def test_is_unsafe_svg_and_download_reject_active_svg(monkeypatch):
     from types import SimpleNamespace
 

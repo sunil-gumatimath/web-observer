@@ -20,7 +20,7 @@ import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
-import { brandHeroUrl, livePreviewUrl } from "@/lib/brand";
+import { brandHeroUrl, hasBrandData, isLivePreviewStale, livePreviewUrl } from "@/lib/brand";
 import { api, ApiError, screenshotUrl } from "@/lib/api";
 import { VALUE_HISTORY_MODES } from "@/lib/modes";
 import {
@@ -58,6 +58,11 @@ const SSE_STALL_MS = 45_000;
 // load, up to ~30s), so poll the monitor for the new screenshot.
 const PREVIEW_POLL_MS = 4_000;
 const PREVIEW_POLL_MAX_TRIES = 20;
+// A just-created monitor has brand enrichment in flight on a worker; wait for
+// it (instead of racing it) before discovering the brand ourselves.
+const BRAND_ENRICH_GRACE_MS = 2 * 60 * 1000;
+const BRAND_POLL_MS = 3_000;
+const BRAND_POLL_MAX_TRIES = 10;
 
 export default function MonitorDetailPage() {
 	return (
@@ -96,7 +101,8 @@ function MonitorDetailInner() {
 	const [brandRefreshing, setBrandRefreshing] = useState(false);
 	const [previewCapturing, setPreviewCapturing] = useState(false);
 	const [sseConnected, setSseConnected] = useState(false);
-	const [heroImgFailed, setHeroImgFailed] = useState(false);
+	const [heroFailed, setHeroFailed] = useState(false);
+	const [heroErrorUrl, setHeroErrorUrl] = useState<string | null>(null);
 	const [screenshotFailed, setScreenshotFailed] = useState(false);
 	// Brand image is the default; a page screenshot is opt-in per page view.
 	const [showPagePreview, setShowPagePreview] = useState(false);
@@ -130,7 +136,8 @@ function MonitorDetailInner() {
 	const [lastHeroKey, setLastHeroKey] = useState(heroKey);
 	if (lastHeroKey !== heroKey) {
 		setLastHeroKey(heroKey);
-		setHeroImgFailed(false);
+		setHeroFailed(false);
+		setHeroErrorUrl(null);
 		setScreenshotFailed(false);
 	}
 
@@ -204,8 +211,85 @@ function MonitorDetailInner() {
 		}
 	}, []);
 
-	// Page screenshots are opt-in now (Brand / Page toggle), so opening a
-	// monitor no longer launches a Chromium capture in the background.
+	// Brand discovery must work for every monitor, not just ones whose
+	// enrichment happened to succeed at creation time. Each effect runs at most
+	// once per monitor (ref guards) so polling/refresh can't retrigger it.
+	const autoBrandFor = useRef<string | null>(null);
+	const autoPreviewFor = useRef<string | null>(null);
+
+	// 1) No brand data yet. A just-created monitor has enrichment in flight on
+	// a worker, so wait for it; an older monitor (created before brand support,
+	// or whose enrichment failed) is discovered immediately.
+	useEffect(() => {
+		if (loading || !workspaceId || !monitor) return;
+		if (hasBrandData(monitor.brand)) return;
+		if (autoBrandFor.current === monitor.id) return;
+		autoBrandFor.current = monitor.id;
+		// This flow owns the screenshot for this monitor; skip effect 2.
+		autoPreviewFor.current = monitor.id;
+		const ws = workspaceId;
+		const id = monitor.id;
+		const justCreated = Date.now() - Date.parse(monitor.created_at) < BRAND_ENRICH_GRACE_MS;
+		void (async () => {
+			try {
+				let latest: Monitor | null = null;
+				if (justCreated) {
+					for (let i = 0; i < BRAND_POLL_MAX_TRIES; i++) {
+						await new Promise((resolve) => setTimeout(resolve, BRAND_POLL_MS));
+						if (!mountedRef.current || monitorIdRef.current !== id) return;
+						const next = await api.getMonitor(ws, id);
+						if (!mountedRef.current || monitorIdRef.current !== id) return;
+						if (hasBrandData(next.brand)) {
+							latest = next;
+							break;
+						}
+					}
+				}
+				if (latest) {
+					setMonitor(latest);
+					// The worker also queued a screenshot; pick it up when it lands.
+					if (!brandHeroUrl(latest.brand)) {
+						await waitForLivePreview(ws, latest.brand?.preview_at ?? null);
+					}
+					return;
+				}
+				// Nothing arrived (or the monitor is old): discover it now.
+				const updated = await api.enrichBrand(ws, id);
+				if (!mountedRef.current || monitorIdRef.current !== id) return;
+				setMonitor(updated);
+				await waitForLivePreview(ws, updated.brand?.preview_at ?? null);
+			} catch {
+				// Brand is cosmetic; the brand card / favicon fallback stays.
+			}
+		})();
+	}, [loading, workspaceId, monitor, waitForLivePreview]);
+
+	// 2) Brand known but no usable hero image (no og:image, or it failed to
+	// render): the page screenshot is the brand preview, so make sure one exists.
+	useEffect(() => {
+		if (loading || !workspaceId || !monitor) return;
+		if (autoPreviewFor.current === monitor.id) return;
+		if (!hasBrandData(monitor.brand)) return;
+		const upstream = monitor.brand?.hero_url || null;
+		const noHero =
+			!brandHeroUrl(monitor.brand) ||
+			(heroFailed && (!upstream || upstream === heroErrorUrl));
+		if (!noHero || !isLivePreviewStale(monitor.brand)) return;
+		autoPreviewFor.current = monitor.id;
+		const ws = workspaceId;
+		const id = monitor.id;
+		const baseline = monitor.brand?.preview_at ?? null;
+		void (async () => {
+			try {
+				const res = await api.refreshLivePreview(ws, id);
+				if (res.queued && mountedRef.current && monitorIdRef.current === id) {
+					await waitForLivePreview(ws, baseline);
+				}
+			} catch {
+				// Optional enrichment; the brand card stays.
+			}
+		})();
+	}, [loading, workspaceId, monitor, heroFailed, heroErrorUrl, waitForLivePreview]);
 
 	// Live updates: SSE primary with polling fallback.
 	// `polling` stays true while waiting (even past the stall budget) so the
@@ -511,7 +595,21 @@ function MonitorDetailInner() {
 	// Brand image is the default hero. A screenshot of the monitored page is
 	// available as an explicit opt-in via the Brand / Page toggle.
 	const brandHero = brandHeroUrl(monitor.brand);
+	// Upstream og:image (first hero candidate). When the re-hosted hero fails
+	// to render, this still usually works in the browser, so try it before the
+	// card branch renders.
+	const upstreamHero = monitor.brand?.hero_url || null;
+	const heroSrc = !heroFailed
+		? brandHero
+		: upstreamHero !== null && upstreamHero !== heroErrorUrl
+			? upstreamHero
+			: null;
 	const pageShot = livePreviewUrl(monitor.brand);
+	// Screenshot shows in Page mode, or automatically when the site has no
+	// usable hero image (HN has no og:image, so its screenshot is the best
+	// brand preview available).
+	const showScreenshot =
+		!!pageShot && !screenshotFailed && (showPagePreview || !heroSrc);
 	const hostname = (() => {
 		try {
 			return new URL(monitor.url).hostname.replace(/^www\./, "");
@@ -526,20 +624,25 @@ function MonitorDetailInner() {
 			<div className="mb-8 overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--surface-1)]">
 				{/* Top Cover Hero Banner */}
 				<div className="group relative h-36 bg-[var(--surface-2)] sm:h-44 border-b border-[var(--hairline)] overflow-hidden">
-					{/* Brand image is the default. A page screenshot is opt-in via the Brand / Page toggle. */}
-					{showPagePreview && pageShot && !screenshotFailed ? (
+					{/* Brand image is the default; a page screenshot shows
+						when the user toggled to Page mode or when the site has no
+						usable hero image (there is no brand image to show). */}
+					{showScreenshot && pageShot ? (
 							<img
 								src={pageShot}
 								alt={`${monitor.name} page screenshot`}
 								className="absolute inset-0 size-full object-cover object-top"
 								onError={() => setScreenshotFailed(true)}
 							/>
-						) : brandHero && !heroImgFailed ? (
+						) : heroSrc ? (
 							<img
-								src={brandHero}
+								src={heroSrc}
 								alt={`${monitor.name} brand preview`}
 								className="absolute inset-0 size-full object-cover object-top"
-								onError={() => setHeroImgFailed(true)}
+								onError={() => {
+									setHeroFailed(true);
+									setHeroErrorUrl(heroSrc);
+								}}
 								referrerPolicy="no-referrer"
 							/>
 						) : (
@@ -565,9 +668,9 @@ function MonitorDetailInner() {
 						<div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 						{/* Source label + controls */}
 						<div className="absolute bottom-3 left-3 rounded-full border border-white/20 bg-black/60 px-2.5 py-1 text-[10px] font-medium text-white/90 backdrop-blur-md">
-							{showPagePreview && pageShot && !screenshotFailed
+							{showScreenshot
 								? "page screenshot"
-								: brandHero && !heroImgFailed
+								: heroSrc
 								? "og:image"
 								: "brand card"}
 						</div>

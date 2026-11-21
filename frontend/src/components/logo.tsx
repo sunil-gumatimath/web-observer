@@ -5,12 +5,6 @@ type LogoIconProps = {
   className?: string;
 };
 
-/**
- * Minimal / Clean — Linear Theme
- * A focused target: centered dot + two precise rings + one active arc + ping.
- * Uses Linear lavender-blue (#5e6ad2) for the active ping.
- * ViewBox 0 0 32 32.
- */
 export function LogoIcon({ size = 32, className = "" }: LogoIconProps) {
   return (
     <span
@@ -28,29 +22,13 @@ export function LogoIcon({ size = 32, className = "" }: LogoIconProps) {
         aria-label="Web Observer"
         className="h-full w-full"
       >
-        {/* soft inner highlight */}
-        <rect x="0.5" y="0.5" width="31" height="31" rx="7.5" fill="#0f1011" />
-        <rect x="0.5" y="0.5" width="31" height="31" rx="7.5" stroke="white" strokeOpacity="0.06" />
-
-        {/* outer track — hairline */}
-        <circle cx="16" cy="16" r="9.5" stroke="white" strokeOpacity="0.12" strokeWidth="0.95" />
-
-        {/* active scanning arc — Linear lavender accent */}
-        <path
-          d="M 16 6.5 A 9.5 9.5 0 0 1 24.25 9.75"
-          stroke="#5e6ad2"
-          strokeWidth="1.55"
-          strokeLinecap="round"
-        />
-        {/* small ping at arc tip */}
-        <circle cx="24.25" cy="9.75" r="1.35" fill="#828fff" stroke="#0f1011" strokeWidth="0.9" />
-        <circle cx="24.25" cy="9.75" r="2.45" fill="#5e6ad2" fillOpacity="0.25" />
-
-        {/* middle ring */}
-        <circle cx="16" cy="16" r="5.9" stroke="white" strokeWidth="1.35" strokeOpacity="0.9" />
-
-        {/* center — the page being watched */}
-        <circle cx="16" cy="16" r="2.35" fill="white" />
+        <rect x="0.5" y="0.5" width="31" height="31" rx="9" fill="#111827" />
+        <rect x="0.5" y="0.5" width="31" height="31" rx="9" stroke="#ffffff" strokeOpacity="0.12" />
+        {/* Page outline with a folded corner */}
+        <path d="M10 7.5h8l5 5v12H10z" fill="#1f2937" stroke="#e5e7eb" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M18 7.5v5h5" stroke="#e5e7eb" strokeWidth="1.5" strokeLinejoin="round" />
+        {/* Changed-content signal */}
+        <path d="M13 20h2.5l1.8-4 2.1 6 1.2-2H23" stroke="#34d399" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </span>
   );

@@ -78,6 +78,7 @@ from app.services.storage import StorageError, delete_object, get_bytes, presign
 from app.services.structured import diff_lists, items_from_normalized
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
 from app.workers.branding import capture_brand_preview as enqueue_brand_preview
+from app.workers.branding import enqueue_brand_enrichment_for
 from app.workers.branding import enrich_monitor_brand as enqueue_brand_enrichment
 from app.workers.enqueue import enqueue_check
 
@@ -642,6 +643,9 @@ def create_from_sitemap(
 
     result = import_monitors(db, _workspace, rows)
     db.commit()
+    # No per-row Chromium capture for bulk creates; the monitor page captures
+    # a screenshot on demand when a site has no usable brand image.
+    enqueue_brand_enrichment_for(result.created, capture_preview=False)
     return {
         "created": result.created,
         "skipped": result.skipped,
@@ -882,10 +886,17 @@ def update_monitor(
                 },
             ) from exc
 
+    # Brand assets (logo/hero/screenshot) belong to the old URL; drop them and
+    # re-discover for the new one so the banner never shows another site's brand.
+    url_changed = "url" in data and data["url"] != monitor.url
+
     for key, value in data.items():
         if key == "tags":
             value = normalize_tags(value)
         setattr(monitor, key, value)
+
+    if url_changed:
+        monitor.brand = None
 
     if "schedule_interval_minutes" in data and data["schedule_interval_minutes"] is not None:
         monitor.base_interval_minutes = data["schedule_interval_minutes"]
@@ -937,6 +948,8 @@ def update_monitor(
 
     db.commit()
     db.refresh(monitor)
+    if url_changed:
+        enqueue_brand_enrichment_for([str(monitor.id)])
     write_audit(
         db,
         workspace_id=workspace_id,
