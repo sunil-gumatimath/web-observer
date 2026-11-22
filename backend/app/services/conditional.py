@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import difflib
-import re
+import logging
 from typing import Any
+
+import regex
 
 from app.models.entities import LIST_DIFF_MODES, VALUE_MODES
 from app.services.structured import diff_lists, items_from_normalized
 
+logger = logging.getLogger(__name__)
+
 # User-supplied regexes run inside check workers against fetched page text.
 # Two mitigations keep a pathological pattern from stalling a shared worker:
 # the pattern itself is validated/capped at the schema layer, and the text it
-# is applied to is hard-capped here. An oversized/invalid pattern yields None;
-# callers decide the fail direction per rule (must_match suppresses with a
-# reason; must_not_match lets the alert through) — the config author sees the
-# "does not match" reason in the change row either way.
+# is applied to is hard-capped here. An oversized/invalid/timed-out pattern
+# yields None: must_match suppresses, and must_not_match suppresses with an
+# explicit reason — neither rule fails open silently.
 _MAX_PATTERN_LEN = 256
 _MAX_REGEX_TEXT_CHARS = 200_000
 
@@ -24,16 +27,29 @@ _MAX_REGEX_TEXT_CHARS = 200_000
 _MAX_DIFF_COMPARE_CHARS = 50_000
 
 
+# Seconds. A catastrophic-backtracking pattern is cut off instead of
+# pinning a shared check worker.
+_BOUNDED_SEARCH_TIMEOUT = 0.05
+
+
 def _bounded_search(pattern: str, text: str) -> bool | None:
-    """re.search with caps; None when the pattern is invalid or oversized."""
+    """regex.search with caps; None if invalid, oversized or timed out."""
     if len(pattern) > _MAX_PATTERN_LEN:
         return None
     try:
-        # pi-lens-ignore: python-unsafe-regex - length-capped, auth-scoped
-        rx = re.compile(pattern, re.IGNORECASE)
-    except re.error:
+        # pi-lens-ignore: python-unsafe-regex - length-capped, time-bounded,
+        # auth-scoped; regex.search forwards timeout into the engine.
+        return (
+            regex.search(
+                pattern,
+                text[:_MAX_REGEX_TEXT_CHARS],
+                flags=regex.IGNORECASE,
+                timeout=_BOUNDED_SEARCH_TIMEOUT,
+            )
+            is not None
+        )
+    except (regex.error, TimeoutError):
         return None
-    return rx.search(text[:_MAX_REGEX_TEXT_CHARS]) is not None
 
 
 def _changed_char_count(before: str, after: str) -> int:
@@ -127,6 +143,17 @@ def parse_monitor_value(text: str, mode: str) -> float | None:
         return None
 
 
+def _warn_invalid_threshold(monitor: Any, key: str, cfg: dict[str, Any], exc: Exception) -> None:
+    """Log a stored alert_config value runtime parsing could not use."""
+    logger.warning(
+        "alert_config_invalid_value monitor_id=%s key=%s value=%r error=%s",
+        getattr(monitor, "id", None),
+        key,
+        cfg.get(key),
+        exc,
+    )
+
+
 def should_alert(
     monitor: Any,
     prev_text: str,
@@ -162,15 +189,15 @@ def should_alert(
                     thresh = float(cfg["price_below"])
                     if new_price >= thresh:
                         return False, f"price {new_price} not below {thresh}"
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as exc:
+                    _warn_invalid_threshold(monitor, "price_below", cfg, exc)
             if "price_above" in cfg:
                 try:
                     thresh = float(cfg["price_above"])
                     if new_price <= thresh:
                         return False, f"price {new_price} not above {thresh}"
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as exc:
+                    _warn_invalid_threshold(monitor, "price_above", cfg, exc)
             if "percent_change" in cfg and prev_text:
                 try:
                     pct = float(cfg["percent_change"])
@@ -179,8 +206,8 @@ def should_alert(
                         change_pct = abs(new_price - old_price) / abs(old_price) * 100
                         if change_pct < pct:
                             return False, f"price change {change_pct:.1f}% < {pct}%"
-                except (ValueError, TypeError, ZeroDivisionError):
-                    pass
+                except (ValueError, TypeError, ZeroDivisionError) as exc:
+                    _warn_invalid_threshold(monitor, "percent_change", cfg, exc)
 
     # JSON field numeric thresholds (reusing price logic)
     if mode == "json_field":
@@ -191,15 +218,15 @@ def should_alert(
                     thresh = float(cfg["value_below"])
                     if new_val >= thresh:
                         return False, f"value {new_val} not below {thresh}"
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as exc:
+                    _warn_invalid_threshold(monitor, "value_below", cfg, exc)
             if "value_above" in cfg:
                 try:
                     thresh = float(cfg["value_above"])
                     if new_val <= thresh:
                         return False, f"value {new_val} not above {thresh}"
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as exc:
+                    _warn_invalid_threshold(monitor, "value_above", cfg, exc)
         if "percent_change" in cfg:
             try:
                 pct = float(cfg["percent_change"])
@@ -209,8 +236,8 @@ def should_alert(
                     change_pct = abs(new_v - old_v) / abs(old_v) * 100
                     if change_pct < pct:
                         return False, f"value change {change_pct:.1f}% < {pct}%"
-            except (ValueError, TypeError, ZeroDivisionError):
-                pass
+            except (ValueError, TypeError, ZeroDivisionError) as exc:
+                _warn_invalid_threshold(monitor, "percent_change", cfg, exc)
 
     # List thresholds
     if mode in LIST_DIFF_MODES:
@@ -226,30 +253,36 @@ def should_alert(
                 need = int(cfg["list_min_removed"])
                 if len(ld.removed) < need:
                     return False, f"only {len(ld.removed)} removed < {need}"
-        except Exception:
-            pass
+        except Exception as exc:
+            # A stored list rule from before schema validation may be bad;
+            # never swallow it without a trace.
+            logger.warning(
+                "alert_config_list_rule_failed monitor_id=%s error=%s",
+                getattr(monitor, "id", None),
+                exc,
+            )
 
     # Generic diff size threshold
     if "min_diff_chars" in cfg:
         try:
             need = int(cfg["min_diff_chars"])
+            diff_len: int | None
             if mode == "visual":
                 # Visual snapshots carry hashes, not text — the meaningful
-                # "size of the change" is the perceptual distance (same digest
-                # change detection used).
+                # "size of the change" is the perceptual distance. Without a
+                # readable digest there is nothing comparable: skip the
+                # threshold rather than counting characters in a hash string.
                 diff_len = _visual_distance(prev_text, new_text)
-                if diff_len is None:
-                    diff_len = _changed_char_count(prev_text, new_text)
             elif mode in VALUE_MODES:
                 # "USD 19.99" -> "USD 24.99" has a length delta of 0 but is a
                 # real change — count the characters that actually differ.
                 diff_len = _changed_char_count(prev_text, new_text)
             else:
                 diff_len = _changed_char_count(prev_text, new_text)
-            if diff_len < need:
+            if diff_len is not None and diff_len < need:
                 return False, f"diff {diff_len} chars < {need}"
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as exc:
+            _warn_invalid_threshold(monitor, "min_diff_chars", cfg, exc)
 
     if "percent_change" in cfg and mode == "page_content":
         try:
@@ -259,8 +292,8 @@ def should_alert(
             change_pct = _changed_char_count(prev_text, new_text) / max_len * 100
             if change_pct < pct:
                 return False, f"edited content {change_pct:.1f}% < {pct}%"
-        except (ValueError, TypeError, ZeroDivisionError):
-            pass
+        except (ValueError, TypeError, ZeroDivisionError) as exc:
+            _warn_invalid_threshold(monitor, "percent_change", cfg, exc)
 
     # Regex filters
     # Visual snapshots are hash strings, not page text — a content regex can
@@ -272,6 +305,13 @@ def should_alert(
                 return False, f"new content does not match {cfg['regex_must_match']}"
         if "regex_must_not_match" in cfg:
             result = _bounded_search(str(cfg["regex_must_not_match"]), new_text)
+            if result is None:
+                # Oversized/unparseable/timed-out exclusion cannot be trusted:
+                # suppress with an explicit reason, never fail open silently.
+                return (
+                    False,
+                    f"excluded regex could not be evaluated: {cfg['regex_must_not_match']}",
+                )
             if result:
                 return False, f"new content matches excluded {cfg['regex_must_not_match']}"
 
@@ -313,13 +353,13 @@ def check_rate_limits(
         now = datetime.now(UTC)
         monitor_id = getattr(monitor, "id", None)
 
-        def _recent_signal_count(since: datetime) -> int:
+        def _recent_signal_count(since: datetime, *, include_excluded: bool = False) -> int:
             q = select(ChangeEvent.id).where(
                 ChangeEvent.monitor_id == monitor_id,
                 ChangeEvent.is_noise.is_(False),
                 ChangeEvent.created_at >= since,
             )
-            if exclude_change_id is not None:
+            if exclude_change_id is not None and not include_excluded:
                 q = q.where(ChangeEvent.id != exclude_change_id)
             return len(list(session.execute(q).all()))
 
@@ -330,7 +370,9 @@ def check_rate_limits(
 
         if flap_window and flap_max:
             cutoff = now - timedelta(minutes=flap_window)
-            hits = _recent_signal_count(cutoff)
+            # Docs: suppress when *at least* flap_max_alerts signal changes
+            # fired in the window — including the change being evaluated.
+            hits = _recent_signal_count(cutoff, include_excluded=True)
             if hits >= flap_max:
                 return (
                     False,

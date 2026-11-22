@@ -120,6 +120,8 @@ Or start each process manually (working directory: `backend`, except frontend):
 
 # 2 — HTTP + notifications
 .\.venv\Scripts\dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2
+# separate process for slow LLM enrichment:
+dramatiq app.workers --queues ai_enrichment --processes 1 --threads 1
 
 # 3 — Browser / JS-rendered checks (Playwright) — REQUIRED for js_required monitors
 # Windows: always --threads 1 (sync Playwright is not multi-thread safe)
@@ -197,7 +199,7 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 | Selector preview | `POST /api/v1/workspaces/{id}/monitors/selector-preview` — sanitized HTML for the point-and-click picker |
 | Brand info | `POST /api/v1/workspaces/{id}/monitors/brand-info` — logo/title/description auto-fill |
 | Change Q&A | `POST /api/v1/workspaces/{id}/changes/{change_id}/ask-ai` — ask a question about one change (5/minute) |
-| Status badge | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/badge.svg` — public SVG badge, no auth |
+| Status badge | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/badge.svg` — deliberately public SVG badge, no auth; both UUIDs must match and the monitor UUID acts as the capability token |
 | Value history | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/value-history` — chartable series for `product_price` / `json_field` |
 | Mark all read | `POST /api/v1/workspaces/{id}/alerts/read-all` |
 | Snapshot download | `GET /api/v1/workspaces/{id}/snapshots/{snapshot_id}` |
@@ -268,7 +270,7 @@ What runs natively, one row per service:
 | `redis` | `localhost:6379` (WSL / Memurai) |
 | `api` | `uvicorn app.main:app` (port 8002) |
 | `scheduler` | `python -m app.scheduler` |
-| `worker` | `dramatiq app.workers` (http_checks + notifications) |
+| `worker` | `dramatiq app.workers` (http_checks + notifications, plus a separate ai_enrichment worker) |
 | `worker-browser` | `dramatiq app.workers --queues browser_checks` (`--threads 1`) |
 | `web` | `next dev` (frontend, port 3000) |
 

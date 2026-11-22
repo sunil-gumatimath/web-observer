@@ -208,6 +208,8 @@ def get_public_share(request: Request, token: str, db: Db) -> PublicShareOut:
         .where(
             ChangeEvent.monitor_id == monitor.id,
             ChangeEvent.workspace_id == row.workspace_id,
+            # Public links share signals, not internally held AI-triaged noise.
+            ChangeEvent.is_noise.is_(False),
         )
         .order_by(ChangeEvent.created_at.desc())
         .limit(50)
@@ -219,6 +221,9 @@ def get_public_share(request: Request, token: str, db: Db) -> PublicShareOut:
             PublicShareAlertOut(
                 id=ev.id,
                 change_category=ev.change_category,
+                title=ev.title,
+                impact=ev.impact,
+                confidence=ev.confidence,
                 ai_summary=ev.ai_summary,
                 diff_summary=ev.diff_summary,
                 diff=None,

@@ -10,6 +10,9 @@ Two things decide whether a model is usable here:
 
 * the provider is free (Kilo Gateway ``isFree`` / $0 pricing) or the workspace
   supplies its own paid key, and
+* the model is marked ``failover_safe`` for automatic failover. A model that
+  answered the summary probe but failed Q&A/digest stays selectable by users
+  while being skipped by the default failover chain.
 * the model returns a *complete* JSON object inside the output budget. Most
   reasoning models spend the whole budget on hidden thinking tokens and return
   an empty or truncated body, which the app treats as a failure.
@@ -39,6 +42,9 @@ class ModelEntry:
     #: default cap; higher values are applied only to this model so reasoning
     #: models get room without inflating every other request.
     verified_at: int | None = None
+    #: A model may answer the summary prompt but fail other features (Q&A,
+    #: digest). Such models stay selectable but are skipped by default failover.
+    failover_safe: bool = True
 
     @property
     def verified_200(self) -> bool:
@@ -125,6 +131,7 @@ _KILO_MODELS: list[ModelEntry] = [
         base=KILO_BASE,
         note="Completed summary + triage at 800 tokens, but Q&A and digest returned HTTP 403 on 2026-10-29 and empty content on 2026-11-18. Not recommended as a default.",
         verified_at=800,
+        failover_safe=False,
     ),
 ]
 
@@ -140,6 +147,12 @@ PROVIDERS: list[Provider] = [
 
 #: Base URL -> provider id, so a stored base can be matched to its catalog.
 PROVIDER_BY_BASE: dict[str, str] = {p.base: p.id for p in PROVIDERS}
+
+
+def all_candidates_for_base(base: str | None) -> list[str]:
+    """Every model for a provider, including ones excluded from default failover."""
+    provider = provider_for_base(base)
+    return [] if provider is None else [m.value for m in provider.models]
 
 
 #: Models that must not be used as a failover candidate for a given base:
@@ -163,7 +176,7 @@ def candidates_for_base(base: str | None, *, verified_only: bool = False) -> lis
     if not provider_id:
         return []
     provider = next(p for p in PROVIDERS if p.id == provider_id)
-    return [m.value for m in provider.models if m.usable or not verified_only]
+    return [m.value for m in provider.models if (m.usable or not verified_only) and m.failover_safe]
 
 
 def output_cap_for(base: str | None, model: str | None, default: int) -> int:

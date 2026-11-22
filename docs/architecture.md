@@ -66,7 +66,7 @@ flowchart TB
     REDIS -->|"browser_checks"| BROWW
     REDIS -->|"notifications"| NOTIFW
     REDIS -->|"notifications"| WEBHW
-    REDIS -->|"http_checks"| AIEW
+    REDIS -->|"ai_enrichment"| AIEW
     REDIS -->|"http_checks"| BRANDW
     HTTPW -.->|"run-status writes publish\nafter_flush wakeup hints"| REDIS
     LIVE -->|"re-reads authoritative\nrun state every tick"| NEO

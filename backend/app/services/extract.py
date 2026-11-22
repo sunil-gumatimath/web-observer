@@ -83,7 +83,10 @@ def apply_ignore_regexes(text: str, patterns: list[str], *, preserve_markdown: b
         # CPU core for minutes. Above the cap the regex pass is skipped
         # (deterministically), trading noise-filtering for bounded latency.
         logger.warning(
-            "ignore_regexes_skipped len=%d cap=%d", len(text), _MAX_IGNORE_REGEX_TEXT_CHARS
+            "ignore_regexes_skipped len=%d cap=%d patterns=%d",
+            len(text),
+            _MAX_IGNORE_REGEX_TEXT_CHARS,
+            len(patterns),
         )
         return normalize_markdown_text(text) if preserve_markdown else normalize_text(text)
     for pattern in patterns:
@@ -313,8 +316,11 @@ def extract_main_markdown(
     if not md or len(md.strip()) < _MIN_MAIN_CONTENT_CHARS:
         return None
 
-    text = normalize_text(md)
-    return apply_ignore_regexes(text, ignore_regexes or [])
+    # trafilatura emits markdown where blank lines and indentation matter.
+    # normalize_text() strips both, so an unchanged page could hash differently
+    # on the next run (flapping); keep the block structure instead.
+    text = normalize_markdown_text(md)
+    return apply_ignore_regexes(text, ignore_regexes or [], preserve_markdown=True)
 
 
 def content_hash(normalized_text: str) -> str:
@@ -370,46 +376,60 @@ _PRICE_CODES = (
 _AMOUNT = r"(\d[\d.,]*)"
 
 
-def _normalize_amount(raw: str) -> str:
+def _normalize_amount(raw: str, *, dot_is_grouping: bool = False) -> str:
     """Canonicalize a matched amount to dot-decimal without grouping.
 
     Handles both ``1,234.56`` and ``1.234,56`` conventions: when both
     separators appear, the *last* one is the decimal separator. A lone comma
     followed by 1–2 digits is decimal (``19,99``); a lone separator followed
-    by exactly 3 digits is grouping (``10.000``, ``1,200``).
+    A dot with a 3-digit tail stays decimal (``10.000``, ``0.500``); a comma
+    with a 3-digit tail is a thousands group (``1,200``). Trailing-symbol
+    (European) prices opt into dot-as-grouping at the candidate layer.
     """
     s = re.sub(r"\s+", "", raw).strip(".,")
     if not s or not re.search(r"\d", s):
         return ""
     last_dot, last_comma = s.rfind("."), s.rfind(",")
-    dec_idx = max(last_dot, last_comma)
     if last_dot != -1 and last_comma != -1:
         # Both present → later one separates decimals, the other groups.
+        dec_idx = max(last_dot, last_comma)
         dec_part = s[dec_idx + 1 :]
         int_part = re.sub(r"[.,]", "", s[:dec_idx])
         return f"{int_part}.{dec_part}"
     sep_char = "." if last_dot != -1 else ("," if last_comma != -1 else "")
     if sep_char:
         head, _, tail = s.rpartition(sep_char)
-        tail_digits = len(tail)
-        if len(tail) == 3 and head:
-            # ``10.000`` / ``1,200`` → grouping, not decimals.
+        if head and len(tail) == 3 and (sep_char == "," or (sep_char == "." and dot_is_grouping)):
+            # A 3-digit group: ``1,200`` everywhere, and ``1.200 ¥`` on the
+            # trailing-symbol (European) path. Bare ``10.000``/``0.500``
+            # keep their dot: losing it would 1000x the price.
             return re.sub(r"[.,]", "", s)
-        if 1 <= tail_digits <= 2:
-            # Decimal separator (``19.99`` / ``19,99``).
+        if sep_char == "." and s.count(".") > 1:
+            # Multiple dots are grouping (``1.234.567``).
+            return re.sub(r"[.,]", "", s)
+        if 1 <= len(tail) <= 3:
+            # ``19.99``, ``19,99``, ``10.000``, ``0.500``.
             return f"{head.replace(',', '').replace('.', '')}.{tail}"
-        # No/far decimals → treat all separators as grouping.
         return re.sub(r"[.,]", "", s)
     return s
 
 
-def _price_candidates(text: str) -> list[str]:
-    candidates: list[tuple[int, str]] = []
+# Labels marking the current price vs a struck-through compare-at price.
+# Only text *preceding* a candidate is inspected: in "Was $99, now $49" the
+# first candidate must not be tagged "now" by the second one's label.
+_CURRENT_PRICE_RE = re.compile(r"\b(now|final|current|sale|today)\b", re.I)
+_COMPARE_AT_RE = re.compile(r"\b(was|old|reg(?:ular)?|compare(?:-at)?|rrp|list)\b", re.I)
 
-    def add(position: int, code: str, amount_raw: str) -> None:
-        amount = _normalize_amount(amount_raw)
+
+def _price_candidates(text: str) -> list[tuple[int, str, str]]:
+    """Candidates as ``(position, value, preceding_context)`` in page order."""
+    candidates: list[tuple[int, str, str]] = []
+
+    def add(position: int, code: str, amount_raw: str, *, dot_grouping: bool = False) -> None:
+        amount = _normalize_amount(amount_raw, dot_is_grouping=dot_grouping)
         if amount:
-            candidates.append((position, f"{code} {amount}"))
+            context = text[max(0, position - 64) : position].lower()
+            candidates.append((position, f"{code} {amount}", context))
 
     sym_cls = re.escape(_PRICE_SYMBOLS)
     code_alt = "|".join(_PRICE_CODES)
@@ -420,7 +440,13 @@ def _price_candidates(text: str) -> list[str]:
 
     # 2) Symbol-after (common in Europe): 19,99 €, 1290 Ft-style trailing symbol
     for match in re.finditer(rf"{_AMOUNT}\s*([{sym_cls}])", text):
-        add(match.start(), _SYMBOL_TO_CODE.get(match.group(2), "USD"), match.group(1))
+        # Trailing symbol = European convention: 1.200 is a grouped thousand.
+        add(
+            match.start(),
+            _SYMBOL_TO_CODE.get(match.group(2), "USD"),
+            match.group(1),
+            dot_grouping=True,
+        )
 
     # 3) ISO code before or after the number: USD 19.99 / 19.99 EUR
     for match in re.finditer(rf"\b({code_alt})\s*{_AMOUNT}", text, re.IGNORECASE):
@@ -436,9 +462,10 @@ def _price_candidates(text: str) -> list[str]:
         if bare:
             amount = _normalize_amount(bare.group(1))
             if amount:
-                candidates.append((bare.start(), amount))
+                context = text[max(0, bare.start() - 64) : bare.start()].lower()
+            candidates.append((bare.start(), amount, context))
 
-    return [value for _, value in sorted(candidates, key=lambda candidate: candidate[0])]
+    return sorted(candidates, key=lambda candidate: candidate[0])
 
 
 def extract_price(
@@ -500,4 +527,18 @@ def extract_price(
     candidates = _price_candidates(text)
     if not candidates:
         raise ExtractionError("price_not_found", "No price found on the page")
-    return candidates[0]
+
+    def _rank(context: str) -> int:
+        # Use the label closest to the amount: "Was $99, final $49" must not
+        # let the older "was" tag the second candidate as a compare-at price.
+        now = max((m.end() for m in _CURRENT_PRICE_RE.finditer(context)), default=-1)
+        was = max((m.end() for m in _COMPARE_AT_RE.finditer(context)), default=-1)
+        if now >= 0 and now > was:
+            return 0
+        if was >= 0 and was > now:
+            return 2
+        return 1
+
+    # An explicit current-price label wins over a compare-at ("was") price;
+    # without labels the first candidate in document order still wins.
+    return min(candidates, key=lambda c: (_rank(c[2]), c[0]))[1]

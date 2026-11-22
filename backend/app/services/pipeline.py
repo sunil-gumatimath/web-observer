@@ -29,6 +29,7 @@ from app.models.entities import (
 )
 from app.services import context_dev
 from app.services.ai_summary import (
+    TRIAGE_MARKER,
     AIEnrichment,
     apply_triage_reason,
     enrich_change,
@@ -323,22 +324,29 @@ def _extract_and_store_snapshot(
     immediately (extraction failed or HTTP error).
     """
     if result.status_code >= 400:
-        run.status = RunStatus.FAILED.value
-        run.http_status = result.status_code
-        run.latency_ms = result.latency_ms
-        run.error_code = "http_client_error" if result.status_code < 500 else "http_server_error"
-        run.error_message = f"HTTP {result.status_code}"
-        run.finished_at = datetime.now(UTC)
-        db.commit()
+        error_code = "http_client_error" if result.status_code < 500 else "http_server_error"
+        error_message = f"HTTP {result.status_code}"
+        # Fenced write: never blind-write FAILED over a run the reaper already
+        # claimed while this check was in flight.
+        from app.workers.run_guard import fail_run
+
+        fail_run(
+            db,
+            run,
+            error_code,
+            error_message,
+            http_status=result.status_code,
+            latency_ms=result.latency_ms,
+        )
         return (
             None,
             "",
             "",
             None,
             PipelineResult(
-                status=run.status,
-                error_code=run.error_code,
-                error_message=run.error_message,
+                status=RunStatus.FAILED.value,
+                error_code=error_code,
+                error_message=error_message,
             ),
         )
 
@@ -359,22 +367,27 @@ def _extract_and_store_snapshot(
             normalized = JSON_FIELD_MISSING_MARKER
             items = None
         else:
-            run.status = RunStatus.FAILED.value
-            run.http_status = result.status_code
-            run.latency_ms = result.latency_ms
-            run.error_code = exc.code
-            run.error_message = str(exc)
-            run.finished_at = datetime.now(UTC)
-            db.commit()
+            error_code = exc.code
+            error_message = str(exc)
+            from app.workers.run_guard import fail_run
+
+            fail_run(
+                db,
+                run,
+                error_code,
+                error_message,
+                http_status=result.status_code,
+                latency_ms=result.latency_ms,
+            )
             return (
                 None,
                 "",
                 "",
                 None,
                 PipelineResult(
-                    status=run.status,
-                    error_code=exc.code,
-                    error_message=str(exc),
+                    status=RunStatus.FAILED.value,
+                    error_code=error_code,
+                    error_message=error_message,
                 ),
             )
 
@@ -382,9 +395,6 @@ def _extract_and_store_snapshot(
         monitor.mode == "list_items" and items == [] and _has_previous_success(db, monitor)
     )
     if not normalized and not empty_list_after_baseline:
-        run.status = RunStatus.FAILED.value
-        run.http_status = result.status_code
-        run.latency_ms = result.latency_ms
         # SPA hint: page has substantial HTML with script but extraction produced nothing
         # and monitor is not using JS rendering – suggest enabling js_required.
         html_text = result.text or ""
@@ -394,25 +404,33 @@ def _extract_and_store_snapshot(
             and not getattr(monitor, "js_required", False)
         )
         if is_spa_hint:
-            run.error_code = "js_required_hint"
-            run.error_message = (
+            error_code = "js_required_hint"
+            error_message = (
                 "Extracted content was empty — page appears to require JavaScript rendering; "
                 "try enabling 'JavaScript rendering required' on this monitor."
             )
         else:
-            run.error_code = "extraction_failed"
-            run.error_message = "Extracted content was empty"
-        run.finished_at = datetime.now(UTC)
-        db.commit()
+            error_code = "extraction_failed"
+            error_message = "Extracted content was empty"
+        from app.workers.run_guard import fail_run
+
+        fail_run(
+            db,
+            run,
+            error_code,
+            error_message,
+            http_status=result.status_code,
+            latency_ms=result.latency_ms,
+        )
         return (
             None,
             "",
             "",
             None,
             PipelineResult(
-                status=run.status,
-                error_code=run.error_code,
-                error_message=run.error_message,
+                status=RunStatus.FAILED.value,
+                error_code=error_code,
+                error_message=error_message,
             ),
         )
 
@@ -699,7 +717,25 @@ def _create_change_event(
 ) -> ChangeEvent:
     """Run AI enrichment and persist the :class:`ChangeEvent` row."""
     workspace = db.get(Workspace, monitor.workspace_id)
-    ai_enabled = bool(workspace.ai_summaries_enabled) if workspace is not None else True
+    from app.services.usage import QuotaExceeded, assert_can_use_ai
+
+    quota_ok = True
+    if workspace is not None:
+        try:
+            assert_can_use_ai(db, workspace)
+        except QuotaExceeded as exc:
+            quota_ok = False
+            logger.warning(
+                "ai_quota_exceeded workspace_id=%s monitor_id=%s error=%s",
+                workspace.id,
+                monitor.id,
+                exc,
+            )
+    # Over budget: keep the deterministic change detection and heuristic
+    # summary, but never spend more server-managed tokens today.
+    ai_enabled = (
+        bool(workspace.ai_summaries_enabled) if workspace is not None else True
+    ) and quota_ok
     watch_note = getattr(monitor, "watch_note", None)
     provider_config_valid = True
     try:
@@ -815,38 +851,19 @@ def _create_change_event(
         # when a watch_note is present. Avoid a second LLM call.
         is_noise = bool(getattr(enrichment, "is_noise", False))
         triage_reason = getattr(enrichment, "noise_reason", None)
-    # Backward-compat fallback: if enrichment came from a mocked heuristic/fallback
-    # provider with no noise flag but watch_note exists, fall back to triage_change
-    # so existing tests mocking _call_llm_triage still work.
-    if (
-        watch_note
-        and not is_noise
-        and enrichment.provider != "llm"
-        and ai_enabled
-        and provider_config_valid
-        and _settings.ai_summaries_enabled
-    ):
-        from app.services.ai_summary import triage_change
-
-        fallback_noise, fallback_reason = triage_change(
-            monitor_name=monitor.name,
-            url=monitor.url,
-            mode=monitor.mode,
-            diff_text=ctx.diff_text,
-            watch_note=watch_note,
-            suggested_category=enrichment.category,
-            llm=llm_cfg,
-        )
-        is_noise = fallback_noise
-        triage_reason = fallback_reason
+    # Single-call enrichment (LLM or SubQ) already carries the triage decision.
+    # Do not call triage_change again here: with a SubQ gate that would spend a
+    # second decision call and let it overwrite the first result.
     if is_noise:
         # Preserve category/model but surface triage reason for inbox visibility.
         # If LLM already supplied a noise_reason, show it; otherwise generic.
         display_reason = triage_reason or getattr(enrichment, "noise_reason", None)
-        if display_reason:
+        if display_reason and not enrichment.summary.startswith(TRIAGE_MARKER):
             # The reason goes on the first line, the model's own summary of
             # what changed follows below it — the reason alone used to
-            # replace the summary, hiding the actual change.
+            # replace the summary, hiding the actual change. A SubQ noise
+            # result is already formatted; applying it twice duplicated the
+            # marker line in the stored summary.
             enrichment = apply_triage_reason(
                 enrichment,
                 display_reason,
@@ -897,6 +914,23 @@ def _queue_notifications(
     # filter) but must not generate notifications or outbound webhooks — this
     # is what makes triage actually quiet the noise.
     if change.is_noise:
+        return [], []
+
+    # Quota gate: fail closed *before* any NotificationOutbox row is created.
+    # assert_can_use_notifications is added to usage.py by the same review-fix
+    # batch, so import it lazily instead of binding it at module import time.
+    from app.services.usage import QuotaExceeded, assert_can_use_notifications
+
+    try:
+        assert_can_use_notifications(db, db.get(Workspace, monitor.workspace_id))
+    except QuotaExceeded as exc:
+        logger.warning(
+            "notification_quota_exceeded monitor_id=%s change_id=%s error=%s "
+            "— skipping outbox rows (fail closed)",
+            monitor.id,
+            change.id,
+            exc,
+        )
         return [], []
 
     # Cooldown / flapping guard (opt-in via alert_config): the change stays a
@@ -1239,13 +1273,21 @@ def apply_fetch_result(
             )
         if screenshots_enabled:
             _enqueue_alert_screenshot(change_id, monitor)
-        try:
-            from app.workers.ai_enrich import enrich_change_event
+        from app.workers.ai_enrich import enrich_change_event
 
+        try:
             enrich_change_event.send(str(change_id), diff_text)
             logger.info("ai_enrich_enqueued change_id=%s monitor_id=%s", change_id, monitor.id)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ai_enrich_enqueue_failed change_id=%s error=%s", change_id, exc)
+            logger.exception("ai_enrich_enqueue_failed change_id=%s error=%s", change_id, exc)
+            # The placeholder is already committed. A broker outage must not
+            # strand the change with a heuristic summary and no notification:
+            # fall back to running the enrichment inline in this worker.
+            try:
+                enrich_change_event(str(change_id), diff_text)
+                logger.info("ai_enrich_inline_fallback_done change_id=%s", change_id)
+            except Exception:  # noqa: BLE001
+                logger.exception("ai_enrich_inline_fallback_failed change_id=%s", change_id)
         return PipelineResult(
             status=run.status,
             content_hash=digest,

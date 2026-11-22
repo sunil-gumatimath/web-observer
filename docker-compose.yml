@@ -5,7 +5,7 @@
 #   ./scripts/docker-up.sh logs -f      # follow all logs
 #
 # Inside the container supervisord runs: redis, api, worker-http,
-# worker-browser, scheduler, frontend.
+# worker-ai, worker-browser, scheduler, frontend.
 #
 # Postgres is not containerised — backend/.env points DATABASE_URL at Neon.
 

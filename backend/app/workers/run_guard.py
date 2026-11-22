@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
@@ -52,6 +53,8 @@ def fail_run(
     message: str,
     *,
     http_status: int | None = None,
+    latency_ms: int | None = None,
+    from_statuses: tuple[str, ...] | None = None,
 ) -> None:
     """Mark a run as FAILED and persist immediately.
 
@@ -65,6 +68,11 @@ def fail_run(
       downgraded — a blind ``run.status = FAILED`` here would overwrite the
       committed result while its change event / outbox rows stay live.
 
+    ``from_statuses`` widens the fence for callers that fail a run *before*
+    claiming it (e.g. the browser-check quota hook sees a QUEUED run); it
+    defaults to RUNNING only. ``latency_ms`` is carried through so fenced
+    failure paths still record the fetch latency they observed.
+
     Any pending uncommitted state from the failing path is rolled back first,
     so the fence reads truth and nothing half-applied is flushed alongside.
     """
@@ -73,12 +81,15 @@ def fail_run(
     values: dict = {"error_code": code, "error_message": message, "finished_at": now}
     if http_status is not None:
         values["http_status"] = http_status
+    if latency_ms is not None:
+        values["latency_ms"] = latency_ms
+    statuses = (RunStatus.RUNNING.value,) if from_statuses is None else tuple(from_statuses)
     # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
     fenced = db.execute(
         sa_update(MonitorRun)
         .where(
             MonitorRun.id == run.id,
-            MonitorRun.status == RunStatus.RUNNING.value,
+            MonitorRun.status.in_(statuses),
         )
         .values(status=RunStatus.FAILED.value, **values)
     )
@@ -95,6 +106,8 @@ def fail_run(
     run.error_message = message
     if http_status is not None:
         run.http_status = http_status
+    if latency_ms is not None:
+        run.latency_ms = latency_ms
     run.finished_at = now
 
 
@@ -114,6 +127,70 @@ def enqueue_outbox(outbox_ids) -> None:
                 "outbox_enqueue_failed outbox_id=%s (row stays pending; reaper will retry)",
                 oid,
             )
+
+
+def _reaper_claimed(db: Session, run: MonitorRun) -> bool:
+    """Fresh-read whether the reaper already claimed this run as FAILED.
+
+    The worker's own session can still hold stale state (a terminal commit by
+    the reaper is invisible to an open transaction), so probe through a fresh
+    Session bound to the *caller's* engine, mirroring
+    ``pipeline._live_run_status``. Session-like test doubles without a
+    ``get_bind`` fall back to the in-memory run attributes.
+    """
+    status = getattr(run, "status", None)
+    error_code = getattr(run, "error_code", None)
+    get_bind = getattr(db, "get_bind", None)
+    if get_bind is None:
+        return status == RunStatus.FAILED.value and error_code == "timeout_reaped"
+    try:
+        from sqlalchemy.orm import Session as _Session
+
+        bind = get_bind()
+        engine = getattr(bind, "engine", bind)
+        with _Session(bind=engine) as probe:
+            row = probe.execute(
+                select(MonitorRun.status, MonitorRun.error_code).where(MonitorRun.id == run.id)
+            ).one_or_none()
+    except Exception as exc:  # noqa: BLE001 - probe failure must not suppress accounting
+        logger.warning("reaper_claim_probe_failed run_id=%s error=%s", run.id, exc)
+        return status == RunStatus.FAILED.value and error_code == "timeout_reaped"
+    if row is None:
+        return False
+    return row[0] == RunStatus.FAILED.value and row[1] == "timeout_reaped"
+
+
+def _record_failure_outcome(
+    db: Session,
+    monitor: Monitor,
+    run: MonitorRun,
+    *,
+    code: str,
+    message: str,
+) -> list:
+    """Account a failed run unless the reaper already FAILED/timeout_reaped it.
+
+    Two workers can otherwise count the same failure: the reaper transitions
+    RUNNING -> FAILED(timeout_reaped) while this worker is still in its error
+    handler, and an unconditional ``record_run_outcome`` then increments
+    consecutive_failures a second time (and may fire duplicate notifications).
+    """
+    if _reaper_claimed(db, run):
+        logger.info(
+            "run_outcome_skipped_reaped run_id=%s code=%s (reaper already FAILED/timeout_reaped)",
+            run.id,
+            code,
+        )
+        return []
+    outbox_ids = record_run_outcome(
+        db,
+        monitor=monitor,
+        succeeded=False,
+        error_code=code,
+        error_message=message,
+    )
+    db.commit()
+    return list(outbox_ids or [])
 
 
 def execute_monitored_run(
@@ -214,14 +291,13 @@ def execute_monitored_run(
                 db.commit()
             else:
                 record_domain_failure(domain)
-                outbox_extra = record_run_outcome(
+                outbox_extra = _record_failure_outcome(
                     db,
-                    monitor=monitor,
-                    succeeded=False,
-                    error_code=pipeline.error_code,
-                    error_message=pipeline.error_message,
+                    monitor,
+                    run,
+                    code=pipeline.error_code,
+                    message=pipeline.error_message,
                 )
-                db.commit()
 
             outbox_ids = list(pipeline.outbox_ids or []) + [str(x) for x in outbox_extra]
             enqueue_outbox(outbox_ids)
@@ -235,50 +311,26 @@ def execute_monitored_run(
 
         except DomainBlocked as exc:
             fail_run(db, run, "blocked_address", str(exc))
-            record_run_outcome(
-                db,
-                monitor=monitor,
-                succeeded=False,
-                error_code="blocked_address",
-                error_message=str(exc),
-            )
-            db.commit()
+            _record_failure_outcome(db, monitor, run, code="blocked_address", message=str(exc))
         except SSRFError as exc:
             fail_run(db, run, exc.code, str(exc))
-            record_run_outcome(
-                db,
-                monitor=monitor,
-                succeeded=False,
-                error_code=exc.code,
-                error_message=str(exc),
-            )
-            db.commit()
+            _record_failure_outcome(db, monitor, run, code=exc.code, message=str(exc))
         except FetchError as exc:
             if domain:
                 record_domain_failure(domain)
             fail_run(db, run, exc.code, str(exc), http_status=exc.http_status)
-            outbox_extra = record_run_outcome(
-                db,
-                monitor=monitor,
-                succeeded=False,
-                error_code=exc.code,
-                error_message=str(exc),
+            outbox_extra = _record_failure_outcome(
+                db, monitor, run, code=exc.code, message=str(exc)
             )
-            db.commit()
             enqueue_outbox(outbox_extra)
         except Exception as exc:  # noqa: BLE001
             logger.exception("%s_failed run_id=%s", worker_label, run_id)
             if domain:
                 record_domain_failure(domain)
             fail_run(db, run, "internal_error", str(exc)[:2000])
-            outbox_extra = record_run_outcome(
-                db,
-                monitor=monitor,
-                succeeded=False,
-                error_code="internal_error",
-                error_message=str(exc)[:2000],
+            outbox_extra = _record_failure_outcome(
+                db, monitor, run, code="internal_error", message=str(exc)[:2000]
             )
-            db.commit()
             enqueue_outbox(outbox_extra)
         finally:
             # Only release a slot we actually acquired.  If assert_domain_allowed

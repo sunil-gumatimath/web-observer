@@ -5,6 +5,7 @@
 #   * Next.js frontend          :3000
 #   * FastAPI API               :8002
 #   * Dramatiq worker (http)    (background)
+#   * Dramatiq worker (ai)      (background)
 #   * Dramatiq worker (browser) (background)
 #   * Scheduler                 (background)
 #   * Redis                     (127.0.0.1:6379, inside the container)

@@ -87,6 +87,7 @@ def test_ai_enrich_commits_when_outbox_already_exists(monkeypatch):
     monkeypatch.setattr(ai_enrich, "workspace_llm_config", lambda w: {"model": "test"})
     monkeypatch.setattr(ai_summary, "enrich_change", lambda **kwargs: enrichment)
     monkeypatch.setattr(usage, "increment_ai_tokens", lambda *a, **k: None)
+    monkeypatch.setattr(usage, "assert_can_use_ai", lambda db, ws: None)
 
     ai_enrich.enrich_change_event.fn(str(CHANGE_ID), "diff")
 

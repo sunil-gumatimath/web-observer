@@ -26,14 +26,20 @@ def generate_ai_digest_summary(workspace: Workspace, event_bullets: list[str]) -
     if not settings.ai_summaries_enabled or not getattr(workspace, "ai_summaries_enabled", True):
         return None
 
-    llm_cfg = None
-    if workspace.llm_api_key or workspace.llm_api_base or workspace.llm_model:
-        llm_cfg = {
-            "api_key": decrypt_secret(workspace.llm_api_key),
-            "api_base": workspace.llm_api_base,
-            "model": workspace.llm_model,
-        }
-    cfg = _effective_llm(llm_cfg)
+    try:
+        llm_cfg = None
+        if workspace.llm_api_key or workspace.llm_api_base or workspace.llm_model:
+            llm_cfg = {
+                "api_key": decrypt_secret(workspace.llm_api_key),
+                "api_base": workspace.llm_api_base,
+                "model": workspace.llm_model,
+            }
+        cfg = _effective_llm(llm_cfg)
+    except Exception as exc:  # noqa: BLE001
+        # One workspace's rotated or malformed BYOK config must not abort the
+        # digest job for every other workspace.
+        logger.warning("digest_ai_config_failed workspace_id=%s error=%s", workspace.id, exc)
+        return None
     if not cfg.get("api_key"):
         return None
 
@@ -117,6 +123,16 @@ def enqueue_workspace_digest(
 ) -> list[uuid.UUID]:
     body, count = build_digest_body(db, workspace, since=since)
     if count == 0:
+        return []
+
+    from app.services.usage import QuotaExceeded, assert_can_use_notifications
+
+    try:
+        assert_can_use_notifications(db, workspace)
+    except QuotaExceeded as exc:
+        logger.warning(
+            "digest_notification_quota_exceeded workspace_id=%s error=%s", workspace.id, exc
+        )
         return []
 
     channels = db.scalars(

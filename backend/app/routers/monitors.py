@@ -326,6 +326,8 @@ def list_monitors(
     workspace_id: UUID,
     db: Db,
     _workspace: AnyWs,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
 ) -> list[Monitor]:
     # Latest change per monitor via a LATERAL join: the subquery runs once per
     # monitor, walks ix_change_events_monitor_created and stops at the first
@@ -351,6 +353,8 @@ def list_monitors(
         .outerjoin(latest_ce, true())
         .where(Monitor.workspace_id == workspace_id)
         .order_by(Monitor.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     ).all()
 
     monitors: list[Monitor] = []
@@ -402,6 +406,7 @@ def create_monitor(
     workspace_id: UUID,
     body: MonitorCreate,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> Monitor:
     workspace = db.get(Workspace, workspace_id)
@@ -500,6 +505,16 @@ def create_monitor(
 
     db.commit()
     db.refresh(monitor)
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitor.created",
+        resource_type="monitor",
+        resource_id=str(monitor.id),
+        meta={"name": monitor.name, "url": monitor.url},
+    )
+    db.commit()
 
     # Brand-aware dashboard: best-effort auto-populate logo/title/description/hero
     # from the page's HTML meta (og:title, og:description, og:image, favicon).
@@ -549,14 +564,14 @@ def create_monitor(
 
 class SitemapDiscoverIn(BaseModel):
     url: str
-    max_urls: int = Field(default=500, ge=1, le=2000)
+    max_urls: int = Field(default=200, ge=1, le=200)
 
 
 class SitemapCreateIn(BaseModel):
     url: str
     # Bounded: each URL becomes a monitor row, so one request cannot create an
     # unbounded batch (individual monitors still count against plan quotas).
-    urls: list[str] = Field(min_length=1, max_length=2_000)
+    urls: list[str] = Field(min_length=1, max_length=200)
     mode: str = "page_content"
     css_selector: str | None = None
     schedule_interval_minutes: int = Field(default=60, ge=1)
@@ -662,7 +677,7 @@ def monitor_brand_info(
     workspace_id: UUID,
     body: BrandInfoRequest,
     db: Db,
-    _workspace: AnyWs,
+    _workspace: MemberWs,
 ) -> BrandInfoOut:
     """Preview brand metadata for a URL without creating a monitor.
 
@@ -706,7 +721,7 @@ def selector_preview(
     workspace_id: UUID,
     body: SelectorPreviewIn,
     db: Db,
-    _workspace: AnyWs,
+    _workspace: MemberWs,
 ) -> SelectorPreviewOut:
     """Fetch a URL server-side and return sanitized HTML for element picking.
 
@@ -823,11 +838,41 @@ def update_monitor(
     body: MonitorUpdate,
     db: Db,
     principal: Principal,
-    _workspace: MemberWs,
+    workspace: MemberWs,
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
     prev_enabled = bool(monitor.enabled)
     data = body.model_dump(exclude_unset=True)
+
+    # Explicit JSON nulls are not the same as omitted fields. Reject them
+    # before any setattr below can overwrite a non-nullable column.
+    for _non_null_field in (
+        "name",
+        "schedule_interval_minutes",
+        "timeout_seconds",
+        "max_response_bytes",
+    ):
+        if _non_null_field in data and data[_non_null_field] is None:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"{_non_null_field} cannot be null",
+            )
+
+    if "schedule_interval_minutes" in data:
+        _interval = data["schedule_interval_minutes"]
+        if _interval is not None:
+            from app.services.plans import get_plan
+
+            plan = get_plan(workspace)
+            if _interval < plan.min_interval_minutes:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Minimum interval for plan {plan.name} is "
+                        f"{plan.min_interval_minutes} minutes"
+                    ),
+                )
 
     config_fields = {
         "url",
@@ -986,7 +1031,9 @@ def delete_monitor(
     mid = monitor.id
     monitor_name = monitor.name
 
-    # Object storage cleanup first (best-effort)
+    # Collect storage keys now, but only delete them AFTER the DB commit
+    # succeeds: a rolled-back delete must not leave dangling DB references.
+    object_keys: list[str] = []
     snapshots = db.scalars(
         select(Snapshot).where(
             Snapshot.monitor_id == mid,
@@ -996,10 +1043,7 @@ def delete_monitor(
     for snap in snapshots:
         for obj_key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
             if obj_key:
-                try:
-                    delete_object(obj_key)
-                except StorageError as exc:
-                    logger.debug("snapshot_object_delete_failed key=%s error=%s", obj_key, exc)
+                object_keys.append(obj_key)
 
     # Bulk SQL only — disable session sync so SA does not try to NULL out
     # non-nullable monitor_id FKs on in-session relationship state.
@@ -1024,6 +1068,11 @@ def delete_monitor(
         meta={"name": monitor_name},
     )
     db.commit()
+    for obj_key in object_keys:
+        try:
+            delete_object(obj_key)
+        except StorageError as exc:
+            logger.debug("snapshot_object_delete_failed key=%s error=%s", obj_key, exc)
 
 
 @router.post(
@@ -1034,12 +1083,23 @@ def pause_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
     monitor.enabled = False
     db.commit()
     db.refresh(monitor)
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitor.paused",
+        resource_type="monitor",
+        resource_id=str(monitor_id),
+        meta={"enabled": False},
+    )
+    db.commit()
     return monitor
 
 
@@ -1051,6 +1111,7 @@ def resume_monitor(
     workspace_id: UUID,
     monitor_id: UUID,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> Monitor:
     monitor = _get_monitor(db, workspace_id, monitor_id)
@@ -1058,6 +1119,16 @@ def resume_monitor(
     monitor.next_run_at = datetime.now(UTC) + timedelta(seconds=5)
     db.commit()
     db.refresh(monitor)
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitor.resumed",
+        resource_type="monitor",
+        resource_id=str(monitor_id),
+        meta={"enabled": True},
+    )
+    db.commit()
     return monitor
 
 
@@ -1074,10 +1145,13 @@ class BulkActionIn(BaseModel):
 
 
 @router.post("/workspaces/{workspace_id}/monitors/bulk")
+@limiter.limit("20/minute")
 def bulk_action(
+    request: Request,
     workspace_id: UUID,
     body: BulkActionIn,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> dict:
     monitors = db.scalars(
@@ -1087,9 +1161,19 @@ def bulk_action(
     ).all()
     found_ids = {m.id for m in monitors}
     missing = [str(mid) for mid in body.monitor_ids if mid not in found_ids]
+    monitor_ids = [str(m.id) for m in monitors]
     if body.action == "pause":
         for m in monitors:
             m.enabled = False
+        db.commit()
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            principal=principal,
+            action="monitor.bulk_pause",
+            resource_type="monitor",
+            meta={"action": "pause", "monitor_ids": monitor_ids},
+        )
         db.commit()
         return {"updated": len(monitors), "missing": missing}
     if body.action == "resume":
@@ -1098,8 +1182,18 @@ def bulk_action(
             m.enabled = True
             m.next_run_at = now
         db.commit()
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            principal=principal,
+            action="monitor.bulk_resume",
+            resource_type="monitor",
+            meta={"action": "resume", "monitor_ids": monitor_ids},
+        )
+        db.commit()
         return {"updated": len(monitors), "missing": missing}
-    # delete
+    # delete: collect storage keys now, remove them only after the DB commit.
+    object_keys: list[str] = []
     for m in monitors:
         mid = m.id
         # Reuse bulk delete logic from single delete
@@ -1111,10 +1205,7 @@ def bulk_action(
         for snap in snapshots:
             for obj_key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
                 if obj_key:
-                    try:
-                        delete_object(obj_key)
-                    except Exception:
-                        pass
+                    object_keys.append(obj_key)
         sync_off = {"synchronize_session": False}
         for bulk_stmt in (
             sa_delete(ChangeEvent).where(ChangeEvent.monitor_id == mid),
@@ -1127,13 +1218,30 @@ def bulk_action(
             db.execute(bulk_stmt, execution_options=sync_off)
     db.expunge_all()
     db.commit()
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitor.bulk_delete",
+        resource_type="monitor",
+        meta={"action": "delete", "monitor_ids": monitor_ids},
+    )
+    db.commit()
+    for obj_key in object_keys:
+        try:
+            delete_object(obj_key)
+        except StorageError as exc:
+            logger.debug("snapshot_object_delete_failed key=%s error=%s", obj_key, exc)
     return {"deleted": len(monitors), "missing": missing}
 
 
 @router.post("/workspaces/{workspace_id}/monitors/pause-all")
+@limiter.limit("20/minute")
 def pause_all_monitors(
+    request: Request,
     workspace_id: UUID,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> dict:
     """Disable every monitor in the workspace (bulk pause, persisted to the DB)."""
@@ -1143,14 +1251,26 @@ def pause_all_monitors(
         .values(enabled=False)
     )
     db.commit()
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitor.pause_all",
+        resource_type="monitor",
+        meta={"updated": res.rowcount},
+    )
+    db.commit()
     # rowcount exists on CursorResult; the Result stub omits it.
     return {"updated": res.rowcount}  # type: ignore[attr-defined]
 
 
 @router.post("/workspaces/{workspace_id}/monitors/resume-all")
+@limiter.limit("20/minute")
 def resume_all_monitors(
+    request: Request,
     workspace_id: UUID,
     db: Db,
+    principal: Principal,
     _workspace: MemberWs,
 ) -> dict:
     """Re-enable every paused monitor and schedule their next run promptly."""
@@ -1159,6 +1279,15 @@ def resume_all_monitors(
         sa_update(Monitor)
         .where(Monitor.workspace_id == workspace_id, Monitor.enabled.is_(False))
         .values(enabled=True, next_run_at=now)
+    )
+    db.commit()
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        principal=principal,
+        action="monitor.resume_all",
+        resource_type="monitor",
+        meta={"updated": res.rowcount},
     )
     db.commit()
     # rowcount exists on CursorResult; the Result stub omits it.
@@ -1205,6 +1334,11 @@ def manual_run(
             age = now - age_ref
             # Lost queue message after worker restart: re-enqueue the same run.
             if active.status == RunStatus.QUEUED.value and age >= timedelta(seconds=90):
+                # The stuck-run reaper fails QUEUED runs older than two minutes,
+                # keyed on queued_at. Refresh and persist it BEFORE re-publishing,
+                # or the reaper can instantly kill the run we just re-queued.
+                active.queued_at = now
+                db.commit()
                 enqueue_check(str(active.id), needs_browser=needs_browser)
                 return ManualRunOut(
                     run_id=active.id,
@@ -1671,11 +1805,15 @@ def ask_change(
     """Answer a question about an authorized change using its server-side diff."""
     from app.config import get_settings
     from app.services.ai_summary import ask_about_change, workspace_llm_config
-    from app.services.usage import increment_ai_tokens
+    from app.services.usage import QuotaExceeded, assert_can_use_ai, increment_ai_tokens
 
     settings = get_settings()
     if not settings.ai_summaries_enabled or not workspace.ai_summaries_enabled:
         raise HTTPException(status_code=409, detail="AI is disabled for this workspace")
+    try:
+        assert_can_use_ai(db, workspace)
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
 
     detail = get_change(workspace_id, change_id, db, workspace)
     monitor = db.get(Monitor, detail.monitor_id)
@@ -1832,6 +1970,11 @@ def mark_change_noise(
     if change is None:
         raise HTTPException(status_code=404, detail="Change event not found")
     change.is_noise = body.is_noise
+    if not body.is_noise and (change.ai_summary or "").startswith("[AI triage]"):
+        # A human marked this as a real signal: keep the model's own summary
+        # of what changed and drop the stale internal triage reason line.
+        lines = (change.ai_summary or "").split("\n", 1)
+        change.ai_summary = lines[1].strip() if len(lines) > 1 else ""
     db.commit()
     db.refresh(change)
     return change
@@ -1846,7 +1989,7 @@ def mark_change_read(
     change_id: UUID,
     body: ReadStateIn,
     db: Db,
-    _workspace: AnyWs,
+    _workspace: MemberWs,
 ) -> ChangeEvent:
     change = db.scalar(
         select(ChangeEvent).where(
@@ -1869,7 +2012,7 @@ def mark_change_read(
 def mark_all_alerts_read(
     workspace_id: UUID,
     db: Db,
-    _workspace: AnyWs,
+    _workspace: MemberWs,
 ) -> AlertsSummary:
     mark_read = (
         sa_update(ChangeEvent)

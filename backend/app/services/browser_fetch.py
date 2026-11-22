@@ -346,7 +346,7 @@ def _fetch_url_cf_browser(
         response = httpx.post(
             endpoint.rstrip("/") + "/",
             json={"url": validated.url, "timeout_ms": cf_timeout_ms},
-            headers={"X-CF-Failover-Token": token},
+            headers={"X-CF-Failover-Token": token} if token else {},
             timeout=max(30, timeout_seconds + 15),
         )
     except Exception as exc:  # noqa: BLE001 - any transport error = failover unavailable

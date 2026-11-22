@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Badge, Card, ModeBadge, SectionTitle } from "@/components/ui";
 import { api, brandAssetUrl } from "@/lib/api";
+import { parseSummaryParts } from "@/lib/summary";
 import type { PublicShare } from "@/lib/types";
 
 export default function PublicSharePage() {
@@ -114,8 +115,16 @@ export default function PublicSharePage() {
                     {new Date(a.created_at).toLocaleString()}
                   </span>
                 </div>
+                {a.title ? (
+                  <p className="text-sm font-semibold text-[var(--ink)]">{a.title}</p>
+                ) : null}
+                {a.impact ? (
+                  <p className="text-xs text-[var(--ink-subtle)]">Impact: {a.impact}</p>
+                ) : null}
                 <p className="text-sm text-[var(--ink)]">
-                  {a.ai_summary || a.diff_summary || "Content changed."}
+                  {parseSummaryParts(a.ai_summary).detail ||
+                    a.diff_summary ||
+                    "Content changed."}
                 </p>
               </Card>
             ))}

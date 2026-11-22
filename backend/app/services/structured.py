@@ -202,7 +202,14 @@ def diff_lists(before: list[str], after: list[str]) -> ListDiff:
 
     def identity(item: str) -> str:
         match = re.search(r"<!--mtw-id:(.*?)-->$", item)
-        return f"id:{match.group(1)}" if match else f"item:{item}"
+        if match:
+            return f"id:{match.group(1)}"
+        # Link items are emitted as "[text](url)". The href is the stable
+        # identity: editing link text is a modification, not remove + add.
+        link = re.search(r"\[[^\]]*\]\(([^)]+)\)\s*$", item)
+        if link and link.group(1):
+            return f"href:{link.group(1)}"
+        return f"item:{item}"
 
     before_by_id = {identity(item): item for item in before}
     after_by_id = {identity(item): item for item in after}

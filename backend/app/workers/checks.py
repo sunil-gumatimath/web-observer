@@ -58,12 +58,14 @@ def fetch_page_with_provider_fallback(
             raise
         if exc.code == "http_error" and exc.http_status not in _PROVIDER_HTTP_STATUSES:
             raise
+        # Clock the provider call itself: starting after it made latency_ms
+        # measure only logging / response construction.
+        started = time.perf_counter()
         try:
             markdown = context_dev.scrape_markdown(url, timeout_seconds=timeout_seconds)
         except Exception as provider_exc:  # noqa: BLE001 - never mask the original
             logger.warning("page_provider_fallback_failed url=%s error=%s", url, provider_exc)
             raise exc from provider_exc
-        started = time.perf_counter()
         logger.info("page_provider_fallback_used url=%s chars=%s", url, len(markdown))
         return FetchResult(
             final_url=url,

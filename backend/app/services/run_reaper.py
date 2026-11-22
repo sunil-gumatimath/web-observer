@@ -116,6 +116,11 @@ def reap_stuck_runs(db: Session) -> int:
         monitor = db.get(Monitor, run.monitor_id)
         outbox_ids: list = []
         if monitor is not None:
+            # The scheduler skips a monitor while it has an active run, so a
+            # reaped (now FAILED) run leaves it stranded until its old
+            # next_run_at. Make it due immediately so the next scheduler pass
+            # claims a replacement run for the lost check.
+            monitor.next_run_at = now
             outbox_ids = record_run_outcome(
                 db,
                 monitor=monitor,

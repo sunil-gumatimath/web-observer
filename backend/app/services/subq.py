@@ -131,16 +131,28 @@ def build_systemone_payload(
         },
     }
 
-    if has_watch or has_semantic:
-        criteria_text = (semantic_trigger if has_semantic else watch_note) or ""
-        questions["matches_criteria"] = {
+    def _match_question(criteria_text: str) -> dict:
+        return {
             "type": "noul",
-            "instructions": f"Does this change match what the user is specifically watching for: '{escape_untrusted_text(criteria_text.strip())}'?",
+            "instructions": (
+                "Does this change match what the user is specifically watching for: "
+                f"'{escape_untrusted_text(criteria_text.strip())}'?"
+            ),
             "criteria": {
                 "true": "The change directly aligns with or satisfies the user's specific watch note or trigger criteria",
                 "false": "The change does not match or is irrelevant to the user's criteria",
             },
         }
+
+    if has_watch and has_semantic:
+        # Both criteria are active: ask about each separately so a matching
+        # watch note cannot be silently ignored in favour of the trigger.
+        questions["matches_watch"] = _match_question(watch_note or "")
+        questions["matches_semantic"] = _match_question(semantic_trigger or "")
+    elif has_watch or has_semantic:
+        questions["matches_criteria"] = _match_question(
+            (semantic_trigger if has_semantic else watch_note) or ""
+        )
 
     return {
         "model": model,
@@ -149,12 +161,26 @@ def build_systemone_payload(
     }
 
 
+def _probability(value: object) -> float | None:
+    """Coerce a noul answer to [0, 1]; invalid/missing values mean 'unknown'."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number < 0 or number > 1:
+        return None
+    return number
+
+
 def parse_subq_response(
     data: dict,
     *,
     noise_threshold: float = 0.70,
     has_watch_or_semantic: bool = False,
     model_name: str | None = None,
+    criteria_count: int = 1,
 ) -> SubQDecision:
     """Parse the SubQ /v1/systemone response into a typed SubQDecision."""
     answers = data.get("answers") or {}
@@ -164,7 +190,7 @@ def parse_subq_response(
     is_noise_answer = answers.get("is_noise") or {}
     noise_prob = 0.0
     if isinstance(is_noise_answer, dict):
-        noise_prob = float(is_noise_answer.get("noul", 0.0) or 0.0)
+        noise_prob = _probability(is_noise_answer.get("noul")) or 0.0
 
     # 2. Category selection (choice)
     cat_answer = answers.get("category") or {}
@@ -182,20 +208,25 @@ def parse_subq_response(
     if chosen_impact not in SUBQ_IMPACT_LEVELS:
         chosen_impact = "low"
 
-    # 4. Watch criteria / semantic trigger matching (noul: 0.0 - 1.0)
-    matches_answer = answers.get("matches_criteria")
-    match_prob: float | None = None
-    if isinstance(matches_answer, dict) and "noul" in matches_answer:
-        match_prob = float(matches_answer.get("noul", 1.0) or 0.0)
+    # 4. Watch criteria / semantic trigger matching (noul: 0.0 - 1.0).
+    # Invalid or missing answers are unknown, never a failed match: a broken
+    # response must not silently suppress a real change.
+    match_probs: list[float] = []
+    for key in ("matches_criteria", "matches_watch", "matches_semantic"):
+        answer = answers.get(key)
+        if isinstance(answer, dict) and "noul" in answer:
+            prob = _probability(answer.get("noul"))
+            if prob is not None:
+                match_probs.append(prob)
 
     # Decision logic
     is_noise = False
     noise_reason: str | None = None
 
-    if has_watch_or_semantic and match_prob is not None:
-        if match_prob < 0.35:
+    if has_watch_or_semantic and len(match_probs) >= criteria_count:
+        if all(p < 0.35 for p in match_probs):
             is_noise = True
-            noise_reason = f"SubQ triage: change does not match watch criteria (match probability {match_prob:.2f})"
+            noise_reason = f"SubQ triage: change does not match watch criteria (match probability {min(match_probs):.2f})"
         elif noise_prob >= noise_threshold:
             is_noise = True
             noise_reason = (
@@ -246,10 +277,22 @@ def evaluate_subq_decision(
         return None
 
     base = (api_base or settings.subq_api_base or "https://api.subq.ai/v1").rstrip("/")
+    if api_base and api_base.rstrip("/") != (settings.subq_api_base or "").rstrip("/"):
+        # A custom provider base carries the same bearer token as the default
+        # one, so apply the same HTTPS/SSRF guard as the LLM provider base.
+        from app.services.ai_summary import validate_provider_base
+
+        try:
+            base = validate_provider_base(base, resolve_dns=False)
+        except ValueError as exc:
+            logger.warning("subq_invalid_provider_base error=%s", exc)
+            return None
     model_name = model or settings.subq_model or "subq-snap-preview"
     endpoint = f"{base}/systemone"
 
-    has_watch_or_semantic = bool((watch_note or "").strip() or (semantic_trigger or "").strip())
+    has_watch = bool((watch_note or "").strip())
+    has_semantic = bool((semantic_trigger or "").strip())
+    has_watch_or_semantic = has_watch or has_semantic
     payload = build_systemone_payload(
         monitor_name=monitor_name,
         url=url,
@@ -275,11 +318,14 @@ def evaluate_subq_decision(
                 noise_threshold=noise_threshold,
                 has_watch_or_semantic=has_watch_or_semantic,
                 model_name=model_name,
+                criteria_count=2 if has_watch and has_semantic else 1,
             )
+        # Never echo a provider response body: it can contain echoed request
+        # state (watch notes, diff excerpts) or credential fragments.
         logger.warning(
-            "subq_request_failed status=%s body=%s",
+            "subq_request_failed status=%s body_bytes=%s",
             resp.status_code,
-            resp.text[:200],
+            len(resp.content or b""),
         )
         return None
     except Exception as exc:  # noqa: BLE001

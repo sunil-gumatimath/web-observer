@@ -136,6 +136,11 @@ def update_workspace(
                 status_code=422,
                 detail="A workspace LLM API key is required for custom base/model overrides",
             )
+        if has_key and not (final_base and str(final_base).strip()):
+            raise HTTPException(
+                status_code=422,
+                detail="A workspace LLM API base is required with a workspace API key",
+            )
         if final_base and str(final_base).strip():
             from app.services.ai_summary import validate_provider_base
 
