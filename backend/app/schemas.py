@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from datetime import datetime
@@ -60,6 +61,30 @@ _MAX_IGNORE_SELECTORS = 20
 MAX_SELECTOR_LEN = 300
 MAX_URL_LEN = 2048
 _REGEX_ALERT_KEYS = ("regex_must_match", "regex_must_not_match")
+# Numeric alert_config thresholds are validated at the API boundary: stored
+# rows created before this cap are still handled defensively in conditional.py.
+# bool is rejected explicitly (isinstance(True, int) is True in Python).
+_NUMERIC_ALERT_KEYS = (
+    "price_below",
+    "price_above",
+    "value_below",
+    "value_above",
+    "percent_change",
+    "cooldown_minutes",
+    "flap_window_minutes",
+)
+_INT_ALERT_KEYS = (
+    "min_diff_chars",
+    "list_min_added",
+    "list_min_removed",
+    "flap_max_alerts",
+)
+_INT_ALERT_MIN = {
+    "min_diff_chars": 0,
+    "list_min_added": 0,
+    "list_min_removed": 0,
+    "flap_max_alerts": 1,
+}
 
 
 def _validate_regex_patterns(patterns: list[str] | None) -> list[str] | None:
@@ -100,7 +125,7 @@ def _validate_selector_list(selectors: list[str] | None) -> list[str] | None:
 
 
 def _validate_alert_config(cfg: dict | None) -> dict | None:
-    """Validate the regex alert rules inside an alert_config dict."""
+    """Validate regex and numeric alert rules inside an alert_config dict."""
     if cfg is None:
         return None
     if not isinstance(cfg, dict):
@@ -118,6 +143,23 @@ def _validate_alert_config(cfg: dict | None) -> dict | None:
                 re.compile(pat)
             except re.error as exc:
                 raise ValueError(f"alert_config.{key} is not a valid regex: {exc}") from exc
+    for key in _NUMERIC_ALERT_KEYS + _INT_ALERT_KEYS:
+        if key not in cfg:
+            continue
+        value = cfg[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"alert_config.{key} must be a number")
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError(f"alert_config.{key} must be finite")
+        if key in _INT_ALERT_KEYS:
+            if int(value) != value:
+                raise ValueError(f"alert_config.{key} must be an integer")
+            if value < _INT_ALERT_MIN[key]:
+                raise ValueError(
+                    f"alert_config.{key} must be >= {_INT_ALERT_MIN[key]}"
+                )
+        elif value < 0:
+            raise ValueError(f"alert_config.{key} must be >= 0")
     return cfg
 
 
@@ -716,6 +758,10 @@ class PublicShareMonitorOut(BaseModel):
 class PublicShareAlertOut(BaseModel):
     id: uuid.UUID
     change_category: str | None = None
+    title: str | None = None
+    impact: str | None = None
+    confidence: float | None = None
+    is_noise: bool = False
     ai_summary: str | None = None
     diff_summary: str | None = None
     diff: str | None = None

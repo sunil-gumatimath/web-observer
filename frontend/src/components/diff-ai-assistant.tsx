@@ -38,7 +38,12 @@ export function DiffAiAssistant({ workspaceId, changeId }: DiffAiAssistantProps)
       const response = await api.askChangeAi(workspaceId, changeId, prompt);
       setCompletion(response.text);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "AI analysis failed");
+      const message = e instanceof Error ? e.message : "AI analysis failed";
+      setError(
+        /429|too many requests/i.test(message)
+          ? "Rate limit reached — please wait a minute and try again."
+          : message,
+      );
     } finally {
       setIsLoading(false);
     }
@@ -223,6 +228,7 @@ export function DiffAiAssistant({ workspaceId, changeId }: DiffAiAssistantProps)
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask anything about this diff (e.g. security risks, executive summary, pricing changes)..."
+              maxLength={2000}
               disabled={isLoading}
               className="field flex-1 text-xs"
             />

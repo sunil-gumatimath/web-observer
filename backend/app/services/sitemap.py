@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from urllib.parse import urldefrag, urlparse
+from urllib.parse import urldefrag, urlparse, urlsplit, urlunsplit
 
 from app.config import get_settings
 from app.services import context_dev
@@ -40,6 +40,13 @@ class _DiscoveryLimits:
 def _strip_ns(tag: str) -> str:
     """Strip the sitemap XML namespace from an ElementTree tag."""
     return tag.split("}", 1)[1] if "}" in tag else tag
+
+
+def _clean_page_url(raw: str) -> str:
+    """Drop fragments *and* query strings so variants don't duplicate a page."""
+    value = urldefrag(raw.strip()).url
+    parts = urlsplit(value)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
 def _local_urls(url: str) -> list[str]:
@@ -203,11 +210,11 @@ def discover_sitemap_urls(
             else:
                 page_urls.extend(locs)
 
-    # 4) Normalize + de-duplicate, drop fragments.
+    # 4) Normalize + de-duplicate, drop fragments and query strings.
     parsed: list[str] = []
     have: set[str] = set()
     for u in page_urls:
-        cleaned = urldefrag(u.strip()).url
+        cleaned = _clean_page_url(u)
         if not cleaned or cleaned in have:
             continue
         # Only keep http(s) URLs.

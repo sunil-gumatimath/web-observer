@@ -19,10 +19,14 @@ class PlanLimits:
     max_browser_checks_per_day: int
     min_interval_minutes: int
     ai_summaries: bool
+    ai_tokens_per_day: int
     webhooks: bool
     api_keys: bool
     seats: int
     price_monthly_usd: int
+    # Defaulted so PlanLimits values constructed by other modules/tests that
+    # predate this limit keep working.
+    max_notifications_per_day: int = 200
 
 
 # Solo / personal use: "free" is intentionally generous (billing skipped for now).
@@ -32,8 +36,10 @@ PLANS: dict[str, PlanLimits] = {
         max_monitors=100,
         max_checks_per_day=5000,
         max_browser_checks_per_day=200,
+        max_notifications_per_day=200,
         min_interval_minutes=15,
         ai_summaries=True,
+        ai_tokens_per_day=100_000,
         webhooks=True,
         api_keys=True,
         seats=5,
@@ -44,8 +50,10 @@ PLANS: dict[str, PlanLimits] = {
         max_monitors=100,
         max_checks_per_day=5000,
         max_browser_checks_per_day=200,
+        max_notifications_per_day=1_000,
         min_interval_minutes=15,
         ai_summaries=True,
+        ai_tokens_per_day=500_000,
         webhooks=True,
         api_keys=True,
         seats=10,
@@ -56,8 +64,10 @@ PLANS: dict[str, PlanLimits] = {
         max_monitors=500,
         max_checks_per_day=25000,
         max_browser_checks_per_day=1000,
+        max_notifications_per_day=5_000,
         min_interval_minutes=5,
         ai_summaries=True,
+        ai_tokens_per_day=2_000_000,
         webhooks=True,
         api_keys=True,
         seats=50,
@@ -68,8 +78,10 @@ PLANS: dict[str, PlanLimits] = {
         max_monitors=5000,
         max_checks_per_day=200000,
         max_browser_checks_per_day=10000,
+        max_notifications_per_day=20_000,
         min_interval_minutes=5,
         ai_summaries=True,
+        ai_tokens_per_day=10_000_000,
         webhooks=True,
         api_keys=True,
         seats=1000,
@@ -107,8 +119,10 @@ def plans_public() -> list[dict]:
             "max_monitors": p.max_monitors,
             "max_checks_per_day": p.max_checks_per_day,
             "max_browser_checks_per_day": p.max_browser_checks_per_day,
+            "max_notifications_per_day": p.max_notifications_per_day,
             "min_interval_minutes": p.min_interval_minutes,
             "ai_summaries": p.ai_summaries,
+            "ai_tokens_per_day": p.ai_tokens_per_day,
             "webhooks": p.webhooks,
             "api_keys": p.api_keys,
             "seats": p.seats,

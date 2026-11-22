@@ -394,6 +394,10 @@ export type ModelCatalog = {
 export type PublicShareAlert = {
   id: string;
   change_category: string | null;
+  title: string | null;
+  impact: string | null;
+  confidence: number | null;
+  is_noise: boolean;
   ai_summary: string | null;
   diff_summary: string | null;
   created_at: string;

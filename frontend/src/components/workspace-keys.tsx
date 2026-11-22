@@ -99,7 +99,14 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
     setMsg(null);
     try {
       const body: Record<string, string | undefined> = {};
-      if (llmKey.trim()) body.llm_api_key = llmKey.trim();
+      if (llmKey.trim()) {
+        body.llm_api_key = llmKey.trim();
+        // A workspace key must always be paired with an explicit base, even
+        // when the picker still shows "use server default" (the base is
+        // prefilled from settings, so the normal change detection would omit
+        // it). This makes the provider choice explicit and backend-validated.
+        body.llm_api_base = llmBase.trim() || settings.llm_api_base || undefined;
+      }
       if (typeof llmKey === "string" && llmKey.trim() === "" && settings.as_llm_api_key) {
         body.llm_api_key = "";
       }

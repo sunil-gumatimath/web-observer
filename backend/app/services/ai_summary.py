@@ -1,7 +1,7 @@
 """Optional AI summaries and change classification.
 
 Never used as the sole change detector — only enriches deterministic diffs.
-P0: single LLM call (category+summary+noise), JSON mode, smart truncation, retries, token tracking.
+P0: single LLM call (category+summary+noise), JSON mode, smart truncation, bounded transient retry, model failover, token tracking.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from app.security.ssrf import (
     validate_url_for_fetch,
 )
 from app.services.model_catalog import (
+    all_candidates_for_base,
     candidates_for_base,
     output_cap_for,
 )
@@ -82,8 +83,8 @@ def _effective_llm(llm: dict | None) -> dict:
     """Resolve an all-workspace or all-server provider configuration.
 
     A workspace base/model is honored only when that same configuration carries
-    a workspace API key. This prevents a legacy or malformed override from
-    redirecting the server-managed credential to an attacker-controlled host.
+    a workspace API key. A key without a base is ignored (the server key is
+    used) so a legacy BYOK row cannot leak its key to the server provider.
 
     On the server side the provider is decided by the base URL: the matching
     settings' key is used so the credential always belongs to the configured
@@ -93,16 +94,19 @@ def _effective_llm(llm: dict | None) -> dict:
     workspace_key = (llm or {}).get("api_key")
     if workspace_key:
         custom_base = (llm or {}).get("api_base")
-        return {
-            "api_key": workspace_key,
-            "api_base": (
-                validate_provider_base(custom_base) if custom_base else settings.llm_api_base
-            ),
-            "model": (llm or {}).get("model") or settings.llm_model,
-            "max_output_tokens": (llm or {}).get("max_output_tokens")
-            or settings.ai_max_output_tokens,
-            "scope": "workspace",
-        }
+        if not custom_base:
+            # Legacy key-only rows must not silently send a private key to
+            # the server's provider. Use the server-managed key instead.
+            logger.warning("workspace_llm_key_without_base_ignored")
+        else:
+            return {
+                "api_key": workspace_key,
+                "api_base": validate_provider_base(custom_base),
+                "model": (llm or {}).get("model") or settings.llm_model,
+                "max_output_tokens": (llm or {}).get("max_output_tokens")
+                or settings.ai_max_output_tokens,
+                "scope": "workspace",
+            }
     api_key = settings.llm_api_key
     model = settings.llm_model
     return {
@@ -319,6 +323,7 @@ def _dedup_key(
     watch_note: str | None,
     brand: dict | None,
     semantic_trigger: str | None = None,
+    subq_signature: str | None = None,
 ) -> str:
     prompt_inputs = {
         "version": 2,
@@ -334,6 +339,7 @@ def _dedup_key(
         "watch_note": (watch_note or "").strip(),
         "semantic_trigger": (semantic_trigger or "").strip(),
         "brand": brand or {},
+        "subq_signature": subq_signature or "",
     }
     encoded = json.dumps(prompt_inputs, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(encoded.encode()).hexdigest()[:32]
@@ -343,7 +349,8 @@ def _dedup_get(key: str) -> AIEnrichment | None:
     # TTL 0 means dedup is disabled entirely. Without this guard a probe (or a
     # deployment that turned dedup off) would still be served stale Redis hits.
     try:
-        if int(get_settings().ai_dedup_ttl_seconds or 600) <= 0:
+        ttl_setting = get_settings().ai_dedup_ttl_seconds
+        if ttl_setting is not None and int(ttl_setting) <= 0:
             return None
     except Exception:
         pass
@@ -395,7 +402,8 @@ def _dedup_get(key: str) -> AIEnrichment | None:
 
 def _dedup_set(key: str, enrichment: AIEnrichment) -> None:
     try:
-        ttl = int(get_settings().ai_dedup_ttl_seconds or 600)
+        ttl_setting = get_settings().ai_dedup_ttl_seconds
+        ttl = 600 if ttl_setting is None else int(ttl_setting)
     except Exception:
         ttl = 600
     if ttl <= 0:
@@ -713,6 +721,8 @@ def _parse_llm_content(
     """
     raw = _strip_code_fences(content or "")
     title: str | None = None
+    semantic_false = False
+    semantic_reason: str | None = None
     impact: str | None = None
     confidence: float | None = None
     # try JSON
@@ -835,17 +845,22 @@ def _parse_llm_content(
         elif upper.startswith("SHOULD_ALERT:"):
             val = stripped.split(":", 1)[1].strip().lower()
             if val in ("false", "0", "no", "n"):
-                is_noise = True
-                noise_reason = noise_reason or "Semantic condition not met"
+                semantic_false = True
+                semantic_reason = "Semantic condition not met"
         elif upper.startswith("TRIGGER_REASON:"):
             tr = stripped.split(":", 1)[1].strip()
-            if is_noise and tr:
-                noise_reason = f"Semantic condition not met: {tr}"
+            if semantic_false and tr:
+                semantic_reason = f"Semantic condition not met: {tr}"
         elif upper.startswith("NOISE:"):
             val = stripped.split(":", 1)[1].strip().lower()
             is_noise = val.startswith("y") or val == "true"
         elif upper.startswith("REASON:"):
             noise_reason = stripped.split(":", 1)[1].strip() or None
+    # A "NOISE: false" line after "SHOULD_ALERT: false" must not cancel the
+    # semantic suppression: resolve that decision once, after parsing.
+    if semantic_false:
+        is_noise = True
+        noise_reason = semantic_reason
     return cat, summary, is_noise, noise_reason, title, impact, confidence
 
 
@@ -902,9 +917,10 @@ def _candidate_models(primary: str | None, api_base: str | None) -> list[str]:
         configured = candidates_for_base(base, verified_only=True)
     else:
         # An explicit list may still name another provider's models — drop them.
-        allowed = set(candidates_for_base(base))
-        if allowed:
-            configured = [name for name in configured if name in allowed]
+        allowed = set(all_candidates_for_base(base))
+        # An unknown provider has no eligible models: never send a foreign
+        # model id to it, even when it was listed explicitly.
+        configured = [name for name in configured if name in allowed]
 
     for name in configured:
         if name in candidates:
@@ -985,7 +1001,9 @@ def _request_chat_with_failover(
                     },
                     payload=payload,
                     timeout=min(timeout, remaining),
-                    max_attempts=1,
+                    # One transient retry (429/5xx/timeout) inside the same
+                    # candidate; the outer budget still counts one attempt.
+                    max_attempts=2,
                 )
             except Exception as exc:
                 if use_json:
@@ -1093,7 +1111,7 @@ def _call_llm_combined(
             {"role": "user", "content": user},
         ],
         temperature=0.2,
-        max_tokens=cfg["max_output_tokens"] + (100 if has_watch else 0),
+        max_tokens=cfg["max_output_tokens"] + (100 if has_watch or has_semantic else 0),
         timeout=30.0,
     )
     category, summary, is_noise, noise_reason, title, impact, confidence = _parse_llm_content(
@@ -1249,7 +1267,10 @@ def enrich_change(
     subq_key = (llm or {}).get("subq_api_key") or settings.subq_api_key
     subq_enabled = bool((llm or {}).get("subq_enabled", settings.subq_enabled) and subq_key)
     subq_decision = None
-    if enabled and subq_enabled and subq_key:
+    has_triage_signal = bool(
+        (watch_note or "").strip() or (semantic_trigger or "").strip()
+    )
+    if enabled and has_triage_signal and subq_enabled and subq_key:
         try:
             from app.services.subq import evaluate_subq_decision
 
@@ -1320,7 +1341,32 @@ def enrich_change(
             confidence=subq_decision.confidence if subq_decision else None,
         )
 
-    # P1: dedup — identical diffs within TTL reuse previous LLM result
+    # P1: dedup — identical diffs within TTL reuse previous LLM result.
+    # SubQ is cheap but its decision is per-call state: include its config,
+    # credential fingerprint and decision fields so a changed gate invalidates
+    # the cached narrative instead of silently overriding it.
+    subq_signature = ""
+    if subq_decision is not None:
+        subq_identity = hashlib.sha256(
+            json.dumps(
+                {
+                    "key": subq_key,
+                    "base": (llm or {}).get("subq_api_base") or settings.subq_api_base,
+                    "model": (llm or {}).get("subq_model") or settings.subq_model,
+                    "threshold": settings.subq_noise_threshold,
+                },
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()[:16]
+        subq_signature = json.dumps(
+            {
+                "identity": subq_identity,
+                "category": subq_decision.category,
+                "impact": subq_decision.impact,
+                "confidence": subq_decision.confidence,
+            },
+            sort_keys=True,
+        )
     dedup_key = _dedup_key(
         workspace_id=workspace_id,
         provider_scope=cfg["scope"],
@@ -1334,6 +1380,7 @@ def enrich_change(
         watch_note=watch_note,
         brand=brand,
         semantic_trigger=semantic_trigger,
+        subq_signature=subq_signature,
     )
     cached = _dedup_get(dedup_key)
     if cached is not None:
@@ -1477,26 +1524,3 @@ def ask_about_change(
     return content[:4000], tokens, used_model
 
 
-def _call_llm(
-    *,
-    monitor_name: str,
-    url: str,
-    mode: str,
-    deterministic_summary: str,
-    diff_text: str,
-    suggested_category: str,
-    watch_note: str | None = None,
-    llm: dict | None = None,
-) -> tuple[str, str]:
-    """Legacy two-line call — kept for backward compatibility / tests."""
-    summary, cat, _, _, _, *_ = _call_llm_combined(
-        monitor_name=monitor_name,
-        url=url,
-        mode=mode,
-        deterministic_summary=deterministic_summary,
-        diff_text=diff_text,
-        suggested_category=suggested_category,
-        watch_note=watch_note,
-        llm=llm,
-    )
-    return summary, cat

@@ -124,19 +124,23 @@ def test_queue_notifications_skips_noise() -> None:
     assert webhook_ids == []
 
 
-def test_async_effective_key_resolution() -> None:
-    """Async enrichment should activate with global key or workspace key."""
-    s = Settings()
-    s.llm_api_key = "global-server-key"
-    s.ai_async_enrichment = True
+def test_workspace_key_resolution_uses_production_helper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise the real BYOK resolver instead of re-implementing it inline."""
+    from types import SimpleNamespace
 
-    llm_cfg = None
-    effective_key = (llm_cfg.get("api_key") if llm_cfg else None) or s.llm_api_key
-    assert effective_key == "global-server-key"
-    assert s.ai_async_enrichment and effective_key
+    from app.services import crypto
 
-    # Workspace BYOK override
-    llm_cfg = {"api_key": "custom-workspace-key"}
-    effective_key = (llm_cfg.get("api_key") if llm_cfg else None) or s.llm_api_key
-    assert effective_key == "custom-workspace-key"
-    assert s.ai_async_enrichment and effective_key
+    monkeypatch.setattr(crypto, "decrypt_secret", lambda _: "custom-workspace-key")
+    monkeypatch.setattr(ai_summary, "validate_provider_base", lambda base: base)
+    workspace = SimpleNamespace(
+        llm_api_key="encrypted-key",
+        llm_api_base="https://workspace.example/v1",
+        llm_model="custom-model",
+    )
+    cfg = ai_summary.workspace_llm_config(workspace)
+    assert cfg is not None
+    assert cfg["api_key"] == "custom-workspace-key"
+    assert cfg["api_base"] == "https://workspace.example/v1"
+    assert cfg["model"] == "custom-model"

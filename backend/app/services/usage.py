@@ -103,6 +103,45 @@ def increment_ai_tokens(db: Session, workspace_id: uuid.UUID, *, n: int = 1) -> 
     return _increment(db, counter, "ai_tokens", n)
 
 
+def ai_token_limit(workspace) -> int:
+    """Daily AI token ceiling for a workspace (0 means unlimited)."""
+    if workspace is None:
+        return int(get_settings().max_ai_tokens_per_day)
+    from app.services.plans import get_plan
+
+    return int(get_plan(workspace).ai_tokens_per_day)
+
+
+def assert_can_use_ai(db: Session, workspace) -> None:
+    """Raise QuotaExceeded before an LLM call when today's budget is spent."""
+    limit = ai_token_limit(workspace)
+    if limit <= 0:
+        return
+    counter = get_or_create_counter(db, workspace.id)
+    if (getattr(counter, "ai_tokens", 0) or 0) >= limit:
+        raise QuotaExceeded(f"Daily AI token quota exceeded ({limit} tokens/day)")
+
+
+def notification_limit(workspace) -> int:
+    """Daily notification ceiling for a workspace (0 means unlimited)."""
+    if workspace is None or isinstance(workspace, uuid.UUID):
+        return int(get_settings().max_notifications_per_day)
+    from app.services.plans import get_plan
+
+    return int(get_plan(workspace).max_notifications_per_day)
+
+
+def assert_can_use_notifications(db: Session, workspace) -> None:
+    """Fail closed before an outbox row is created when today's quota is spent."""
+    limit = notification_limit(workspace)
+    if limit <= 0:
+        return
+    workspace_id = getattr(workspace, "id", workspace)
+    counter = get_or_create_counter(db, workspace_id)
+    if (counter.notifications_count or 0) >= limit:
+        raise QuotaExceeded(f"Daily notification quota exceeded ({limit}/day)")
+
+
 class QuotaExceeded(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)
@@ -138,8 +177,10 @@ def usage_snapshot(db: Session, workspace_id: uuid.UUID) -> dict:
         "checks_count": counter.checks_count,
         "checks_limit": plan.max_checks_per_day if plan else settings.max_checks_per_day,
         "notifications_count": counter.notifications_count,
+        "notifications_limit": notification_limit(workspace),
         "storage_bytes": counter.storage_bytes,
         "ai_tokens": getattr(counter, "ai_tokens", 0) or 0,
+        "ai_tokens_limit": ai_token_limit(workspace),
         "max_monitors": plan.max_monitors if plan else settings.max_monitors_per_workspace,
         "min_check_interval_minutes": plan.min_interval_minutes
         if plan

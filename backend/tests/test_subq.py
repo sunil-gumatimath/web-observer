@@ -44,8 +44,11 @@ def test_build_systemone_payload_with_watch_and_trigger() -> None:
         watch_note="only alert on price changes",
         semantic_trigger="price increase > $5",
     )
-    assert "matches_criteria" in payload["questions"]
-    assert "price increase &gt; $5" in payload["questions"]["matches_criteria"]["instructions"]
+    assert "matches_watch" in payload["questions"]
+    assert "matches_semantic" in payload["questions"]
+    assert "matches_criteria" not in payload["questions"]
+    assert "price increase &gt; $5" in payload["questions"]["matches_semantic"]["instructions"]
+    assert "only alert on price changes" in payload["questions"]["matches_watch"]["instructions"]
     assert "WATCH NOTE: only alert on price changes" in payload["state"]
     assert "SEMANTIC TRIGGER: price increase &gt; $5" in payload["state"]
 
@@ -182,6 +185,7 @@ def test_enrich_change_subq_gate_filters_noise(monkeypatch: pytest.MonkeyPatch) 
         mode="page_content",
         deterministic_summary="Layout shift",
         diff_text='+ style="margin-top: 10px;"',
+        watch_note="only pricing changes",
     )
     assert enrichment.is_noise is True
     assert enrichment.provider == "subq"
@@ -234,6 +238,7 @@ def test_enrich_change_subq_signal_with_llm_summary(monkeypatch: pytest.MonkeyPa
         mode="page_content",
         deterministic_summary="Price change",
         diff_text="+ $29\n- $20",
+        watch_note="only pricing changes",
     )
     assert enrichment.is_noise is False
     assert enrichment.provider == "llm"

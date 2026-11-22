@@ -85,18 +85,31 @@ def run_browser_check(run_id: str) -> None:
                 r.delete(rkey)
             except Exception as decr_exc:  # noqa: BLE001
                 logger.debug("browser_quota_rollback_failed error=%s", decr_exc)
-            run.status = RunStatus.FAILED.value
-            run.error_code = "quota_exceeded"
-            run.error_message = (
+            error_message = (
                 f"Browser check daily quota exceeded (plan limit: {limit} browser checks/day)"
             )
-            run.finished_at = datetime.now(UTC)
+            # This hook runs before the RUNNING claim, so widen the fence to
+            # the pre-claim states; a reaper that already FAILED this QUEUED
+            # run still wins and is not downgraded.
+            from app.workers.run_guard import fail_run
+
+            fail_run(
+                db,
+                run,
+                "quota_exceeded",
+                error_message,
+                from_statuses=(
+                    RunStatus.SCHEDULED.value,
+                    RunStatus.QUEUED.value,
+                    RunStatus.RUNNING.value,
+                ),
+            )
             outbox_ids = record_run_outcome(
                 db,
                 monitor=monitor,
                 succeeded=False,
                 error_code="quota_exceeded",
-                error_message=run.error_message,
+                error_message=error_message,
             )
             db.commit()
             from app.workers.run_guard import enqueue_outbox

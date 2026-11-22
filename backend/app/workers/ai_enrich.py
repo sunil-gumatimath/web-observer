@@ -2,8 +2,9 @@
 
 When `AI_ASYNC_ENRICHMENT=true` the pipeline creates a heuristic ChangeEvent
 immediately and delegates LLM work here so the `http_checks` worker never
-blocks on the LLM. The actor updates the ChangeEvent in-place and then
-queues notifications (respecting is_noise).
+blocks on the LLM. The actor runs on its own `ai_enrichment` queue with its
+own worker process, so an LLM stall cannot delay site checks. It updates the
+ChangeEvent in-place and then queues notifications (respecting is_noise).
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from app.workers.broker import redis_broker  # noqa: F401
 logger = logging.getLogger(__name__)
 
 
-@dramatiq.actor(queue_name="http_checks", max_retries=3, time_limit=60_000)
+@dramatiq.actor(queue_name="ai_enrichment", max_retries=3, time_limit=60_000)
 def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> None:
     """Enrich an existing ChangeEvent with LLM summary/category/noise."""
     from app.services.ai_summary import enrich_change
@@ -54,9 +55,11 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
             return
 
         # Idempotency check: skip if already enriched by LLM
+        # The placeholder is produced by template_summary(), which starts with
+        # "<monitor name>: likely ". A genuine LLM summary that merely contains
+        # the word "likely" must not be re-enriched (and re-billed) on retry.
         is_heuristic_placeholder = (
-            "likely" in (change.ai_summary or "")
-            or "heuristic" in (change.ai_summary or "")
+            (change.ai_summary or "").startswith(f"{monitor.name}: likely ")
             or "[Pending" in (change.ai_summary or "")
             or change.ai_summary == (change.diff_summary or "")
         )
@@ -112,6 +115,17 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
                 fallback_summary = change.diff_summary
                 diff_text = fallback_summary if fallback_summary else ""
 
+        from app.services.usage import QuotaExceeded, assert_can_use_ai
+
+        try:
+            assert_can_use_ai(db, workspace)
+            quota_ok = True
+        except QuotaExceeded as exc:
+            quota_ok = False
+            logger.warning(
+                "ai_enrich_quota_exceeded workspace_id=%s error=%s", workspace.id, exc
+            )
+
         provider_config_valid = True
         try:
             llm_cfg = workspace_llm_config(workspace)
@@ -135,6 +149,7 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
                 workspace.ai_summaries_enabled
                 and settings.ai_summaries_enabled
                 and provider_config_valid
+                and quota_ok
             ),
             watch_note=getattr(monitor, "watch_note", None),
             llm=llm_cfg,

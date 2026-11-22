@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     max_checks_per_day: int = 500
     max_browser_checks_per_day: int = 50
     max_notification_deliveries_per_day: int = 200
+    # Daily notification ceiling for workspaces without a plan override.
+    # 0 disables the check.
+    max_notifications_per_day: int = 200
 
     # Domain reliability
     per_domain_rate_per_minute: int = 10
@@ -112,6 +115,9 @@ class Settings(BaseSettings):
     circuit_window_seconds: int = 300
     circuit_open_seconds: int = 600
     consecutive_failure_notify_threshold: int = 3
+    # Do not enqueue another monitor_failure notification within this many
+    # minutes of the previous one for the same monitor. 0 disables cooldown.
+    failure_notify_cooldown_minutes: int = 60
     visual_ahash_threshold: int = 5  # hamming distance for visual "same" (legacy aHash path)
     # Hamming distance (out of 256 bits) for the DCT pHash path — the digest
     # used by new visual captures. 8/256 (~3%) flags a single rewritten
@@ -161,6 +167,8 @@ class Settings(BaseSettings):
     ai_max_output_tokens: int = 200
     ai_async_enrichment: bool = False  # if true, LLM runs in background worker
     ai_dedup_ttl_seconds: int = 600
+    # Daily AI token ceiling for workspaces without a plan override. 0 disables.
+    max_ai_tokens_per_day: int = 100_000
 
     # SubQ Decisions API (System 1 fast decision model)
     subq_enabled: bool = False

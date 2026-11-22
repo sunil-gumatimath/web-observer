@@ -42,19 +42,25 @@ export default function ChangeDetailPage() {
 	const [run, setRun] = useState<MonitorRun | null>(null);
 	const [monitor, setMonitor] = useState<Monitor | null>(null);
 	const [aiSummariesEnabled, setAiSummariesEnabled] = useState(false);
+	const [assistantError, setAssistantError] = useState<string | null>(null);
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
 			try {
 				const ws = await ensureWorkspace();
+				let settingsError: string | null = null;
 				const [c, settings] = await Promise.all([
 					api.getChange(ws, params.id),
-					api.getWorkspaceSettings(ws).catch(() => null),
+					api.getWorkspaceSettings(ws).catch(() => {
+						settingsError = "AI availability could not be checked.";
+						return null;
+					}),
 				]);
 				if (!cancelled) {
 					setWorkspaceId(ws);
 					setChange(c);
 					setAiSummariesEnabled(settings?.ai_assistant_available === true);
+					setAssistantError(settingsError);
 				}
 				// Opening a change directly (e.g. from an email link) marks it read.
 				if (!c.is_read) {
@@ -239,6 +245,10 @@ export default function ChangeDetailPage() {
 					</div>
 				);
 			})() : null}
+
+			{assistantError ? (
+				<p className="mb-4 text-xs text-[var(--muted)]">{assistantError}</p>
+			) : null}
 
 			{workspaceId && aiSummariesEnabled ? (
 				<div className="mb-6">
