@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 STUCK_RUNNING_MINUTES = 5
 # QUEUED with no worker pickup — often a lost Redis message after restart.
 STUCK_QUEUED_MINUTES = 2
+# Browser jobs run on a separate, slower queue (Playwright launches are heavy
+# and the actor is gated by a daily quota), so a healthy backlog legitimately
+# leaves a QUEUED browser run waiting longer than an HTTP one. A run that is
+# only "stuck" because the browser queue is busy must not be failed as a lost
+# message. The SELECT above still uses the tight STUCK_QUEUED_MINUTES as a
+# superset; this wider window is applied per-run in the loop for browser runs.
+STUCK_QUEUED_BROWSER_MINUTES = 10
 
 
 def reap_stuck_runs(db: Session) -> int:
@@ -72,6 +79,26 @@ def reap_stuck_runs(db: Session) -> int:
     reaped = 0
     for run in stuck:
         old_status = run.status
+        # Browser-bound QUEUED runs get a wider grace period (see
+        # STUCK_QUEUED_BROWSER_MINUTES): under a Playwright backlog the run is
+        # healthy, not lost. The SELECT kept them via the tight cutoff; skip
+        # them here until they outlive the browser window. Non-browser runs
+        # (and RUNNING runs) keep the tight threshold.
+        if old_status == RunStatus.QUEUED.value:
+            _m = db.get(Monitor, run.monitor_id)
+            _is_browser = bool(getattr(_m, "js_required", False)) or (
+                getattr(_m, "mode", "") == "visual"
+            )
+            if _is_browser and (now - (run.queued_at or now)) < timedelta(
+                minutes=STUCK_QUEUED_BROWSER_MINUTES
+            ):
+                logger.debug(
+                    "reap_deferred_browser_queued run_id=%s monitor_id=%s "
+                    "(within browser queue grace window)",
+                    run.id,
+                    run.monitor_id,
+                )
+                continue
         age_ref = run.started_at or run.queued_at or now
         failure_message = (
             f"Run stuck in {old_status} state for too long, reaped by cleanup. "

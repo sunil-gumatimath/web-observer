@@ -15,6 +15,11 @@ from app.models.entities import OutboxStatus
 
 logger = logging.getLogger(__name__)
 
+# How many recent monitor_failure outbox rows the cooldown probe inspects. The
+# idempotency-key prefix already scopes these to one monitor, so a handful is
+# always enough to find the most recent notice.
+_COOLDOWN_PROBE_ROWS = 5
+
 
 def record_run_outcome(
     db: Session,
@@ -122,6 +127,11 @@ def _sent_within(db: Session, monitor: Monitor, *, minutes: int) -> bool:
     cooldown.
     """
     cutoff = datetime.now(UTC) - timedelta(minutes=minutes)
+    # Every row matching the failure:{monitor_id}:count: prefix is, by
+    # construction, a monitor_failure notice for this monitor, so the most
+    # recent row answers the question. A small bounded scan keeps this cheap
+    # on the hot failure path (the payload-kind check below is kept as a
+    # defensive guard, not because unrelated rows are expected here).
     rows = db.scalars(
         select(NotificationOutbox)
         .where(
@@ -129,7 +139,7 @@ def _sent_within(db: Session, monitor: Monitor, *, minutes: int) -> bool:
             NotificationOutbox.idempotency_key.startswith(f"failure:{monitor.id}:count:"),
         )
         .order_by(NotificationOutbox.created_at.desc())
-        .limit(200)
+        .limit(_COOLDOWN_PROBE_ROWS)
     ).all()
     for row in rows:
         payload = row.payload or {}

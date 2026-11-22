@@ -143,6 +143,90 @@ def test_reaper_sets_monitor_next_run_at_to_now(monkeypatch) -> None:
     assert db.commits == 1
 
 
+# --- M3: browser QUEUED runs get a wider grace window -------------------
+
+
+def _reaper_db(run, monitor, *, execute_calls):
+    class DB:
+        def scalars(self, stmt):
+            return SimpleNamespace(all=lambda: [run])
+
+        def get(self, model, pk):
+            return monitor
+
+        def execute(self, stmt):
+            execute_calls.append(stmt)
+            run.status = RunStatus.FAILED.value
+            return SimpleNamespace(rowcount=1)
+
+        def commit(self):
+            pass
+
+    return DB()
+
+
+def test_reaper_defers_recent_browser_queued_run(monkeypatch) -> None:
+    """A browser run waiting 4 min is healthy backlog, not a lost message."""
+    monkeypatch.setattr(run_reaper, "record_run_outcome", lambda *a, **k: [])
+    run = SimpleNamespace(
+        id=uuid4(),
+        monitor_id=uuid4(),
+        status=RunStatus.QUEUED.value,
+        started_at=None,
+        queued_at=datetime.now(UTC) - timedelta(minutes=4),
+        error_code=None,
+        error_message=None,
+        finished_at=None,
+    )
+    monitor = SimpleNamespace(
+        id=run.monitor_id, js_required=True, mode="page_content", next_run_at=None
+    )
+    calls: list = []
+    assert run_reaper.reap_stuck_runs(_reaper_db(run, monitor, execute_calls=calls)) == 0
+    assert calls == []
+
+
+def test_reaper_still_reaps_old_browser_queued_run(monkeypatch) -> None:
+    monkeypatch.setattr(run_reaper, "record_run_outcome", lambda *a, **k: [])
+    run = SimpleNamespace(
+        id=uuid4(),
+        monitor_id=uuid4(),
+        status=RunStatus.QUEUED.value,
+        started_at=None,
+        queued_at=datetime.now(UTC) - timedelta(minutes=11),
+        error_code=None,
+        error_message=None,
+        finished_at=None,
+    )
+    monitor = SimpleNamespace(
+        id=run.monitor_id, js_required=True, mode="page_content", next_run_at=datetime.now(UTC)
+    )
+    calls: list = []
+    assert run_reaper.reap_stuck_runs(_reaper_db(run, monitor, execute_calls=calls)) == 1
+    assert len(calls) == 1
+
+
+def test_reaper_reaps_recent_http_queued_run(monkeypatch) -> None:
+    """Non-browser QUEUED runs keep the tight 2-minute threshold."""
+    monkeypatch.setattr(run_reaper, "record_run_outcome", lambda *a, **k: [])
+    run = SimpleNamespace(
+        id=uuid4(),
+        monitor_id=uuid4(),
+        status=RunStatus.QUEUED.value,
+        started_at=None,
+        queued_at=datetime.now(UTC) - timedelta(minutes=3),
+        error_code=None,
+        error_message=None,
+        finished_at=None,
+    )
+    monitor = SimpleNamespace(
+        id=run.monitor_id, js_required=False, mode="page_content", next_run_at=datetime.now(UTC)
+    )
+    calls: list = []
+    assert run_reaper.reap_stuck_runs(_reaper_db(run, monitor, execute_calls=calls)) == 1
+    assert len(calls) == 1
+
+
 # --- #7: no double failure accounting when the reaper already claimed ----
 
 
