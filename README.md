@@ -344,7 +344,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 
 ## Features
 
-### Monitoring modes (9)
+### Monitoring modes (10)
 
 | Mode | What it watches |
 | ------ | ----------------- |
@@ -357,6 +357,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | `json_field` | A single value via a JSONPath-style query, e.g. `$.data.price` |
 | `visual` | Perceptual screenshot comparison — DCT pHash, `VISUAL_PHASH_THRESHOLD=8` bits of 256 (legacy aHash path keeps `VISUAL_AHASH_THRESHOLD=5`); the change detail renders the two compared runs as a before/after slider plus a collapsible pHash summary |
 | `security_scan` | Cloudflare URL Scanner verdict + technology inventory, diffed item-by-item; needs `CLOUDFLARE_URLSCANNER_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`; plain HTTP only — big reference: [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) |
+| `html_meta` | Code-level facts `page_content` ignores — title, meta tags, canonical/alternate URLs, JSON-LD types, script srcs — diffed as a `key: value` item set; preview-image queries (`og:image`, `twitter:image`) are kept because CDN params change the served image, navigation URLs have theirs stripped; plain HTTP only (`js_required` rejected) |
 
 Also on the monitoring side: a **visual element picker** (point-and-click CSS-selector synthesis with sanitized proxied preview + brand/info auto-fill — `frontend/src/components/selector-picker.tsx`), opt-in **screenshots** captured only on signal changes (`visual` monitors are the exception: each run keeps its own capture under `screenshots/<monitor_id>/<run_id>.png` so the before/after pair matches the run that fired), **watch notes** and **monitor tags** (up to 10, API + bulk import only), **bulk CSV/JSON import/export** with sitemap-driven batch creation, **adaptive scheduling** that stretches intervals after quiet runs, and a public **status badge** (`GET .../badge.svg`, no auth — the monitor UUID in the URL is the capability token; the workspace id is verified but does not scope the lookup).
 
@@ -461,3 +462,24 @@ npm run build
 ```
 
 CI (`.github/workflows/ci.yml`) runs the backend unit tests and the Postgres-backed integration tests in separate jobs, plus a Gitleaks secret scan on the backend and frontend jobs, and the frontend type-check / lint / test / build. It is the source of truth for which checks must pass and their current counts.
+
+## Contributing
+
+`main` is protected by a repository ruleset (`.github/rulesets/main.json`): no force-push or branch
+deletion, and every change lands through a pull request whose five CI jobs are green against the
+latest `main`. There is no approving-review requirement, so a solo maintainer can merge their own PR.
+
+```bash
+git switch -c my-change
+# ... commit ...
+git push -u origin my-change
+gh pr create --fill        # or open the PR in the browser
+gh pr checks --watch       # then merge once green
+```
+
+Re-apply the ruleset after editing the JSON:
+
+```bash
+gh api --method PUT repos/sunil-gumatimath/web-observer/rulesets/27852901 \
+  --input .github/rulesets/main.json
+```
