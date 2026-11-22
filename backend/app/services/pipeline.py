@@ -922,15 +922,7 @@ def _queue_notifications(
     from app.services.usage import QuotaExceeded, assert_can_use_notifications
 
     try:
-        # Support both shapes of the helper (workspace row like
-        # assert_can_use_ai, or workspace_id like assert_can_run_check).
-        import inspect
-
-        params = list(inspect.signature(assert_can_use_notifications).parameters)
-        if len(params) > 1 and params[1] == "workspace":
-            assert_can_use_notifications(db, db.get(Workspace, monitor.workspace_id))
-        else:
-            assert_can_use_notifications(db, monitor.workspace_id)
+        assert_can_use_notifications(db, db.get(Workspace, monitor.workspace_id))
     except QuotaExceeded as exc:
         logger.warning(
             "notification_quota_exceeded monitor_id=%s change_id=%s error=%s "

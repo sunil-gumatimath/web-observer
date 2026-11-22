@@ -199,7 +199,7 @@ With Clerk keys set, the app requires **sign-in**; it will not fall back to the 
 | Selector preview | `POST /api/v1/workspaces/{id}/monitors/selector-preview` — sanitized HTML for the point-and-click picker |
 | Brand info | `POST /api/v1/workspaces/{id}/monitors/brand-info` — logo/title/description auto-fill |
 | Change Q&A | `POST /api/v1/workspaces/{id}/changes/{change_id}/ask-ai` — ask a question about one change (5/minute) |
-| Status badge | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/badge.svg` — public SVG badge, no auth |
+| Status badge | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/badge.svg` — deliberately public SVG badge, no auth; both UUIDs must match and the monitor UUID acts as the capability token |
 | Value history | `GET /api/v1/workspaces/{id}/monitors/{monitor_id}/value-history` — chartable series for `product_price` / `json_field` |
 | Mark all read | `POST /api/v1/workspaces/{id}/alerts/read-all` |
 | Snapshot download | `GET /api/v1/workspaces/{id}/snapshots/{snapshot_id}` |

@@ -39,8 +39,8 @@ def test_queue_notifications_fails_closed_over_quota(monkeypatch) -> None:
 
     called = []
 
-    def _quota(db, workspace_id):
-        called.append(workspace_id)
+    def _quota(db, workspace):
+        called.append(workspace)
         raise usage.QuotaExceeded("Daily notification quota exceeded (10/day)")
 
     monkeypatch.setattr(usage, "assert_can_use_notifications", _quota, raising=False)
@@ -55,7 +55,7 @@ def test_queue_notifications_fails_closed_over_quota(monkeypatch) -> None:
     )
 
     assert pipeline._queue_notifications(db, monitor, change, ctx) == ([], [])
-    assert called == [monitor.workspace_id]
+    assert [workspace.id for workspace in called] == [monitor.workspace_id]
 
 
 # --- #6: re-enqueue refreshes the reaper's QUEUED clock -----------------
