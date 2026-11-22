@@ -254,9 +254,7 @@ def test_product_price_ignore_selectors_also_count_as_a_scope(monkeypatch):
     from app.services.pipeline import extract_normalized
 
     monkeypatch.setattr(context_dev, "is_configured", lambda: True)
-    monkeypatch.setattr(
-        context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5"
-    )
+    monkeypatch.setattr(context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5")
     html = "<html><body><nav>$1</nav><b>$9.87</b></body></html>"
     result = FetchResult(
         final_url="https://shop.example.com/product",
@@ -292,9 +290,7 @@ def test_product_price_provider_used_when_scoped_local_extraction_finds_nothing(
     from app.services.pipeline import extract_normalized
 
     monkeypatch.setattr(context_dev, "is_configured", lambda: True)
-    monkeypatch.setattr(
-        context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5"
-    )
+    monkeypatch.setattr(context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5")
     # #buy matches but holds no price, and no price exists anywhere to fall
     # back on — so local extraction raises price_not_found.
     html = "<html><body><div id='buy'><span>Out of stock</span></div></body></html>"
@@ -358,9 +354,7 @@ def test_product_price_no_scope_still_uses_provider_first(monkeypatch):
     from app.services.pipeline import extract_normalized
 
     monkeypatch.setattr(context_dev, "is_configured", lambda: True)
-    monkeypatch.setattr(
-        context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5"
-    )
+    monkeypatch.setattr(context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5")
     result = FetchResult(
         final_url="https://shop.example.com/product",
         status_code=200,
