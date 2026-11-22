@@ -109,9 +109,7 @@ def test_preview_image_meta_keeps_meaningful_query_but_nav_urls_strip_it() -> No
         '<meta name="twitter:image" content="https://cdn.example.com/hero.jpg?w=640&token=abc">',
     )
     t_items = extract_html_meta_items(twitter, "https://shop.example.com/store")
-    assert (
-        "meta twitter:image: https://cdn.example.com/hero.jpg?w=640&token=abc" in t_items
-    )
+    assert "meta twitter:image: https://cdn.example.com/hero.jpg?w=640&token=abc" in t_items
     # The token on a *navigation* URL would still be stripped:
     assert "?token=" not in " ".join(items)
 

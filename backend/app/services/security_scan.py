@@ -173,9 +173,7 @@ def _poll_result(
                 # A distinct code so run history can tell "the Scanner refused
                 # or aborted this target" apart from a transient API/transport
                 # failure (scan_error) — the status itself is only in the message.
-                raise UrlScannerError(
-                    "scan_rejected", f"URL Scanner ended with status {status}"
-                )
+                raise UrlScannerError("scan_rejected", f"URL Scanner ended with status {status}")
             if task.get("success") is False:
                 # Cloudflare explains why in task.errors, e.g. code 5021
                 # "hostname was recently scanned" — surface it under its own
