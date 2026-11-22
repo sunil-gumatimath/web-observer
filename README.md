@@ -468,6 +468,7 @@ CI (`.github/workflows/ci.yml`) runs the backend unit tests and the Postgres-bac
 `main` is protected by a repository ruleset (`.github/rulesets/main.json`): no force-push or branch
 deletion, and every change lands through a pull request whose five CI jobs are green against the
 latest `main`. There is no approving-review requirement, so a solo maintainer can merge their own PR.
+Pull requests are also reviewed by CodeRabbit; its comments are advisory (the ruleset does not gate on them), so read them before merging.
 
 ```bash
 git switch -c my-change
