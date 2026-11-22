@@ -21,7 +21,6 @@ from app.models import (
     NotificationChannel,
     NotificationOutbox,
     Snapshot,
-    UsageCounter,
     Workspace,
 )
 from app.models.entities import OutboxStatus

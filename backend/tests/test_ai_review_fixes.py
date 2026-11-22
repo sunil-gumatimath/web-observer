@@ -8,14 +8,13 @@ from types import SimpleNamespace
 import pytest
 
 from app.config import Settings
-from app.services import ai_summary, digest, subq, usage
+from app.services import ai_summary, digest, pipeline, subq, usage
 from app.services.ai_summary import (
     AIEnrichment,
     _call_llm_combined,
     _parse_llm_content,
     format_triage_summary,
 )
-from app.services import pipeline
 from app.services.pipeline import _create_change_event
 
 

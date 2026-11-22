@@ -22,7 +22,6 @@ from app.routers import monitors
 from app.schemas import MonitorCreate, MonitorUpdate
 from app.services.plans import PlanLimits
 
-
 WS_ID = uuid4()
 PRINCIPAL = SimpleNamespace(user_id=uuid4(), email="review@example.com")
 WORKSPACE = SimpleNamespace(id=WS_ID, plan="free")
