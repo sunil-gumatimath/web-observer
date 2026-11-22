@@ -122,9 +122,7 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
             quota_ok = True
         except QuotaExceeded as exc:
             quota_ok = False
-            logger.warning(
-                "ai_enrich_quota_exceeded workspace_id=%s error=%s", workspace.id, exc
-            )
+            logger.warning("ai_enrich_quota_exceeded workspace_id=%s error=%s", workspace.id, exc)
 
         provider_config_valid = True
         try:

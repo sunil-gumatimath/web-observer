@@ -176,11 +176,7 @@ def candidates_for_base(base: str | None, *, verified_only: bool = False) -> lis
     if not provider_id:
         return []
     provider = next(p for p in PROVIDERS if p.id == provider_id)
-    return [
-        m.value
-        for m in provider.models
-        if (m.usable or not verified_only) and m.failover_safe
-    ]
+    return [m.value for m in provider.models if (m.usable or not verified_only) and m.failover_safe]
 
 
 def output_cap_for(base: str | None, model: str | None, default: int) -> int:

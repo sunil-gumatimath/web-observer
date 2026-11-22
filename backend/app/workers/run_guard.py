@@ -177,8 +177,7 @@ def _record_failure_outcome(
     """
     if _reaper_claimed(db, run):
         logger.info(
-            "run_outcome_skipped_reaped run_id=%s code=%s "
-            "(reaper already FAILED/timeout_reaped)",
+            "run_outcome_skipped_reaped run_id=%s code=%s (reaper already FAILED/timeout_reaped)",
             run.id,
             code,
         )
@@ -312,9 +311,7 @@ def execute_monitored_run(
 
         except DomainBlocked as exc:
             fail_run(db, run, "blocked_address", str(exc))
-            _record_failure_outcome(
-                db, monitor, run, code="blocked_address", message=str(exc)
-            )
+            _record_failure_outcome(db, monitor, run, code="blocked_address", message=str(exc))
         except SSRFError as exc:
             fail_run(db, run, exc.code, str(exc))
             _record_failure_outcome(db, monitor, run, code=exc.code, message=str(exc))

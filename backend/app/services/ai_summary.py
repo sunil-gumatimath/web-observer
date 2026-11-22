@@ -1267,9 +1267,7 @@ def enrich_change(
     subq_key = (llm or {}).get("subq_api_key") or settings.subq_api_key
     subq_enabled = bool((llm or {}).get("subq_enabled", settings.subq_enabled) and subq_key)
     subq_decision = None
-    has_triage_signal = bool(
-        (watch_note or "").strip() or (semantic_trigger or "").strip()
-    )
+    has_triage_signal = bool((watch_note or "").strip() or (semantic_trigger or "").strip())
     if enabled and has_triage_signal and subq_enabled and subq_key:
         try:
             from app.services.subq import evaluate_subq_decision
@@ -1522,5 +1520,3 @@ def ask_about_change(
         json_mode=False,
     )
     return content[:4000], tokens, used_model
-
-

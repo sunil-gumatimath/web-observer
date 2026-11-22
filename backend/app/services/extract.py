@@ -399,9 +399,7 @@ def _normalize_amount(raw: str, *, dot_is_grouping: bool = False) -> str:
     sep_char = "." if last_dot != -1 else ("," if last_comma != -1 else "")
     if sep_char:
         head, _, tail = s.rpartition(sep_char)
-        if head and len(tail) == 3 and (
-            sep_char == "," or (sep_char == "." and dot_is_grouping)
-        ):
+        if head and len(tail) == 3 and (sep_char == "," or (sep_char == "." and dot_is_grouping)):
             # A 3-digit group: ``1,200`` everywhere, and ``1.200 ¥`` on the
             # trailing-symbol (European) path. Bare ``10.000``/``0.500``
             # keep their dot: losing it would 1000x the price.
@@ -427,9 +425,7 @@ def _price_candidates(text: str) -> list[tuple[int, str, str]]:
     """Candidates as ``(position, value, preceding_context)`` in page order."""
     candidates: list[tuple[int, str, str]] = []
 
-    def add(
-        position: int, code: str, amount_raw: str, *, dot_grouping: bool = False
-    ) -> None:
+    def add(position: int, code: str, amount_raw: str, *, dot_grouping: bool = False) -> None:
         amount = _normalize_amount(amount_raw, dot_is_grouping=dot_grouping)
         if amount:
             context = text[max(0, position - 64) : position].lower()

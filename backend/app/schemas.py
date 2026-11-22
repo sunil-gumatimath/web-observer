@@ -155,9 +155,7 @@ def _validate_alert_config(cfg: dict | None) -> dict | None:
             if int(value) != value:
                 raise ValueError(f"alert_config.{key} must be an integer")
             if value < _INT_ALERT_MIN[key]:
-                raise ValueError(
-                    f"alert_config.{key} must be >= {_INT_ALERT_MIN[key]}"
-                )
+                raise ValueError(f"alert_config.{key} must be >= {_INT_ALERT_MIN[key]}")
         elif value < 0:
             raise ValueError(f"alert_config.{key} must be >= 0")
     return cfg

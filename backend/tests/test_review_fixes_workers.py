@@ -44,9 +44,7 @@ def test_queue_notifications_fails_closed_over_quota(monkeypatch) -> None:
         raise usage.QuotaExceeded("Daily notification quota exceeded (10/day)")
 
     monkeypatch.setattr(usage, "assert_can_use_notifications", _quota, raising=False)
-    monitor = SimpleNamespace(
-        id=uuid4(), workspace_id=uuid4(), screenshots_enabled=False
-    )
+    monitor = SimpleNamespace(id=uuid4(), workspace_id=uuid4(), screenshots_enabled=False)
     change = SimpleNamespace(id=uuid4(), run_id=uuid4(), is_noise=False)
     ctx = SimpleNamespace(enrichment=None, summary="changed", diff_text="+x")
     db = SimpleNamespace(
@@ -81,9 +79,7 @@ def test_enqueue_check_refreshes_queued_at(monkeypatch) -> None:
 
     monkeypatch.setattr(enqueue, "SessionLocal", _session)
     sent = []
-    monkeypatch.setattr(
-        enqueue.run_http_check, "send", lambda rid: sent.append(("http", rid))
-    )
+    monkeypatch.setattr(enqueue.run_http_check, "send", lambda rid: sent.append(("http", rid)))
     monkeypatch.setattr(
         enqueue.run_browser_check, "send", lambda rid: sent.append(("browser", rid))
     )
@@ -119,9 +115,7 @@ def test_reaper_sets_monitor_next_run_at_to_now(monkeypatch) -> None:
         error_message=None,
         finished_at=None,
     )
-    monitor = SimpleNamespace(
-        id=run.monitor_id, next_run_at=datetime.now(UTC) + timedelta(hours=1)
-    )
+    monitor = SimpleNamespace(id=run.monitor_id, next_run_at=datetime.now(UTC) + timedelta(hours=1))
 
     class DB:
         def __init__(self):
@@ -249,14 +243,17 @@ def test_pipeline_failure_skips_outcome_when_reaper_claimed(monkeypatch) -> None
         lambda *a, **k: calls.append(k) or [],
     )
 
-    run_guard.execute_monitored_run(str(run.id), lambda m, d: FetchResult(
-        final_url="https://example.com",
-        status_code=200,
-        content=b"x",
-        text="x",
-        content_type="text/plain",
-        latency_ms=1,
-    ))
+    run_guard.execute_monitored_run(
+        str(run.id),
+        lambda m, d: FetchResult(
+            final_url="https://example.com",
+            status_code=200,
+            content=b"x",
+            text="x",
+            content_type="text/plain",
+            latency_ms=1,
+        ),
+    )
 
     assert calls == []
 

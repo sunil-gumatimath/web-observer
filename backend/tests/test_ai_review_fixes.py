@@ -25,9 +25,7 @@ def test_subq_null_match_probability_fails_open() -> None:
             "matches_criteria": {"noul": None},
         }
     }
-    decision = subq.parse_subq_response(
-        raw, noise_threshold=0.70, has_watch_or_semantic=True
-    )
+    decision = subq.parse_subq_response(raw, noise_threshold=0.70, has_watch_or_semantic=True)
     assert decision.is_noise is False
     assert decision.noise_reason is None
 
@@ -56,9 +54,7 @@ def test_subq_one_matching_criterion_is_a_signal() -> None:
             "matches_semantic": {"noul": 0.10},
         }
     }
-    decision = subq.parse_subq_response(
-        raw, noise_threshold=0.70, has_watch_or_semantic=True
-    )
+    decision = subq.parse_subq_response(raw, noise_threshold=0.70, has_watch_or_semantic=True)
     assert decision.is_noise is False
 
 
@@ -284,6 +280,8 @@ def test_digest_bad_byok_config_does_not_raise(
         llm_model=None,
     )
     assert digest.generate_ai_digest_summary(workspace, ["- change"]) is None  # type: ignore[arg-type]
+
+
 def test_subq_gate_skipped_without_watch_or_trigger(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings()
     settings.subq_enabled = True
@@ -360,9 +358,7 @@ def test_explicit_fallback_list_rejected_for_unknown_base(
     settings = Settings()
     settings.llm_fallback_models = "foreign/model"
     monkeypatch.setattr(ai_summary, "get_settings", lambda: settings)
-    assert ai_summary._candidate_models("primary", "https://unknown.example/v1") == [
-        "primary"
-    ]
+    assert ai_summary._candidate_models("primary", "https://unknown.example/v1") == ["primary"]
 
 
 def test_post_retry_handles_transient_429(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -385,9 +381,7 @@ def test_post_retry_handles_transient_429(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setattr(ai_summary, "_pinned_post", fake_post)
     monkeypatch.setattr(ai_summary.time, "sleep", lambda _: None)
-    response = _post_with_retries(
-        "https://api.example/v1/chat/completions", {}, {}, max_attempts=2
-    )
+    response = _post_with_retries("https://api.example/v1/chat/completions", {}, {}, max_attempts=2)
     assert response.status_code == 200
     assert len(calls) == 2
 
@@ -401,6 +395,8 @@ def test_dedup_disabled_ttl_never_serves_cache(monkeypatch: pytest.MonkeyPatch) 
     enrichment = AIEnrichment(summary="x", category="content", provider="llm")
     _dedup_set("disabled-key", enrichment)
     assert _dedup_get("disabled-key") is None
+
+
 def test_failover_recovers_after_failed_model(monkeypatch: pytest.MonkeyPatch) -> None:
     import httpx
 
@@ -440,6 +436,8 @@ def test_failover_recovers_after_failed_model(monkeypatch: pytest.MonkeyPatch) -
     assert content == '{"summary":"recovered"}'
     assert model == "working"
     assert len(calls) == 3
+
+
 def test_legacy_key_only_byok_never_uses_server_base(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

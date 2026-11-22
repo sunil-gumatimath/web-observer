@@ -324,9 +324,7 @@ def _extract_and_store_snapshot(
     immediately (extraction failed or HTTP error).
     """
     if result.status_code >= 400:
-        error_code = (
-            "http_client_error" if result.status_code < 500 else "http_server_error"
-        )
+        error_code = "http_client_error" if result.status_code < 500 else "http_server_error"
         error_message = f"HTTP {result.status_code}"
         # Fenced write: never blind-write FAILED over a run the reaper already
         # claimed while this check was in flight.

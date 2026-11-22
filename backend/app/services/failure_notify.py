@@ -126,9 +126,7 @@ def _sent_within(db: Session, monitor: Monitor, *, minutes: int) -> bool:
         select(NotificationOutbox)
         .where(
             NotificationOutbox.workspace_id == monitor.workspace_id,
-            NotificationOutbox.idempotency_key.startswith(
-                f"failure:{monitor.id}:count:"
-            ),
+            NotificationOutbox.idempotency_key.startswith(f"failure:{monitor.id}:count:"),
         )
         .order_by(NotificationOutbox.created_at.desc())
         .limit(200)

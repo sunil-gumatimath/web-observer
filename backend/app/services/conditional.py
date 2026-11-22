@@ -143,9 +143,7 @@ def parse_monitor_value(text: str, mode: str) -> float | None:
         return None
 
 
-def _warn_invalid_threshold(
-    monitor: Any, key: str, cfg: dict[str, Any], exc: Exception
-) -> None:
+def _warn_invalid_threshold(monitor: Any, key: str, cfg: dict[str, Any], exc: Exception) -> None:
     """Log a stored alert_config value runtime parsing could not use."""
     logger.warning(
         "alert_config_invalid_value monitor_id=%s key=%s value=%r error=%s",
@@ -355,9 +353,7 @@ def check_rate_limits(
         now = datetime.now(UTC)
         monitor_id = getattr(monitor, "id", None)
 
-        def _recent_signal_count(
-            since: datetime, *, include_excluded: bool = False
-        ) -> int:
+        def _recent_signal_count(since: datetime, *, include_excluded: bool = False) -> int:
             q = select(ChangeEvent.id).where(
                 ChangeEvent.monitor_id == monitor_id,
                 ChangeEvent.is_noise.is_(False),

@@ -339,24 +339,18 @@ def test_flap_gate_counts_the_change_being_evaluated(db) -> None:
         alert_config={"flap_window_minutes": 60, "flap_max_alerts": 3},
     )
     changes = [_seed_signal_change(db, ws, monitor) for _ in range(3)]
-    allowed, reason = conditional.check_rate_limits(
-        db, monitor, exclude_change_id=changes[-1].id
-    )
+    allowed, reason = conditional.check_rate_limits(db, monitor, exclude_change_id=changes[-1].id)
     assert allowed is False
     assert "flapping" in (reason or "")
 
 
 def test_regex_must_not_match_invalid_suppresses() -> None:
-    monitor = SimpleNamespace(
-        mode="page_content", alert_config={"regex_must_not_match": "["}
-    )
+    monitor = SimpleNamespace(mode="page_content", alert_config={"regex_must_not_match": "["})
     allowed, reason = conditional.should_alert(monitor, "before", "after")
     assert allowed is False
     assert "could not be evaluated" in (reason or "")
 
 
 def test_visual_min_diff_skips_when_distance_unavailable() -> None:
-    monitor = SimpleNamespace(
-        mode="visual", alert_config={"min_diff_chars": 100}
-    )
+    monitor = SimpleNamespace(mode="visual", alert_config={"min_diff_chars": 100})
     assert conditional.should_alert(monitor, "before", "after") == (True, None)

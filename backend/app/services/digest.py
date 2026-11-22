@@ -130,7 +130,9 @@ def enqueue_workspace_digest(
     try:
         assert_can_use_notifications(db, workspace)
     except QuotaExceeded as exc:
-        logger.warning("digest_notification_quota_exceeded workspace_id=%s error=%s", workspace.id, exc)
+        logger.warning(
+            "digest_notification_quota_exceeded workspace_id=%s error=%s", workspace.id, exc
+        )
         return []
 
     channels = db.scalars(

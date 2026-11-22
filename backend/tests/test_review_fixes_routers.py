@@ -198,9 +198,7 @@ def test_delete_monitor_deletes_objects_only_after_commit(
     )
     events = []
     monkeypatch.setattr(monitors, "write_audit", lambda *a, **k: events.append("audit"))
-    monkeypatch.setattr(
-        monitors, "delete_object", lambda key: events.append(("delete", key))
-    )
+    monkeypatch.setattr(monitors, "delete_object", lambda key: events.append(("delete", key)))
 
     snapshots = [
         SimpleNamespace(raw_object_key="raw/1", text_object_key="text/1"),
@@ -235,9 +233,7 @@ def test_bulk_action_delete_objects_only_after_commit(
     mon = SimpleNamespace(id=mid, enabled=True, next_run_at=None)
     events = []
     monkeypatch.setattr(monitors, "write_audit", lambda *a, **k: events.append("audit"))
-    monkeypatch.setattr(
-        monitors, "delete_object", lambda key: events.append(("delete", key))
-    )
+    monkeypatch.setattr(monitors, "delete_object", lambda key: events.append(("delete", key)))
     snapshots = [SimpleNamespace(raw_object_key="raw/bulk", text_object_key=None)]
     calls = {"n": 0}
 
@@ -278,18 +274,15 @@ def test_bulk_action_delete_objects_only_after_commit(
 
 def _audit_capture(monkeypatch):
     calls = []
-    monkeypatch.setattr(
-        monitors, "write_audit", lambda db, **kw: calls.append(kw["action"])
-    )
+    monkeypatch.setattr(monitors, "write_audit", lambda db, **kw: calls.append(kw["action"]))
     return calls
 
 
 def test_create_monitor_writes_audit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.plans.assert_can_create_monitor", lambda db, ws: None)
     monkeypatch.setattr(
-        "app.services.plans.assert_can_create_monitor", lambda db, ws: None
-    )
-    monkeypatch.setattr(
-        "app.services.plans.get_plan", lambda ws: SimpleNamespace(name="free", min_interval_minutes=15)
+        "app.services.plans.get_plan",
+        lambda ws: SimpleNamespace(name="free", min_interval_minutes=15),
     )
     monkeypatch.setattr(monitors, "validate_url_for_fetch", lambda *a, **k: None)
     monkeypatch.setattr(monitors, "enqueue_brand_enrichment", SimpleNamespace(send=lambda *a: None))
@@ -440,18 +433,17 @@ def test_sitemap_url_count_capped_at_200() -> None:
     with pytest.raises(ValidationError):
         monitors.SitemapDiscoverIn(url="https://example.com", max_urls=201)
     with pytest.raises(ValidationError):
-        monitors.SitemapCreateIn(
-            url="https://example.com", urls=["https://example.com/a"] * 201
-        )
+        monitors.SitemapCreateIn(url="https://example.com", urls=["https://example.com/a"] * 201)
     # At the cap is valid.
+    assert monitors.SitemapDiscoverIn(url="https://example.com", max_urls=200).max_urls == 200
     assert (
-        monitors.SitemapDiscoverIn(url="https://example.com", max_urls=200).max_urls == 200
+        len(
+            monitors.SitemapCreateIn(
+                url="https://example.com", urls=["https://example.com/a"] * 200
+            ).urls
+        )
+        == 200
     )
-    assert len(
-        monitors.SitemapCreateIn(
-            url="https://example.com", urls=["https://example.com/a"] * 200
-        ).urls
-    ) == 200
 
 
 @pytest.mark.parametrize("name", ["bulk_action", "pause_all_monitors", "resume_all_monitors"])
