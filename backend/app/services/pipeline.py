@@ -103,7 +103,15 @@ def extract_normalized(
     ignore_regexes = [str(s) for s in (monitor.ignore_regexes or [])]
 
     if mode == MODE_PRODUCT_PRICE:
-        if context_dev.is_configured():
+        # A user-supplied price selector / ignore list exists to scope *where*
+        # on the page the price is read (e.g. avoid a cross-sell widget). The
+        # Context.dev structured-price endpoint reads the page's own product
+        # markup and cannot honour that scoping, so when the monitor narrows
+        # the search we extract locally FIRST and only fall back to the
+        # provider if that fails — otherwise a configured selector would be
+        # silently ignored whenever the provider key is set.
+        has_price_scope = bool((monitor.css_selector or "").strip()) or bool(ignore_selectors)
+        if context_dev.is_configured() and not has_price_scope:
             try:
                 return (
                     context_dev.scrape_product_price(
@@ -118,14 +126,38 @@ def extract_normalized(
                     monitor.id,
                     exc,
                 )
-        return (
-            extract_price(
-                result.text,
-                css_selector=monitor.css_selector,
-                ignore_selectors=ignore_selectors,
-            ),
-            None,
-        )
+        try:
+            return (
+                extract_price(
+                    result.text,
+                    css_selector=monitor.css_selector,
+                    ignore_selectors=ignore_selectors,
+                ),
+                None,
+            )
+        except ExtractionError:
+            # Local (selector-scoped) extraction found nothing. Without a scope
+            # that is the real answer ("price removed"). With a scope, give the
+            # structured provider one chance before giving up — the element the
+            # selector targeted may have been renamed while the page still
+            # carries a readable price.
+            if not has_price_scope or not context_dev.is_configured():
+                raise
+            try:
+                return (
+                    context_dev.scrape_product_price(
+                        monitor.url,
+                        timeout_seconds=monitor.timeout_seconds,
+                    ),
+                    None,
+                )
+            except Exception as exc:  # noqa: BLE001 - provider is best-effort
+                logger.warning(
+                    "product_price_provider_fallback_failed monitor_id=%s error=%s",
+                    monitor.id,
+                    exc,
+                )
+                raise
 
     if mode == "site_links":
         urls = [u.strip() for u in result.text.splitlines() if u.strip()]
@@ -1105,8 +1137,16 @@ def _visual_thresholds(monitor: Monitor, settings: object) -> tuple[int, int]:
     """Return (aHash threshold, pHash threshold) for a visual check.
 
     ``min_diff_chars`` is documented as the minimum perceptual distance for
-    visual monitors. Change detection's "Visual similar" short-circuit must
-    use the same value or configured values 1-8 have no effect at all.
+    visual monitors, so when configured it *is* the threshold: a capture whose
+    hamming distance is below it is "similar" (no change). This matches how
+    ``should_alert`` applies the same value to suppression, and — unlike the
+    other modes, where ``min_diff_chars`` is a minimum edit size to exceed — a
+    larger value here means a *coarser* comparison, i.e. fewer alerts.
+
+    Without a configured value the settings defaults apply. Previously a
+    configured value was clamped with ``min(global, configured)``, which capped
+    how coarse the comparison could get and inverted the documented semantics:
+    raising ``min_diff_chars`` above the global default silently had no effect.
     """
     ahash = int(getattr(settings, "visual_ahash_threshold", 5))
     phash = int(getattr(settings, "visual_phash_threshold", 8))
@@ -1116,10 +1156,8 @@ def _visual_thresholds(monitor: Monitor, settings: object) -> tuple[int, int]:
     except (TypeError, ValueError):
         need = 0
     if need > 0:
-        # Tighten only: a larger min_diff_chars must not make the detector
-        # less sensitive than the configured global thresholds.
-        ahash = min(ahash, need)
-        phash = min(phash, need)
+        ahash = need
+        phash = need
     return ahash, phash
 
 

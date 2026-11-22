@@ -39,7 +39,7 @@ These six keys are accepted on any monitor, on top of the per-mode keys above
 
 | Key | Effect |
 | --- | ------ |
-| `min_diff_chars` | Minimum size of the change. For `visual` it means the **perceptual distance** (pHash, or aHash for legacy snapshots) instead of a character count. |
+| `min_diff_chars` | Minimum size of the change. For `visual` it means the **perceptual distance** (pHash, or aHash for legacy snapshots) instead of a character count — and it *is* the comparison threshold, so a larger value means a coarser comparison (fewer alerts), the opposite direction to the other modes. |
 | `regex_must_match` | The new content must match this pattern, otherwise the change is held back. |
 | `regex_must_not_match` | If the new content matches this pattern, the change is held back. |
 | `cooldown_minutes` | Quiet period after a signal alert — no further notifications for this monitor. |
@@ -49,6 +49,11 @@ One caveat:
 
 - The regex filters are **not offered for `visual` mode** in the UI — a
   screenshot's content is a hash, so a content regex can never match it.
+- For `visual`, `min_diff_chars` is a *perceptual distance* threshold, not a
+  minimum edit size, so it runs in the opposite direction: a **larger** value
+  tolerates more visual drift before alerting (fewer alerts), while a smaller
+  value makes the comparison more sensitive. Without it, the global
+  `VISUAL_AHASH_THRESHOLD` / `VISUAL_PHASH_THRESHOLD` defaults apply.
 ---
 
 ## The modes in detail
@@ -86,6 +91,10 @@ Scans the page for the first price-like token and normalizes it
   and each browser check burns quota.
 - Use the optional CSS selector to scope the price search
   (e.g. `#price, .product-price`) and avoid picking up a cross-sell widget.
+  The selector (and any ignore selectors) always win over the optional
+  Context.dev structured-price provider — with a selector configured the
+  price is read locally first and the provider is only consulted if that
+  finds nothing, so scoping keeps working when the provider key is set.
 - Gets a **value-history chart** on the monitor page.
 - Thresholds: `price_below`, `price_above`, `percent_change`.
 
@@ -157,6 +166,12 @@ watches the security verdict.
 - Requires server-side credentials: `CLOUDFLARE_ACCOUNT_ID` and
   `CLOUDFLARE_URLSCANNER_TOKEN`. Without a token the check fails with a clear
   error (it never silently passes).
+- Failures are surfaced with filterable error codes: `scan_not_configured`
+  (no token), `scan_rejected` (the Scanner refused/aborted the target —
+  status `failed`/`aborted`/`rejected`/`error`), `scan_task_error` (Cloudflare
+  reported an unsuccessful scan, e.g. code 5021 "hostname was recently
+  scanned"), `scan_error` (transient submit/result API or transport failure),
+  and `read_timeout` (the scan did not finish in time).
 - The digest is one fact per line — `malicious=`, `categories=`, `tags=`,
   `task.status=`, `task.apexDomain=`, `certificate=`, `server=`, `asn=`, and
   `tech=` — so the diff shows exactly which fact moved.
@@ -176,7 +191,11 @@ Watches the **code-level** facts that `page_content` deliberately ignores.
 - Each fact is one `key: value` line, diffed as an item set, so alerts read
   "meta robots removed" or "script src added" instead of a wall of HTML.
 - Query strings and fragments are stripped from URLs so analytics tokens,
-  cache-busting parameters and build ids do not cause false alerts.
+  cache-busting parameters and build ids do not cause false alerts. The one
+  exception is the preview images (`og:image`, `twitter:image`): their query
+  string is kept, because CDN resize/format params and signed-URL tokens
+  change the image that is actually served, so a preview swap that only
+  differs by query is a real change.
 - Unlisted meta tags (CSRF tokens, build ids, arbitrary vendor tags) are
   ignored by design.
 - Fetched over plain HTTP; `js_required` is rejected. Use it for SEO checks,
@@ -191,7 +210,7 @@ opt-in upgrades. With no key, every mode behaves exactly as documented above.
 
 | Mode | Upgrade | Trigger |
 | ---- | ------- | ------- |
-| `product_price` | Structured price/currency from Context.dev `formats.product` instead of the first price-like regex match | Every check when the key is set; falls back to local regex on any provider error |
+| `product_price` | Structured price/currency from Context.dev `formats.product` instead of the first price-like regex match | Every check when the key is set **and the monitor has no price selector / ignore selectors** — an explicit scope is always honoured locally first; falls back to local regex on any provider error |
 | `site_links` | URL inventory from the Map URLs endpoint when no sitemap exists | Only after the normal sitemap discovery fails; a non-empty result replaces the `no_sitemap` error |
 | `page_content` / `visual` | Markdown or screenshot capture from Context.dev | Only when the local fetch/capture fails with `bot_challenge`, `http_error` (401/403/429), `read_timeout`, or a Playwright error |
 

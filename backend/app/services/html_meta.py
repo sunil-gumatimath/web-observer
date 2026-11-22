@@ -50,6 +50,13 @@ MAX_TOTAL_ITEMS = 120
 # cache-busting query parameter cannot masquerade as a real change.
 URL_META_KEYS: frozenset[str] = frozenset({"og:image", "og:url", "twitter:image"})
 
+# Image preview URLs whose query string is meaningful — CDN resize/format
+# params (?w=640, ?fm=webp) and signed-URL tokens change the image that is
+# actually served, so a preview swap that only differs by query is a real
+# change and must alert. Stripping the query here (like we do for og:url and
+# canonical, where it is genuine cache-busting noise) hid those swaps.
+URL_META_KEYS_KEEP_QUERY: frozenset[str] = frozenset({"og:image", "twitter:image"})
+
 
 def _clean(value: str | None) -> str:
     """Collapse whitespace and cap length so a hostile meta tag cannot bloat a diff."""
@@ -59,11 +66,17 @@ def _clean(value: str | None) -> str:
     return text[:MAX_VALUE_CHARS]
 
 
-def _stable_url(value: str, base_url: str) -> str:
-    """Resolve against the page URL and drop volatile query/fragment parts."""
+def _stable_url(value: str, base_url: str, *, keep_query: bool = False) -> str:
+    """Resolve against the page URL and drop volatile query/fragment parts.
+
+    ``keep_query`` retains the query string for the few URL metas (preview
+    images) where it carries the image's real identity (resize/format params,
+    signed-URL tokens) rather than cache-busting noise.
+    """
     absolute = urljoin(base_url, value.strip())
     parts = urlsplit(absolute)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    query = parts.query if keep_query else ""
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
 
 
 def _jsonld_types(html: str) -> list[str]:
@@ -139,7 +152,12 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
         else:
             continue
         if value and key not in meta_values:
-            meta_values[key] = _stable_url(value, final_url) if key in URL_META_KEYS else value
+            if key in URL_META_KEYS:
+                meta_values[key] = _stable_url(
+                    value, final_url, keep_query=key in URL_META_KEYS_KEEP_QUERY
+                )
+            else:
+                meta_values[key] = value
     for key in sorted(meta_values):
         head_facts.append(f"meta {key}: {meta_values[key]}")
 

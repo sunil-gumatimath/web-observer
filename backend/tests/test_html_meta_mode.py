@@ -76,17 +76,44 @@ def test_extract_html_meta_items_collects_stable_facts() -> None:
     assert "meta description: An example store for tests" in items
     assert "meta robots: index, follow" in items
     assert "meta og:title: Example Store" in items
-    assert "meta og:image: https://shop.example.com/og.png" in items
     assert "canonical: https://shop.example.com/store" in items
     assert "alternate fr: https://shop.example.com/fr" in items
     assert "jsonld type: Organization" in items
     assert "script src: https://shop.example.com/static/app.js" in items
     assert "script src: https://analytics.example.com/track.js" in items
     # Volatile query strings are stripped so ad/analytics tokens do not fire alerts.
-    assert "?v=" not in " ".join(items)
     assert "?token=" not in " ".join(items)
     # Visible body text belongs to page_content, not to this mode.
     assert not any("Visible content" in item for item in items)
+
+
+def test_preview_image_meta_keeps_meaningful_query_but_nav_urls_strip_it() -> None:
+    """A preview-image swap that only differs by query is a real change.
+
+    ``og:image``/``twitter:image`` point at CDN URLs whose query carries the
+    image's identity (resize/format params, signed-URL tokens), so the query
+    survives normalization. Navigation URLs (``og:url``, ``canonical``) and
+    script src keep stripping it — there the query is genuine cache-busting
+    noise (utm/token/version) that must never fire an alert.
+    """
+    items = extract_html_meta_items(HTML, "https://shop.example.com/store")
+    # og:image keeps its resize/version query…
+    assert "meta og:image: https://shop.example.com/og.png?v=123" in items
+    # …while og:url / canonical / script src still drop theirs.
+    assert "canonical: https://shop.example.com/store" in items
+    assert "script src: https://shop.example.com/static/app.js" in items
+    assert "script src: https://analytics.example.com/track.js" in items
+
+    twitter = HTML.replace(
+        '<meta property="og:image" content="/og.png?v=123">',
+        '<meta name="twitter:image" content="https://cdn.example.com/hero.jpg?w=640&token=abc">',
+    )
+    t_items = extract_html_meta_items(twitter, "https://shop.example.com/store")
+    assert (
+        "meta twitter:image: https://cdn.example.com/hero.jpg?w=640&token=abc" in t_items
+    )
+    # The token on a *navigation* URL would still be stripped:
+    assert "?token=" not in " ".join(items)
 
 
 def test_extract_html_meta_items_ignores_unlisted_meta_tags() -> None:

@@ -14,6 +14,55 @@ def _monitor(**kw):
     return SimpleNamespace(**base)
 
 
+def _visual_thresholds(alert_config):
+    from app.services.pipeline import _visual_thresholds
+
+    monitor = SimpleNamespace(mode="visual", alert_config=alert_config)
+    settings = SimpleNamespace(visual_ahash_threshold=5, visual_phash_threshold=8)
+    return _visual_thresholds(monitor, settings)
+
+
+def test_visual_min_diff_chars_sets_threshold_directly():
+    # No configured value -> the settings defaults.
+    assert _visual_thresholds(None) == (5, 8)
+    assert _visual_thresholds({}) == (5, 8)
+    # A configured min_diff_chars IS the perceptual threshold: a larger value
+    # means a coarser comparison (fewer alerts), not a tighter one.
+    assert _visual_thresholds({"min_diff_chars": 20}) == (20, 20)
+    assert _visual_thresholds({"min_diff_chars": 3}) == (3, 3)
+
+
+def _phash_at_distance(base: str, distance: int) -> str:
+    """Return a 256-bit hex digest exactly *distance* bits from *base*."""
+    bits = list("".join(format(int(c, 16), "04b") for c in base))
+    for i in range(distance):
+        bits[i] = "1" if bits[i] == "0" else "0"
+    return "".join(format(int("".join(bits)[i : i + 4], 2), "x") for i in range(0, len(bits), 4))
+
+
+def test_visual_min_diff_chars_above_default_makes_detection_coarser():
+    """Raising min_diff_chars above the global default must widen the 'similar' band.
+
+    Previously the configured value was clamped with min(global, configured),
+    so any value above 8 silently had no effect on detection.
+    """
+    from app.services.visual import visual_diff_summary
+
+    base = "aa" * 32
+    prev = f"ahash:ffe7c3e7e7e7e7e7\nphash:{base}\nsha256:aa\nsize:1280x775"
+    # distance 12: under the default pHash threshold of 8 (a change) but under
+    # a configured threshold of 20 (similar).
+    new = f"ahash:ffe7c3e7e7e7e7e7\nphash:{_phash_at_distance(base, 12)}\nsha256:bb\nsize:1280x775"
+
+    ahash, phash = _visual_thresholds({"min_diff_chars": 20})
+    summary, _ = visual_diff_summary(prev, new, threshold=ahash, phash_threshold=phash)
+    assert "Visual similar" in summary
+
+    # At the default thresholds the same capture pair is a detected change.
+    summary_default, _ = visual_diff_summary(prev, new, threshold=5, phash_threshold=8)
+    assert "Visual similar" not in summary_default
+
+
 def test_no_config_alerts():
     ok, reason = should_alert(_monitor(), "a", "b")
     assert (ok, reason) == (True, None)

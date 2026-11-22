@@ -204,6 +204,175 @@ def test_product_price_falls_back_to_local_regex_when_provider_fails(monkeypatch
     assert extract_normalized(_price_monitor(), result)[0] == "USD 12.99"
 
 
+def test_product_price_selector_overrides_provider(monkeypatch):
+    """A configured price selector must win over the structured provider.
+
+    The provider reads the page's own product markup and cannot honour a
+    ``css_selector`` scope, so when the monitor narrows the search the local
+    selector-scoped extraction runs FIRST and the provider is not consulted —
+    otherwise the selector would be silently ignored whenever the key is set.
+    """
+    from uuid import uuid4
+
+    from app.services.fetcher import FetchResult
+    from app.services.pipeline import extract_normalized
+
+    monkeypatch.setattr(context_dev, "is_configured", lambda: True)
+    provider_calls: list[str] = []
+
+    def record(*args, **kwargs):
+        provider_calls.append(args[0] if args else kwargs.get("url"))
+        return "USD 79.5"
+
+    monkeypatch.setattr(context_dev, "scrape_product_price", record)
+    html = "<html><body><span>$1.00</span><div id='buy'><span>$24.90</span></div></body></html>"
+    result = FetchResult(
+        final_url="https://shop.example.com/product",
+        status_code=200,
+        content=html.encode(),
+        text=html,
+        content_type="text/html",
+        latency_ms=1,
+    )
+    scoped = Monitor(
+        id=uuid4(),
+        workspace_id=uuid4(),
+        name="Scoped",
+        url="https://shop.example.com/product",
+        mode="product_price",
+        css_selector="#buy",
+    )
+
+    assert extract_normalized(scoped, result)[0] == "USD 24.90"
+    assert provider_calls == []  # provider never overrides an explicit scope
+
+
+def test_product_price_ignore_selectors_also_count_as_a_scope(monkeypatch):
+    from uuid import uuid4
+
+    from app.services.fetcher import FetchResult
+    from app.services.pipeline import extract_normalized
+
+    monkeypatch.setattr(context_dev, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5"
+    )
+    html = "<html><body><nav>$1</nav><b>$9.87</b></body></html>"
+    result = FetchResult(
+        final_url="https://shop.example.com/product",
+        status_code=200,
+        content=html.encode(),
+        text=html,
+        content_type="text/html",
+        latency_ms=1,
+    )
+    scoped = Monitor(
+        id=uuid4(),
+        workspace_id=uuid4(),
+        name="Scoped",
+        url="https://shop.example.com/product",
+        mode="product_price",
+        ignore_selectors=["nav"],
+    )
+
+    assert extract_normalized(scoped, result)[0] == "USD 9.87"
+
+
+def test_product_price_provider_used_when_scoped_local_extraction_finds_nothing(monkeypatch):
+    """With a scope, the provider still gets one chance if local finds nothing.
+
+    ``extract_price`` narrows to the selector's nodes only when they match, and
+    raises ``price_not_found`` when the scoped region carries no price — that is
+    the case where the selector target was renamed/restructured but the page
+    still has a readable structured price.
+    """
+    from uuid import uuid4
+
+    from app.services.fetcher import FetchResult
+    from app.services.pipeline import extract_normalized
+
+    monkeypatch.setattr(context_dev, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5"
+    )
+    # #buy matches but holds no price, and no price exists anywhere to fall
+    # back on — so local extraction raises price_not_found.
+    html = "<html><body><div id='buy'><span>Out of stock</span></div></body></html>"
+    result = FetchResult(
+        final_url="https://shop.example.com/product",
+        status_code=200,
+        content=html.encode(),
+        text=html,
+        content_type="text/html",
+        latency_ms=1,
+    )
+    scoped = Monitor(
+        id=uuid4(),
+        workspace_id=uuid4(),
+        name="Scoped",
+        url="https://shop.example.com/product",
+        mode="product_price",
+        css_selector="#buy",
+    )
+
+    assert extract_normalized(scoped, result)[0] == "USD 79.5"
+
+
+def test_product_price_scoped_removal_still_raises_without_provider(monkeypatch):
+    """Without a provider key, a scoped 'no price' is still price_not_found."""
+    from uuid import uuid4
+
+    import pytest
+
+    from app.services.extract import ExtractionError
+    from app.services.fetcher import FetchResult
+    from app.services.pipeline import extract_normalized
+
+    monkeypatch.setattr(context_dev, "is_configured", lambda: False)
+    html = "<html><body><div id='buy'><span>Out of stock</span></div></body></html>"
+    result = FetchResult(
+        final_url="https://shop.example.com/product",
+        status_code=200,
+        content=html.encode(),
+        text=html,
+        content_type="text/html",
+        latency_ms=1,
+    )
+    scoped = Monitor(
+        id=uuid4(),
+        workspace_id=uuid4(),
+        name="Scoped",
+        url="https://shop.example.com/product",
+        mode="product_price",
+        css_selector="#buy",
+    )
+
+    with pytest.raises(ExtractionError) as exc:
+        extract_normalized(scoped, result)
+    assert exc.value.code == "price_not_found"
+
+
+def test_product_price_no_scope_still_uses_provider_first(monkeypatch):
+    """Without any selector/ignore scope the provider-first upgrade is unchanged."""
+    from app.services.fetcher import FetchResult
+    from app.services.pipeline import extract_normalized
+
+    monkeypatch.setattr(context_dev, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        context_dev, "scrape_product_price", lambda *a, **k: "USD 79.5"
+    )
+    result = FetchResult(
+        final_url="https://shop.example.com/product",
+        status_code=200,
+        content=b"<html>$1.00 cross-sell</html>",
+        text="<html>$1.00 cross-sell</html>",
+        content_type="text/html",
+        latency_ms=1,
+    )
+
+    assert extract_normalized(_price_monitor(), result)[0] == "USD 79.5"
+
+
 def test_site_links_uses_url_map_when_no_sitemap_exists(monkeypatch):
     from app.services import sitemap
 

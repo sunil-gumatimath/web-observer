@@ -198,6 +198,56 @@ def test_poll_accepts_capitalized_status_and_rejects_failed_scan(monkeypatch) ->
         ss._poll_result(FailedWithReason(), "a", "t", "s", 30)
 
 
+def test_terminal_and_task_failures_use_distinct_filterable_codes(monkeypatch):
+    """A rejected/aborted scan is not a transient API error.
+
+    error_code is what run history filters on, so the Scanner refusing or
+    aborting a target (scan_rejected) and Cloudflare reporting an unsuccessful
+    scan with task.errors (scan_task_error) must be distinguishable from a
+    transport/HTTP failure (scan_error) — the specific status/reason used to
+    live only in the free-text message.
+    """
+    monkeypatch.setattr(ss.time, "sleep", lambda _s: None)
+
+    class Aborted:
+        def get(self, url: str, **kwargs: object) -> httpx.Response:
+            return httpx.Response(200, json={"task": {"status": "aborted"}})
+
+    with pytest.raises(FetchError) as aborted_exc:
+        ss._poll_result(Aborted(), "a", "t", "s", 30)
+    assert aborted_exc.value.code == "scan_rejected"
+
+    class TaskError:
+        def get(self, url: str, **kwargs: object) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "task": {
+                        "success": False,
+                        "errors": [{"message": "hostname was recently scanned", "code": 5021}],
+                    }
+                },
+            )
+
+    with pytest.raises(FetchError) as task_exc:
+        ss._poll_result(TaskError(), "a", "t", "s", 30)
+    assert task_exc.value.code == "scan_task_error"
+    assert "recently scanned" in task_exc.value.message
+
+
+def test_result_fetch_http_failure_stays_a_generic_scan_error(monkeypatch) -> None:
+    """A non-404 HTTP failure fetching the result is still scan_error."""
+    monkeypatch.setattr(ss.time, "sleep", lambda _s: None)
+
+    class Boom:
+        def get(self, url: str, **kwargs: object) -> httpx.Response:
+            return httpx.Response(500)
+
+    with pytest.raises(FetchError) as exc:
+        ss._poll_result(Boom(), "a", "t", "s", 30)
+    assert exc.value.code == "scan_error"
+
+
 def test_digest_omits_empty_certificate_issuer() -> None:
     result = {
         **_RESULT,
