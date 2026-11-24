@@ -44,8 +44,11 @@ def fetch_page_with_provider_fallback(
     kwargs: dict = {
         "timeout_seconds": timeout_seconds,
         "max_response_bytes": max_response_bytes,
-        "mode": monitor_mode,
     }
+    # Only fetch_url accepts the mode hint; injected primaries (notably the
+    # browser fetcher) have their own signature and must not receive it.
+    if primary is None:
+        kwargs["mode"] = monitor_mode
     if respect_robots:
         kwargs["respect_robots"] = True
     if primary_kwargs:

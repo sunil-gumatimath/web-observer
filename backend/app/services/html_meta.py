@@ -147,17 +147,20 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
         key = prop or name or itemprop or ""
         if not key and attrs.get("charset"):
             key = "charset"
-        # When a key is emitted twice, the spec-correct source wins over a
-        # legacy fallback regardless of document order. A stale fallback must
-        # never mask a real change to the canonical tag.
+        # When a key is emitted twice, prefer its canonical source regardless
+        # of document order: property for Open Graph, name for standard keys
+        # (including twitter: cards), then itemprop. A stale fallback must not
+        # mask a real change to the monitored tag.
         if key == "charset" and attrs.get("charset"):
             rank = 4
-        elif key and key == prop:
+        elif key and key == prop and key.startswith("og:"):
             rank = 3
         elif key and key == name:
             rank = 2
-        elif key and key == itemprop:
+        elif key and key == prop:
             rank = 1
+        elif key and key == itemprop:
+            rank = 0
         else:
             rank = 0
         if key == "charset":

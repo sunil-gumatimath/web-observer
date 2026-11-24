@@ -580,3 +580,25 @@ def test_provider_fallback_latency_covers_provider_call(monkeypatch) -> None:
 
     assert result.latency_ms >= 40
     assert result.provider_markdown == "# markdown"
+
+
+def test_provider_fallback_does_not_pass_mode_to_browser_primary() -> None:
+    def browser_primary(url, *, timeout_seconds, max_response_bytes, wait_selector=None):
+        return FetchResult(
+            final_url=url,
+            status_code=200,
+            content=b"ok",
+            text="ok",
+            content_type="text/html",
+            latency_ms=1,
+        )
+
+    result = checks.fetch_page_with_provider_fallback(
+        "https://example.com/",
+        monitor_mode="page_content",
+        timeout_seconds=5,
+        max_response_bytes=1000,
+        respect_robots=False,
+        primary=browser_primary,
+    )
+    assert result.status_code == 200
