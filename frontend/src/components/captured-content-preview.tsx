@@ -716,6 +716,43 @@ export function CapturedContentPreview({
   }
 
   // ---------------------------------------------------------------------------
+  // HTML / META MODE
+  // ---------------------------------------------------------------------------
+  if (mode === "html_meta") {
+    return (
+      <div className="overflow-hidden rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--hairline)] bg-[var(--surface-1)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <ModeBadge mode="html_meta" />
+            <Badge tone="neutral">{lineItems.length} facts</Badge>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => copyToClipboard(lineItems.join("\n"), "html-meta")}
+            className="text-xs"
+          >
+            {copied === "html-meta" ? "✓ Copied" : "Copy facts"}
+          </Button>
+        </div>
+        <div className="p-4">
+          {lineItems.length > 0 ? (
+            <ReadableContent
+              text={lineItems.join("\n")}
+              maxChars={25000}
+              baseUrl={monitor.url}
+            />
+          ) : (
+            <div className="p-4 text-center text-xs text-[var(--ink-subtle)]">
+              No HTML/meta facts captured.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // 9) PAGE CONTENT (DEFAULT)
   // ---------------------------------------------------------------------------
   const showJsWarning =

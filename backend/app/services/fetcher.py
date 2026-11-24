@@ -226,6 +226,24 @@ def _pinned_get(url: str, *, timeout: httpx.Timeout, headers: dict[str, str]) ->
     )
 
 
+def bot_challenge_message(url: str, challenge: str, mode: str | None = None) -> str:
+    """Explain a block without recommending an option the mode forbids."""
+    from app.models.entities import PLAIN_HTTP_MODES
+
+    if mode in PLAIN_HTTP_MODES:
+        advice = (
+            "This mode reads raw HTML over plain HTTP and cannot use browser "
+            "rendering; try a different endpoint or remove the bot protection."
+        )
+    else:
+        advice = (
+            "The site requires a real browser session; try enabling "
+            "'JavaScript rendering required' on this monitor, or monitor "
+            "a different endpoint."
+        )
+    return f"Blocked while fetching {url}: {challenge}. {advice}"
+
+
 def fetch_binary(
     url: str,
     *,
@@ -312,6 +330,7 @@ def fetch_url(
     timeout_seconds: int,
     max_response_bytes: int,
     respect_robots: bool = True,
+    mode: str | None = None,
 ) -> FetchResult:
     settings = get_settings()
     user_agent = settings.http_user_agent
@@ -422,10 +441,7 @@ def fetch_url(
         if challenge:
             raise FetchError(
                 "bot_challenge",
-                f"Blocked while fetching {url}: {challenge}. "
-                "The site requires a real browser session; try enabling "
-                "'JavaScript rendering required' on this monitor, or monitor "
-                "a different endpoint.",
+                bot_challenge_message(url, challenge, mode),
                 http_status=response.status_code,
             )
         return FetchResult(

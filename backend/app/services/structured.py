@@ -182,6 +182,22 @@ def items_from_normalized(text: str) -> list[str]:
     ]
 
 
+PREVIEW_TRUNCATION_MARKER = "…[preview truncated – full content unavailable]"
+
+
+def strip_preview_marker(text: str) -> str:
+    """Drop the API's preview-truncation marker before parsing stored items.
+
+    The marker is presentation metadata added by the change-detail endpoint
+    when the full snapshot text is unavailable; it is never a watched fact.
+    """
+    return "\n".join(
+        line
+        for line in (text or "").splitlines()
+        if line.strip() != PREVIEW_TRUNCATION_MARKER
+    )
+
+
 def _dedupe_keep_order(items: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -192,23 +208,36 @@ def _dedupe_keep_order(items: Iterable[str]) -> list[str]:
     return out
 
 
-def diff_lists(before: list[str], after: list[str]) -> ListDiff:
+LINK_IDENTITY_MODES = frozenset({"list_items", "rss_feed"})
+
+
+def diff_lists(
+    before: list[str], after: list[str], *, mode: str | None = None
+) -> ListDiff:
     """Set-based list diff that preserves on-page order.
 
     Added items appear in their ``after`` order and removed items in their
     ``before`` order — alphabetical sorting used to scramble recency (e.g. new
     blog posts no longer surfaced first in alerts).
+
+    ``mode`` selects identity resolution: only link-based modes (list_items,
+    rss_feed) key items by href/mtw-id. Plain fact sets such as html_meta must
+    be keyed by their whole text, or a meta value ending in ``[text](url)``
+    collides with another fact. Omitting ``mode`` keeps legacy behavior for
+    direct callers and tests.
     """
+    use_link_identity = mode is None or mode in LINK_IDENTITY_MODES
 
     def identity(item: str) -> str:
-        match = re.search(r"<!--mtw-id:(.*?)-->$", item)
-        if match:
-            return f"id:{match.group(1)}"
-        # Link items are emitted as "[text](url)". The href is the stable
-        # identity: editing link text is a modification, not remove + add.
-        link = re.search(r"\[[^\]]*\]\(([^)]+)\)\s*$", item)
-        if link and link.group(1):
-            return f"href:{link.group(1)}"
+        if use_link_identity:
+            match = re.search(r"<!--mtw-id:(.*?)-->$", item)
+            if match:
+                return f"id:{match.group(1)}"
+            # Link items are emitted as "[text](url)". The href is the stable
+            # identity: editing link text is a modification, not remove + add.
+            link = re.search(r"\[[^\]]*\]\(([^)]+)\)\s*$", item)
+            if link and link.group(1):
+                return f"href:{link.group(1)}"
         return f"item:{item}"
 
     before_by_id = {identity(item): item for item in before}

@@ -9,6 +9,7 @@ existing item-set diff and AI summary pipeline can report added/removed facts.
 from __future__ import annotations
 
 import json
+import re
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from selectolax.parser import HTMLParser
@@ -44,7 +45,8 @@ META_KEYS: frozenset[str] = frozenset(
 MAX_VALUE_CHARS = 300
 MAX_SCRIPT_URLS = 50
 MAX_ALTERNATE_LINKS = 40
-MAX_TOTAL_ITEMS = 120
+MAX_CANONICAL_LINKS = 5
+MAX_TOTAL_ITEMS = 150
 
 # Meta values that are URLs: normalize them like canonical/script links so a
 # cache-busting query parameter cannot masquerade as a real change.
@@ -73,10 +75,10 @@ def _stable_url(value: str, base_url: str, *, keep_query: bool = False) -> str:
     images) where it carries the image's real identity (resize/format params,
     signed-URL tokens) rather than cache-busting noise.
     """
-    absolute = urljoin(base_url, value.strip())
+    absolute = urljoin(base_url, _clean(value))
     parts = urlsplit(absolute)
     query = parts.query if keep_query else ""
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))[:MAX_VALUE_CHARS]
 
 
 def _jsonld_types(html: str) -> list[str]:
@@ -136,31 +138,55 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
         head_facts.append(f"html lang: {lang}")
 
     meta_values: dict[str, str] = {}
+    meta_ranks: dict[str, int] = {}
     for node in tree.css("meta"):
         attrs = node.attributes
-        key = (
-            (attrs.get("property") or attrs.get("name") or attrs.get("itemprop") or "")
-            .strip()
-            .lower()
-        )
+        prop = (attrs.get("property") or "").strip().lower()
+        name = (attrs.get("name") or "").strip().lower()
+        itemprop = (attrs.get("itemprop") or "").strip().lower()
+        key = prop or name or itemprop or ""
         if not key and attrs.get("charset"):
             key = "charset"
+        # When a key is emitted twice, the spec-correct source wins over a
+        # legacy fallback regardless of document order. A stale fallback must
+        # never mask a real change to the canonical tag.
+        if key == "charset" and attrs.get("charset"):
+            rank = 4
+        elif key and key == prop:
+            rank = 3
+        elif key and key == name:
+            rank = 2
+        elif key and key == itemprop:
+            rank = 1
+        else:
+            rank = 0
         if key == "charset":
-            value = _clean(attrs.get("content") or attrs.get("charset"))
+            raw = attrs.get("charset") or ""
+            if raw.strip():
+                value = _clean(raw).lower()
+            else:
+                content = _clean(attrs.get("content"))
+                match = re.search(r"charset\s*=\s*([^;\s]+)", content, re.IGNORECASE)
+                value = (match.group(1) if match else content).lower()
         elif key in META_KEYS:
             value = _clean(attrs.get("content"))
         else:
             continue
-        if value and key not in meta_values:
-            if key in URL_META_KEYS:
-                meta_values[key] = _stable_url(
-                    value, final_url, keep_query=key in URL_META_KEYS_KEEP_QUERY
-                )
-            else:
-                meta_values[key] = value
+        if not value:
+            continue
+        if key in meta_values and rank <= meta_ranks[key]:
+            continue
+        if key in URL_META_KEYS:
+            meta_values[key] = _stable_url(
+                value, final_url, keep_query=key in URL_META_KEYS_KEEP_QUERY
+            )
+        else:
+            meta_values[key] = value
+        meta_ranks[key] = rank
     for key in sorted(meta_values):
         head_facts.append(f"meta {key}: {meta_values[key]}")
 
+    canonical_links = 0
     alternate_links = 0
     for node in tree.css("link"):
         attrs = node.attributes
@@ -169,7 +195,10 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
         if not href:
             continue
         if "canonical" in rel:
+            if canonical_links >= MAX_CANONICAL_LINKS:
+                continue
             head_facts.append(f"canonical: {_stable_url(href, final_url)}")
+            canonical_links += 1
         elif "alternate" in rel and attrs.get("hreflang"):
             if alternate_links >= MAX_ALTERNATE_LINKS:
                 continue

@@ -351,7 +351,7 @@ If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_UR
 | `page_content` | Detected main content (falls back to whole-page text); `js_required` for SPAs |
 | `site_links` | Sitemap URL-set changes (plain HTTP only) |
 | `rss_feed` | RSS/Atom feed entries (plain HTTP only) |
-| `readme` | GitHub repository README changes via `owner/repo` or full URL — GitHub-style markdown diffs; hits the GitHub API first (1 request, `ref`-pinned to the `/tree/<branch>` branch when one is parsed, else the repo's default branch), then a bounded raw fallbacks fan-out capped by a wall-clock budget | |
+| `readme` | GitHub repository README changes via `owner/repo` or full URL — GitHub-style markdown diffs; hits the GitHub API first (1 request, `ref`-pinned to the `/tree/<branch>` branch when one is parsed, else the repo's default branch), then a bounded raw fallbacks fan-out capped by a wall-clock budget |
 | `product_price` | Price + currency (defaults to a daily schedule) |
 | `list_items` | Link list under a CSS selector |
 | `json_field` | A single value via a JSONPath-style query, e.g. `$.data.price` |

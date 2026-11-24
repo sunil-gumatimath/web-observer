@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.models.entities import (
     LIST_DIFF_MODES,
+    PLAIN_HTTP_MODES,
     MonitorMode,
     OutboxStatus,
     RunStatus,
@@ -434,6 +435,7 @@ def _extract_and_store_snapshot(
             "<script" in html_text.lower()
             and len(html_text) > 500
             and not getattr(monitor, "js_required", False)
+            and monitor.mode not in PLAIN_HTTP_MODES
         )
         if is_spa_hint:
             error_code = "js_required_hint"
@@ -688,7 +690,7 @@ def _detect_change(
         else:
             # *items* was parsed once during extraction; only the PREVIOUS
             # page's items need recovering from stored text (never re-fetched).
-            ld = diff_lists(items_from_normalized(prev_text), items or [])
+            ld = diff_lists(items_from_normalized(prev_text), items or [], mode=monitor.mode)
             ctx.summary = ld.summary
             ctx.diff_text = ld.as_text_diff()
     else:

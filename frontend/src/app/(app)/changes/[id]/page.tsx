@@ -21,9 +21,11 @@ import { api, brandAssetUrl, screenshotUrl } from "@/lib/api";
 import type {
 	ChangeEventDetail,
 	Monitor,
+	MonitorMode,
 	MonitorRun,
 	SnapshotAccess,
 } from "@/lib/types";
+import { LIST_DIFF_MODES } from "@/lib/modes";
 import { ensureWorkspace } from "@/lib/workspace";
 import { usePageTitle } from "@/lib/use-page-title";
 import { composeHeadline, parseSummaryParts } from "@/lib/summary";
@@ -43,6 +45,9 @@ export default function ChangeDetailPage() {
 	const [monitor, setMonitor] = useState<Monitor | null>(null);
 	const [aiSummariesEnabled, setAiSummariesEnabled] = useState(false);
 	const [assistantError, setAssistantError] = useState<string | null>(null);
+	const isListDiff = LIST_DIFF_MODES.includes(
+		(monitor?.mode ?? change?.mode) as MonitorMode,
+	);
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
@@ -350,6 +355,7 @@ export default function ChangeDetailPage() {
 						after={change.new_text}
 						unifiedDiff={change.diff}
 						baseUrl={monitor?.url}
+						stripBullets={isListDiff}
 					/>
 				</div>
 			) : null}

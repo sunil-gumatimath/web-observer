@@ -244,7 +244,7 @@ def should_alert(
         try:
             before = items_before if items_before is not None else items_from_normalized(prev_text)
             after = items_after if items_after is not None else items_from_normalized(new_text)
-            ld = diff_lists(before, after)
+            ld = diff_lists(before, after, mode=mode)
             if "list_min_added" in cfg:
                 need = int(cfg["list_min_added"])
                 if len(ld.added) < need:

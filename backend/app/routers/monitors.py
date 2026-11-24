@@ -75,7 +75,13 @@ from app.services.run_logs import (
 from app.services.selector_preview import PreviewError, fetch_selector_preview
 from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_url
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
-from app.services.structured import diff_lists, items_from_normalized
+from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS
+from app.services.structured import (
+    PREVIEW_TRUNCATION_MARKER,
+    diff_lists,
+    items_from_normalized,
+    strip_preview_marker,
+)
 from app.services.usage import QuotaExceeded, assert_can_run_check, usage_snapshot
 from app.workers.branding import capture_brand_preview as enqueue_brand_preview
 from app.workers.branding import enqueue_brand_enrichment_for
@@ -1699,12 +1705,12 @@ def get_change(
                         prev.id,
                     )
                     prev_text = prev.normalized_text or ""
-                    if prev_text and len(prev_text) >= 500:
+                    if prev_text and len(prev_text) >= SNAPSHOT_DB_PREVIEW_CHARS:
                         prev_truncated = True
-                        prev_text = prev_text + "\n…[preview truncated – full content unavailable]"
+                        prev_text = prev_text + "\n" + PREVIEW_TRUNCATION_MARKER
             else:
                 prev_text = prev.normalized_text or ""
-                if prev_text and len(prev_text) >= 500:
+                if prev_text and len(prev_text) >= SNAPSHOT_DB_PREVIEW_CHARS:
                     prev_truncated = True
 
     new_snap = db.get(Snapshot, change.new_snapshot_id)
@@ -1721,12 +1727,12 @@ def get_change(
                     new_snap.id,
                 )
                 new_text = new_snap.normalized_text or ""
-                if new_text and len(new_text) >= 500:
+                if new_text and len(new_text) >= SNAPSHOT_DB_PREVIEW_CHARS:
                     new_truncated = True
-                    new_text = new_text + "\n…[preview truncated – full content unavailable]"
+                    new_text = new_text + "\n" + PREVIEW_TRUNCATION_MARKER
         else:
             new_text = new_snap.normalized_text or ""
-            if new_text and len(new_text) >= 500:
+            if new_text and len(new_text) >= SNAPSHOT_DB_PREVIEW_CHARS:
                 new_truncated = True
 
     prev_text = _cap_text(prev_text)
@@ -1749,7 +1755,11 @@ def get_change(
             # List modes: render the +/- item diff (consistent with alert-time
             # rendering). A raw unified diff would double-prefix stored
             # "- item" lines as "- - item".
-            ld = diff_lists(items_from_normalized(prev_text), items_from_normalized(new_text))
+            ld = diff_lists(
+                items_from_normalized(strip_preview_marker(prev_text)),
+                items_from_normalized(strip_preview_marker(new_text)),
+                mode=mode,
+            )
             diff = ld.as_text_diff()
     elif prev_text is not None and new_text is not None:
         if prev_truncated or new_truncated:
