@@ -1,1 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 72" width="380" height="72" fill="none" role="img" aria-label="URL Monitor"><title>URL Monitor</title><g transform="translate(8 8) scale(.875)"><rect x="2" y="2" width="60" height="60" rx="17" fill="#111827"/><path d="M26 38l-3 3a8 8 0 0 1-11-11l8-8a8 8 0 0 1 11 0M38 26l3-3a8 8 0 0 1 11 11l-8 8a8 8 0 0 1-11 0M23 41l18-18" stroke="#34d399" stroke-width="3.5" stroke-linecap="round"/><circle cx="45" cy="19" r="3" fill="#f3f4f6"/></g><text x="66" y="34" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" letter-spacing="-1.1" fill="#111827" class="word">URL Monitor</text><text x="66" y="53" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="10" font-weight="500" letter-spacing=".35" fill="#6b7280" class="tag">Uptime · SSL · endpoint status</text><style>.word{fill:#111827}.tag{fill:#6b7280}@media(prefers-color-scheme:dark){.word{fill:#f9fafb}.tag{fill:#9ca3af}}</style></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 72" width="380" height="72" fill="none" role="img" aria-label="URL Monitor">
+  <title>URL Monitor</title>
+  <!-- Icon Mark -->
+  <g transform="translate(6, 6)">
+    <rect x="2" y="2" width="56" height="56" rx="15" fill="#0f1011" stroke="#23252a" stroke-width="1.5" class="icon-bg"/>
+    <rect x="2.5" y="2.5" width="55" height="55" rx="14.5" stroke="#ffffff" stroke-opacity="0.08"/>
+    <!-- Modernized Link Chain & Uptime Signal -->
+    <path d="M25 35 L21 39 A7.5 7.5 0 0 1 10.5 28.5 L16.5 22.5 A7.5 7.5 0 0 1 27 22.5" stroke="#828fff" stroke-width="4" stroke-linecap="round"/>
+    <path d="M31 21 L35 17 A7.5 7.5 0 0 1 45.5 27.5 L39.5 33.5 A7.5 7.5 0 0 1 29 33.5" stroke="#828fff" stroke-width="4" stroke-linecap="round"/>
+    <line x1="20" y1="36" x2="36" y2="20" stroke="#34d399" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="43" cy="13" r="2.5" fill="#34d399"/>
+  </g>
+  <!-- Breadcrumb Wordmark -->
+  <text x="76" y="38" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="25" font-weight="700" letter-spacing="-0.03em" class="word-primary">url</text>
+  <text x="114" y="38" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="21" font-weight="400" class="word-slash">/</text>
+  <text x="129" y="38" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="25" font-weight="400" letter-spacing="-0.03em" class="word-secondary">monitor</text>
+  <!-- Tagline -->
+  <text x="76" y="55" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="500" letter-spacing="0.04em" class="tag">UPTIME · SSL · ENDPOINT STATUS</text>
+  <style>
+    .icon-bg { fill: #0f1011; stroke: #23252a; }
+    .word-primary { fill: #0f172a; }
+    .word-slash { fill: #94a3b8; }
+    .word-secondary { fill: #475569; }
+    .tag { fill: #64748b; }
+    @media (prefers-color-scheme: dark) {
+      .icon-bg { fill: #0f1011; stroke: #23252a; }
+      .word-primary { fill: #f8fafc; }
+      .word-slash { fill: #62666d; }
+      .word-secondary { fill: #8a8f98; }
+      .tag { fill: #62666d; }
+    }
+  </style>
+</svg>

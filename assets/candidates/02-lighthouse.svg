@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Web Observer - Lighthouse Beacon">
+  <defs>
+    <linearGradient id="beam-l-solo" x1="100%" y1="0%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="beam-r-solo" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#34d399" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#080c14" stroke="rgba(255,255,255,0.12)" stroke-width="1.2"/>
+  <polygon points="28,21 8,11 8,25" fill="url(#beam-l-solo)"/>
+  <polygon points="36,21 56,11 56,25" fill="url(#beam-r-solo)"/>
+  <path d="M32 14 L28 19 H36 Z" fill="#38bdf8"/>
+  <circle cx="32" cy="21" r="3.5" fill="#ffffff"/>
+  <path d="M28 24 L26 47 H38 L36 24 Z" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <path d="M27.5 32 H36.5" stroke="#0ea5e9" stroke-width="2"/>
+  <path d="M26.8 40 H37.2" stroke="#10b981" stroke-width="2"/>
+  <path d="M20 50 C24 48, 28 52, 32 50 C36 48, 40 52, 44 50" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Web Observer - Origami W">
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#070a12" stroke="rgba(255,255,255,0.12)" stroke-width="1.2"/>
+  <path d="M15 22 L22 22 L28 44 L21 44 Z" fill="#0284c7"/>
+  <path d="M28 44 L32 30 L36 44 Z" fill="#10b981"/>
+  <path d="M32 18 L36 25 L28 25 Z" fill="#34d399"/>
+  <path d="M42 22 L49 22 L43 44 L36 44 Z" fill="#059669"/>
+</svg>

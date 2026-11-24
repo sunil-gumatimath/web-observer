@@ -26,6 +26,10 @@ export default devModeEnabled && !clerkKey
       return NextResponse.next();
     }
   : clerkMiddleware({
+      // This @clerk/nextjs version resolves the key from the options object (or
+      // Clerk's request context) and throws `Missing publishableKey` if neither
+      // has it — it does not fall back to process.env here. Pass it explicitly.
+      publishableKey: clerkKey,
       clockSkewInMs: Number.isFinite(clockSkewInMs) ? clockSkewInMs : 60_000,
     });
 
