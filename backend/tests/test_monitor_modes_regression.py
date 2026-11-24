@@ -1,8 +1,9 @@
 """Regression tests for the monitor-mode fixes.
 
-Covers the defects found while reviewing the eight monitor modes
+Covers the defects found while reviewing the ten monitor modes
 (``page_content``, ``site_links``, ``product_price``, ``list_items``,
-``json_field``, ``rss_feed``, ``readme``, ``visual``) end to end:
+``json_field``, ``rss_feed``, ``readme``, ``visual``, ``security_scan``,
+``html_meta``) end to end:
 
 1. ``rss_feed`` is a list-diff mode — its diff is item-level, not a
    double-prefixed unified diff.

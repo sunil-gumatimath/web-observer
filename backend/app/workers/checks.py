@@ -44,6 +44,7 @@ def fetch_page_with_provider_fallback(
     kwargs: dict = {
         "timeout_seconds": timeout_seconds,
         "max_response_bytes": max_response_bytes,
+        "mode": monitor_mode,
     }
     if respect_robots:
         kwargs["respect_robots"] = True
@@ -179,6 +180,7 @@ def run_http_check(run_id: str) -> None:
             timeout_seconds=monitor.timeout_seconds,
             max_response_bytes=monitor.max_response_bytes,
             respect_robots=True,
+            mode=monitor.mode,
         )
 
     execute_monitored_run(

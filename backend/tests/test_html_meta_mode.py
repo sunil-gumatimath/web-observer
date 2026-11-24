@@ -15,10 +15,16 @@ from app.models.entities import (
     MonitorMode,
 )
 from app.schemas import MonitorCreate, MonitorUpdate
-from app.services.fetcher import FetchResult
+from app.services.ai_summary import _system_prompt
+from app.services.fetcher import FetchResult, bot_challenge_message
 from app.services.html_meta import extract_html_meta_items
 from app.services.pipeline import extract_normalized
-from app.services.structured import diff_lists, items_from_normalized
+from app.services.structured import (
+    PREVIEW_TRUNCATION_MARKER,
+    diff_lists,
+    items_from_normalized,
+    strip_preview_marker,
+)
 
 HTML = """<!doctype html>
 <html lang="en">
@@ -173,7 +179,7 @@ def test_extract_html_meta_items_caps_alternates_and_keeps_key_facts() -> None:
     assert "title: T" in items
     assert any(item.startswith("script src:") for item in items)
     assert sum(item.startswith("alternate ") for item in items) <= 40
-    assert len(items) <= 120
+    assert len(items) <= 150
 
 
 def test_extract_html_meta_items_survives_deeply_nested_jsonld() -> None:
@@ -181,3 +187,111 @@ def test_extract_html_meta_items_survives_deeply_nested_jsonld() -> None:
     html = f'<html><head><script type="application/ld+json">{blob}</script></head></html>'
     items = extract_html_meta_items(html, "https://example.com/")
     assert "document: https://example.com/" in items
+
+
+def test_duplicate_meta_prefers_spec_correct_source_in_either_order() -> None:
+    url = "https://example.com/p"
+    fallback_first = (
+        '<meta name="og:title" content="Fallback"><meta property="og:title" content="Real A">'
+    )
+    spec_first = (
+        '<meta property="og:title" content="Real A"><meta name="og:title" content="Fallback">'
+    )
+    for html in (fallback_first, spec_first):
+        before = extract_html_meta_items(html, url)
+        after = extract_html_meta_items(html.replace("Real A", "Real B"), url)
+        assert "meta og:title: Real A" in before
+        assert "meta og:title: Real B" in after
+        assert not any("Fallback" in item for item in before + after)
+
+
+def test_charset_is_case_normalized_and_attribute_wins() -> None:
+    url = "https://example.com/p"
+    assert "meta charset: utf-8" in extract_html_meta_items('<meta charset="UTF-8">', url)
+    assert "meta charset: utf-8" in extract_html_meta_items(
+        '<meta charset="utf-8" content="text/html; charset=ISO-8859-1">', url
+    )
+    assert "meta charset: utf-8" in extract_html_meta_items(
+        '<meta name="charset" content="utf-8">', url
+    )
+
+
+def test_url_facts_are_length_capped() -> None:
+    html = '<script src="data:text/javascript;base64,' + "A" * 100000 + '"></script>'
+    items = extract_html_meta_items(html, "https://example.com/p")
+    # The URL value is capped at MAX_VALUE_CHARS; the "script src: " label
+    # adds its own prefix on top of that.
+    assert max(len(item.split(": ", 1)[1]) for item in items if ": " in item) <= 300
+
+
+def test_preview_marker_is_not_parsed_as_a_watched_item() -> None:
+    text = "- meta robots: index\n" + PREVIEW_TRUNCATION_MARKER
+    assert items_from_normalized(strip_preview_marker(text)) == ["meta robots: index"]
+
+
+def test_ai_summary_has_html_meta_mode_hint() -> None:
+    assert "Mode=html_meta" in _system_prompt(mode="html_meta", has_watch=False)
+
+
+def test_html_meta_diff_uses_full_fact_identity() -> None:
+    """A meta value ending in a markdown link must not collide with another fact."""
+    before = [
+        "meta description: [A](https://x/d)",
+        "meta og:description: [B](https://x/d)",
+    ]
+    after = [
+        "meta description: [Z](https://x/d)",
+        "meta og:description: [B](https://x/d)",
+    ]
+    diff = diff_lists(before, after, mode="html_meta")
+    assert diff.added == ["meta description: [Z](https://x/d)"]
+    assert diff.removed == ["meta description: [A](https://x/d)"]
+    assert diff.modified == []
+
+
+def test_fact_caps_do_not_evict_script_or_meta_facts() -> None:
+    metas = "".join(
+        f'<meta name="{key}" content="v{i}">'
+        for i, key in enumerate(
+            [
+                "author",
+                "application-name",
+                "color-scheme",
+                "description",
+                "generator",
+                "keywords",
+                "robots",
+                "theme-color",
+                "viewport",
+            ]
+        )
+    )
+    alternates = "".join(f'<link rel="alternate" hreflang="x{i}" href="/a{i}">' for i in range(130))
+    canonicals = "".join(
+        f'<link rel="canonical" href="https://example.com/c{i}">' for i in range(10)
+    )
+    jsonld = (
+        '<script type="application/ld+json">{"@graph":['
+        + ",".join(f'{{"@type":"T{i}"}}' for i in range(30))
+        + "]}</script>"
+    )
+    scripts = "".join(f'<script src="/s{i}.js"></script>' for i in range(50))
+    items = extract_html_meta_items(
+        f"<html><head><title>T</title>{metas}{alternates}{canonicals}{jsonld}{scripts}</head></html>",
+        "https://example.com/",
+    )
+    assert len(items) <= 150
+    assert "title: T" in items
+    assert sum(item.startswith("script src:") for item in items) == 50
+    assert sum(item.startswith("alternate ") for item in items) <= 40
+    assert sum(item.startswith("canonical:") for item in items) <= 5
+    assert sum(item.startswith("jsonld type:") for item in items) == 20
+    assert any(item.startswith("meta description:") for item in items)
+
+
+def test_bot_challenge_message_is_mode_aware() -> None:
+    plain = bot_challenge_message("https://example.com", "Cloudflare challenge", "html_meta")
+    assert "plain HTTP" in plain
+    assert "JavaScript rendering" not in plain
+    browser = bot_challenge_message("https://example.com", "Cloudflare challenge", "page_content")
+    assert "JavaScript rendering" in browser

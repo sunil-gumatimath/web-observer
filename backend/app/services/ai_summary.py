@@ -513,6 +513,10 @@ def _system_prompt(*, mode: str, has_watch: bool, has_semantic: bool = False) ->
             " Mode=json_field: diff is structured JSON or extracted field values. "
             "State exactly which JSON keys and values changed from previous to current."
         ),
+        "html_meta": (
+            " Mode=html_meta: diff is a set of 'key: value' HTML/meta facts "
+            "(+ added / - removed). Name the changed keys and their old/new values."
+        ),
         "visual": (
             " Mode=visual: diff indicates perceptual layout/screenshot changes. "
             "Describe the visual/structural divergence."

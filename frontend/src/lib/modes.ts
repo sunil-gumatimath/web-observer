@@ -6,8 +6,8 @@ import type { MonitorMode } from "@/lib/types";
  * The backend keeps the authoritative list in
  * `backend/app/models/entities.py` (`MonitorMode` / `MONITOR_MODES`). The
  * option list below mirrors it exactly — every mode must appear once, and the
- * `MONITOR_MODE_OPTIONS` array is what the create / edit / sitemap forms and
- * the list filter render.
+ * `MONITOR_MODE_OPTIONS` array is what the edit / sitemap forms and the list
+ * filter render. The create form keeps its own hardcoded option labels.
  */
 
 export type MonitorModeOption = {

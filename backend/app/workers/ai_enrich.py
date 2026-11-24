@@ -100,6 +100,7 @@ def enrich_change_event(change_event_id: str, diff_text: str | None = None) -> N
                     ld = diff_lists(
                         items_from_normalized(prev_text),
                         items_from_normalized(new_text),
+                        mode=monitor.mode,
                     )
                     diff_text = ld.as_text_diff()
                 else:

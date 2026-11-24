@@ -63,6 +63,13 @@ function lineLcs(a: string[], b: string[]) {
 	return ops;
 }
 
+function stripListBullets(text: string): string {
+	return text
+		.split("\n")
+		.map((line) => (line.startsWith("- ") ? line.slice(2) : line))
+		.join("\n");
+}
+
 function buildRows(before: string, after: string): Row[] {
 	const a = before.split("\n");
 	const b = after.split("\n");
@@ -211,23 +218,29 @@ export function GithubDiff({
 	after,
 	unifiedDiff,
 	baseUrl,
+	stripBullets = false,
 }: {
 	before: string | null;
 	after: string | null;
 	unifiedDiff?: string | null;
 	baseUrl?: string;
+	stripBullets?: boolean;
 }) {
 	const [view, setView] = useState<"split" | "unified">("split");
 	const [scope, setScope] = useState<"changes" | "full">("changes");
 	const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set());
 
+	// Item-diff modes store each fact as "- key: value". The gutter already
+	// carries the +/- marker, so strip the stored bullet before recomputing rows.
+	const beforeText = stripBullets ? stripListBullets(before || "") : before || "";
+	const afterText = stripBullets ? stripListBullets(after || "") : after || "";
 	const tooLarge =
-		(before?.split("\n").length ?? 0) > MAX_LINES ||
-		(after?.split("\n").length ?? 0) > MAX_LINES;
+		beforeText.split("\n").length > MAX_LINES ||
+		afterText.split("\n").length > MAX_LINES;
 
 	const rows = useMemo(
-		() => (tooLarge ? [] : buildRows(before || "", after || "")),
-		[before, after, tooLarge],
+		() => (tooLarge ? [] : buildRows(beforeText, afterText)),
+		[beforeText, afterText, tooLarge],
 	);
 
 	const hasContent = Boolean(before || after);

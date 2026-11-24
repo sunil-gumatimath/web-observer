@@ -200,6 +200,10 @@ Watches the **code-level** facts that `page_content` deliberately ignores.
   ignored by design.
 - Fetched over plain HTTP; `js_required` is rejected. Use it for SEO checks,
   tracking-script changes and compliance pages.
+- Facts are bounded: at most 5 canonicals, 40 hreflang alternates, 20 JSON-LD
+  types and 50 script URLs, with a total cap of 150 facts. The per-kind caps
+  are applied before the total cap so a busy page cannot silently evict
+  script or meta facts.
 
 ---
 
@@ -250,6 +254,7 @@ If a check fails, open the monitor's run history to see the error code before de
 | A repo's docs | `readme` |
 | A layout or image change | `visual` |
 | A site's security posture | `security_scan` |
+| Code-level HTML/meta changes | `html_meta` |
 
 ## Related
 
