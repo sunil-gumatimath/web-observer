@@ -192,12 +192,10 @@ def test_extract_html_meta_items_survives_deeply_nested_jsonld() -> None:
 def test_duplicate_meta_prefers_spec_correct_source_in_either_order() -> None:
     url = "https://example.com/p"
     fallback_first = (
-        '<meta name="og:title" content="Fallback">'
-        '<meta property="og:title" content="Real A">'
+        '<meta name="og:title" content="Fallback"><meta property="og:title" content="Real A">'
     )
     spec_first = (
-        '<meta property="og:title" content="Real A">'
-        '<meta name="og:title" content="Fallback">'
+        '<meta property="og:title" content="Real A"><meta name="og:title" content="Fallback">'
     )
     for html in (fallback_first, spec_first):
         before = extract_html_meta_items(html, url)
@@ -256,21 +254,26 @@ def test_fact_caps_do_not_evict_script_or_meta_facts() -> None:
         f'<meta name="{key}" content="v{i}">'
         for i, key in enumerate(
             [
-                "author", "application-name", "color-scheme", "description",
-                "generator", "keywords", "robots", "theme-color", "viewport",
+                "author",
+                "application-name",
+                "color-scheme",
+                "description",
+                "generator",
+                "keywords",
+                "robots",
+                "theme-color",
+                "viewport",
             ]
         )
     )
-    alternates = "".join(
-        f'<link rel="alternate" hreflang="x{i}" href="/a{i}">' for i in range(130)
-    )
+    alternates = "".join(f'<link rel="alternate" hreflang="x{i}" href="/a{i}">' for i in range(130))
     canonicals = "".join(
         f'<link rel="canonical" href="https://example.com/c{i}">' for i in range(10)
     )
     jsonld = (
         '<script type="application/ld+json">{"@graph":['
         + ",".join(f'{{"@type":"T{i}"}}' for i in range(30))
-        + ']}</script>'
+        + "]}</script>"
     )
     scripts = "".join(f'<script src="/s{i}.js"></script>' for i in range(50))
     items = extract_html_meta_items(

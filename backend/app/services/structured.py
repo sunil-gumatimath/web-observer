@@ -192,9 +192,7 @@ def strip_preview_marker(text: str) -> str:
     when the full snapshot text is unavailable; it is never a watched fact.
     """
     return "\n".join(
-        line
-        for line in (text or "").splitlines()
-        if line.strip() != PREVIEW_TRUNCATION_MARKER
+        line for line in (text or "").splitlines() if line.strip() != PREVIEW_TRUNCATION_MARKER
     )
 
 
@@ -211,9 +209,7 @@ def _dedupe_keep_order(items: Iterable[str]) -> list[str]:
 LINK_IDENTITY_MODES = frozenset({"list_items", "rss_feed"})
 
 
-def diff_lists(
-    before: list[str], after: list[str], *, mode: str | None = None
-) -> ListDiff:
+def diff_lists(before: list[str], after: list[str], *, mode: str | None = None) -> ListDiff:
     """Set-based list diff that preserves on-page order.
 
     Added items appear in their ``after`` order and removed items in their
