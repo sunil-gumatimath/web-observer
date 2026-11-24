@@ -67,6 +67,7 @@ from app.services.audit import write_audit
 from app.services.branding import fetch_brand_info, store_brand_assets
 from app.services.bulk_import import import_monitors
 from app.services.diffing import unified_diff
+from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS
 from app.services.run_logs import (
     build_run_log_filters,
     change_ids_for_runs,
@@ -75,7 +76,6 @@ from app.services.run_logs import (
 from app.services.selector_preview import PreviewError, fetch_selector_preview
 from app.services.sitemap import SitemapError, discover_sitemap_urls, name_from_url
 from app.services.storage import StorageError, delete_object, get_bytes, presigned_get_url
-from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS
 from app.services.structured import (
     PREVIEW_TRUNCATION_MARKER,
     diff_lists,

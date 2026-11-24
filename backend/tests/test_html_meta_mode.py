@@ -15,8 +15,8 @@ from app.models.entities import (
     MonitorMode,
 )
 from app.schemas import MonitorCreate, MonitorUpdate
-from app.services.fetcher import FetchResult, bot_challenge_message
 from app.services.ai_summary import _system_prompt
+from app.services.fetcher import FetchResult, bot_challenge_message
 from app.services.html_meta import extract_html_meta_items
 from app.services.pipeline import extract_normalized
 from app.services.structured import (
