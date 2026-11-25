@@ -447,7 +447,28 @@ def redeem_invite(
         db.rollback()
         raise HTTPException(status_code=410, detail="Invite link has expired")
 
-    workspace = db.get(Workspace, row.workspace_id)
+    # A concurrent redeem by this user can commit a membership while this
+    # request waits on the invite row lock. Check again after the claim.
+    existing = db.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == row.workspace_id,
+            WorkspaceMember.user_id == principal.user.id,
+        )
+    )
+    if existing is not None:
+        db.rollback()
+        workspace = db.get(Workspace, row.workspace_id)
+        return WorkspaceInviteRedeemOut(
+            workspace_id=row.workspace_id,
+            workspace_name=workspace.name if workspace else "the workspace",
+            role=row.role,
+            message="You've joined the workspace.",
+        )
+
+    # Lock the workspace row so concurrent redemptions serialize the seat count.
+    workspace = db.scalar(
+        select(Workspace).where(Workspace.id == row.workspace_id).with_for_update()
+    )
     if workspace is not None:
         from app.services.plans import assert_can_add_member
         from app.services.usage import QuotaExceeded

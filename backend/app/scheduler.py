@@ -190,7 +190,7 @@ def release_expired_logic() -> None:
         db.commit()
 
 
-def _enqueue_batch(jobs: list[tuple[UUID, bool]]) -> None:
+def _enqueue_batch(jobs: list[tuple[uuid.UUID, bool]]) -> None:
     """Best-effort enqueue per job so one broker failure does not strand the batch."""
     for run_id, needs_browser in jobs:
         try:

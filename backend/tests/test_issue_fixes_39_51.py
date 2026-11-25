@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -54,6 +54,8 @@ def test_redeem_invite_rejects_when_workspace_at_seat_capacity() -> None:
             s = str(stmt)
             if "workspace_invites" in s:
                 return invite
+            if "FROM workspaces" in s:
+                return ws
             if "count(" in s.lower():
                 return 5
             return None
@@ -116,13 +118,16 @@ def test_notification_channel_test_checks_and_increments_quota(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from starlette.requests import Request
+
     from app.routers import notifications
     from app.services import usage
 
     ws_id = uuid.uuid4()
     ch_id = uuid.uuid4()
     ws = SimpleNamespace(id=ws_id, plan="free")
-    channel = SimpleNamespace(id=ch_id, workspace_id=ws_id, type="slack", address="https://hooks.slack.com/x")
+    channel = SimpleNamespace(
+        id=ch_id, workspace_id=ws_id, type="slack", address="https://hooks.slack.com/x"
+    )
 
     class _DB:
         def __init__(self) -> None:
@@ -199,7 +204,15 @@ def test_webhook_retry_rejects_processing_and_preserves_attempts() -> None:
 def test_csv_cell_neutralizes_formula_prefixes() -> None:
     from app.routers.enterprise import _csv_cell
 
-    for dangerous in ("=HYPERLINK(\"http://evil\",\"x\")", "+cmd", "-1+1", "@SUM(1,2)", "\t=1", "\r=1", "\n=1"):
+    for dangerous in (
+        '=HYPERLINK("http://evil","x")',
+        "+cmd",
+        "-1+1",
+        "@SUM(1,2)",
+        "\t=1",
+        "\r=1",
+        "\n=1",
+    ):
         escaped = _csv_cell(dangerous)
         assert isinstance(escaped, str)
         assert escaped.startswith("'")

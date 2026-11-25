@@ -99,19 +99,19 @@ def upsert_clerk_user(db: Session, *, clerk_user_id: str, email: str) -> User:
                 status_code=401,
                 detail="This email is already linked to a different account.",
             )
-        if by_email is not None:
-            by_email.clerk_user_id = clerk_user_id
-            user = by_email
-        else:
-            user = User(clerk_user_id=clerk_user_id, email=email)
-            db.add(user)
         try:
             with db.begin_nested():
+                if by_email is not None:
+                    by_email.clerk_user_id = clerk_user_id
+                    user = by_email
+                else:
+                    user = User(clerk_user_id=clerk_user_id, email=email)
+                    db.add(user)
                 db.flush()
         except IntegrityError:
             # Concurrent first-login request (e.g. /me + background sync) won
-            # the insert race; re-read the committed/visible row instead of 500.
-            db.expunge(user)
+            # the insert race; savepoint rollback already reverted/expunged
+            # the staged change so we can safely re-read the winning row.
             existing = db.scalar(select(User).where(User.clerk_user_id == clerk_user_id))
             if existing is not None:
                 return existing

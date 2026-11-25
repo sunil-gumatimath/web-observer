@@ -608,7 +608,7 @@ def retry_webhook_delivery(
             "retried": False,
             "message": "Already sent",
         }
-    if delivery.status != "failed":
+    if delivery.status not in ("failed", "pending"):
         return {
             "id": str(delivery.id),
             "status": delivery.status,
@@ -623,9 +623,9 @@ def retry_webhook_delivery(
         .where(
             WebhookDelivery.id == delivery_id,
             WebhookDelivery.workspace_id == workspace_id,
-            WebhookDelivery.status == "failed",
+            WebhookDelivery.status.in_(("failed", "pending")),
         )
-        .values(status="pending", last_error=None, next_attempt_at=None)
+        .values(status="pending", last_error=None, next_attempt_at=None, attempts=0)
     )
     if claimed.rowcount != 1:  # type: ignore[attr-defined]
         db.rollback()
@@ -633,7 +633,7 @@ def retry_webhook_delivery(
             "id": str(delivery.id),
             "status": delivery.status,
             "retried": False,
-            "message": "Delivery is no longer in failed state",
+            "message": "Delivery is no longer retryable",
         }
     db.commit()
     write_audit(

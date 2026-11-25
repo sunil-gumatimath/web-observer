@@ -95,6 +95,7 @@ def test_delete_monitor_includes_screenshot_keys(monkeypatch: pytest.MonkeyPatch
 
 def test_bulk_delete_includes_brand_and_screenshot_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     from starlette.requests import Request
+
     from app.routers import monitors
 
     mid = uuid.uuid4()
@@ -153,6 +154,7 @@ def test_rate_limit_middleware_populates_principal(monkeypatch: pytest.MonkeyPat
     from slowapi import Limiter, _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
     from slowapi.middleware import SlowAPIMiddleware
+
     from app import auth, main, rate_limit
 
     monkeypatch.setattr(auth, "clerk_configured", lambda s: True)
@@ -187,7 +189,9 @@ def test_rate_limit_middleware_populates_principal(monkeypatch: pytest.MonkeyPat
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("field", ["timezone", "mode", "enabled", "js_required", "screenshots_enabled"])
+@pytest.mark.parametrize(
+    "field", ["timezone", "mode", "enabled", "js_required", "screenshots_enabled"]
+)
 def test_patch_monitor_rejects_explicit_null_for_non_nullable_fields(
     field: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -241,7 +245,9 @@ def test_patch_monitor_rejects_explicit_null_for_non_nullable_fields(
 def test_bulk_import_rejects_excessive_ignore_regexes(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services import bulk_import
 
-    monkeypatch.setattr(bulk_import, "get_plan", lambda ws: SimpleNamespace(name="free", min_interval_minutes=5))
+    monkeypatch.setattr(
+        bulk_import, "get_plan", lambda ws: SimpleNamespace(name="free", min_interval_minutes=5)
+    )
     monkeypatch.setattr(bulk_import, "validate_url_for_fetch", lambda *a, **k: None)
 
     class _Scalars:
@@ -387,6 +393,7 @@ def test_list_user_workspaces_scopes_to_api_key_workspace() -> None:
 
 def test_upsert_clerk_user_recovers_from_integrity_error() -> None:
     from contextlib import contextmanager
+
     from app.auth import upsert_clerk_user
 
     winner = SimpleNamespace(id=uuid.uuid4(), clerk_user_id="clerk_1", email="a@example.com")
@@ -438,7 +445,9 @@ def test_reap_stuck_runs_frees_idempotency_key(monkeypatch: pytest.MonkeyPatch) 
         started_at=None,
         idempotency_key=orig_key,
     )
-    mon = SimpleNamespace(id=mon_id, next_run_at=now + timedelta(hours=1), js_required=False, mode="page_content")
+    mon = SimpleNamespace(
+        id=mon_id, next_run_at=now + timedelta(hours=1), js_required=False, mode="page_content"
+    )
     captured_values: dict = {}
 
     class _Scalars:
@@ -483,7 +492,9 @@ def test_run_guard_enqueues_outbox_for_domain_blocked_and_ssrf(
     run_id = uuid.uuid4()
     mon_id = uuid.uuid4()
     run = SimpleNamespace(id=run_id, monitor_id=mon_id, status="queued")
-    mon = SimpleNamespace(id=mon_id, url="https://example.com", enabled=True, workspace_id=uuid.uuid4())
+    mon = SimpleNamespace(
+        id=mon_id, url="https://example.com", enabled=True, workspace_id=uuid.uuid4()
+    )
     enqueued: list = []
 
     class _DB:
@@ -563,7 +574,9 @@ def test_provider_fallback_triggers_on_plain_http_blocked_status(
     from app.workers.checks import fetch_page_with_provider_fallback
 
     monkeypatch.setattr(context_dev, "is_configured", lambda: True)
-    monkeypatch.setattr(context_dev, "scrape_markdown", lambda url, timeout_seconds=30: "# Fallback")
+    monkeypatch.setattr(
+        context_dev, "scrape_markdown", lambda url, timeout_seconds=30: "# Fallback"
+    )
 
     def fake_primary(url, **kwargs):
         return FetchResult(

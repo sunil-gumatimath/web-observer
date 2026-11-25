@@ -1678,12 +1678,9 @@ def change_activity(
     start_dt = datetime(start_day.year, start_day.month, start_day.day, tzinfo=UTC)
 
     day_expr = func.date(ChangeEvent.created_at)
-    q = (
-        select(day_expr, ChangeEvent.change_category, func.count())
-        .where(
-            ChangeEvent.workspace_id == workspace_id,
-            ChangeEvent.created_at >= start_dt,
-        )
+    q = select(day_expr, ChangeEvent.change_category, func.count()).where(
+        ChangeEvent.workspace_id == workspace_id,
+        ChangeEvent.created_at >= start_dt,
     )
     if not include_noise:
         q = q.where(ChangeEvent.is_noise.is_(False))
