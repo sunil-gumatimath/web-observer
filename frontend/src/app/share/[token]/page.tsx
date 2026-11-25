@@ -46,8 +46,8 @@ export default function PublicSharePage() {
   const brand = data.monitor.brand;
   const previewCandidates = [
     brandHeroUrl(brand),
-    brand?.hero_url || null,
     livePreviewUrl(brand),
+    brand?.hero_url || null,
   ].filter((u, idx, arr): u is string => Boolean(u) && arr.indexOf(u) === idx);
   const previewSrc = previewCandidates.find((u) => !failedUrls[u]) ?? null;
 

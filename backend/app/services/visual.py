@@ -131,6 +131,8 @@ class VisualCapture:
     # DCT perceptual hash (hex). Empty only for legacy captures produced
     # before pHash existed; the pipeline falls back to the aHash then.
     phash: str = ""
+    html: str | None = None
+    final_url: str | None = None
 
 
 _DEFAULT_BROWSER_UA = (
@@ -173,12 +175,18 @@ def _launch_chromium(p, validated):  # type: ignore[no-untyped-def]
         raise
 
 
+_PUBLIC_ASSET_TYPES = {"stylesheet", "image", "font"}
+_MAX_PUBLIC_ASSETS_PER_CAPTURE = 40
+
+
 def _capture_screenshot_inline(
     url: str,
     *,
     timeout_seconds: int = 45,
     full_page: bool = True,
     clip_selector: str | None = None,
+    allow_public_assets: bool = False,
+    extract_html: bool = False,
 ) -> VisualCapture:
     """In-process Playwright capture. Prefer capture_screenshot() which isolates via subprocess."""
     validated = validate_url_for_fetch(url, resolve_dns=True)
@@ -190,6 +198,8 @@ def _capture_screenshot_inline(
 
     timeout_ms = max(10_000, timeout_seconds * 1000)
     png: bytes
+    captured_html: str | None = None
+    final_nav_url: str | None = None
     try:
         with sync_playwright() as p:
             browser = _launch_chromium(p, validated)
@@ -205,15 +215,46 @@ def _capture_screenshot_inline(
                     Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
                     window.navigator.chrome = { runtime: {} };
                 """)
+                asset_cache: dict[str, tuple[int, bytes, str]] = {}
+                asset_count = [0]
 
                 def _route_handler(route, request):  # type: ignore[no-untyped-def]
+                    req_url = request.url
+                    if req_url.startswith(("data:", "blob:", "about:")):
+                        return route.continue_()
                     try:
-                        if not is_same_browser_host(request.url, validated.hostname):
-                            return route.abort()
-                        validate_url_for_fetch(request.url, resolve_dns=True)
+                        if is_same_browser_host(req_url, validated.hostname):
+                            validate_url_for_fetch(req_url, resolve_dns=True)
+                            return route.continue_()
+                        if (
+                            allow_public_assets
+                            and request.resource_type in _PUBLIC_ASSET_TYPES
+                            and req_url.startswith(("http://", "https://"))
+                        ):
+                            cached = asset_cache.get(req_url)
+                            if cached is not None:
+                                status, body, ctype = cached
+                                return route.fulfill(status=status, body=body, content_type=ctype)
+                            if asset_count[0] >= _MAX_PUBLIC_ASSETS_PER_CAPTURE:
+                                return route.abort()
+                            asset_count[0] += 1
+                            from app.services.fetcher import fetch_binary
+
+                            res = fetch_binary(
+                                req_url,
+                                timeout_seconds=4,
+                                max_response_bytes=2_000_000,
+                            )
+                            ctype = res.content_type or "application/octet-stream"
+                            asset_cache[req_url] = (res.status_code, res.content, ctype)
+                            return route.fulfill(
+                                status=res.status_code,
+                                body=res.content,
+                                content_type=ctype,
+                            )
+                        return route.abort()
                     except Exception:
                         return route.abort()
-                    return route.continue_()
 
                 page.route("**/*", _route_handler)
                 page.goto(validated.url, wait_until="domcontentloaded", timeout=timeout_ms)
@@ -227,13 +268,17 @@ def _capture_screenshot_inline(
                 # Sites with long-lived connections never reach networkidle.
                 page.wait_for_timeout(1500)
 
-                challenge = detect_bot_challenge(status_code=None, text=page.content())
+                page_html = page.content()
+                challenge = detect_bot_challenge(status_code=None, text=page_html)
                 if challenge:
                     raise FetchError(
                         "bot_challenge",
                         f"Blocked while capturing {validated.url}: {challenge}. "
                         "The site requires a real browser session.",
                     )
+                if extract_html:
+                    captured_html = page_html[:256_000]
+                    final_nav_url = page.url
 
                 if clip_selector:
                     loc = page.locator(clip_selector).first
@@ -282,7 +327,7 @@ def _capture_screenshot_inline(
             ) from exc
         raise FetchError("internal_error", f"Screenshot failed: {exc}") from exc
 
-    return _capture_from_png(png)
+    return _capture_from_png(png, html=captured_html, final_url=final_nav_url)
 
 
 def _capture_screenshot_subprocess(
@@ -291,6 +336,8 @@ def _capture_screenshot_subprocess(
     timeout_seconds: int = 45,
     full_page: bool = True,
     clip_selector: str | None = None,
+    allow_public_assets: bool = False,
+    extract_html: bool = False,
 ) -> VisualCapture:
     """Run capture in a fresh Python process (avoids Dramatiq/Windows FD issues)."""
     # SSRF before spawning
@@ -316,6 +363,10 @@ def _capture_screenshot_subprocess(
         ]
         if clip_selector:
             cmd.extend(["--clip-selector", clip_selector])
+        if allow_public_assets:
+            cmd.append("--allow-public-assets")
+        if extract_html:
+            cmd.append("--extract-html")
 
         env = os.environ.copy()
         env["WEB_OBSERVER_PLAYWRIGHT_CHILD"] = "1"
@@ -378,6 +429,8 @@ def _capture_screenshot_subprocess(
             width=width,
             height=height,
             phash=str(meta.get("phash") or ""),
+            html=meta.get("html") if isinstance(meta.get("html"), str) else None,
+            final_url=meta.get("final_url") if isinstance(meta.get("final_url"), str) else None,
         )
 
 
@@ -387,6 +440,8 @@ def capture_screenshot(
     timeout_seconds: int = 45,
     full_page: bool = True,
     clip_selector: str | None = None,
+    allow_public_assets: bool = False,
+    extract_html: bool = False,
 ) -> VisualCapture:
     """Capture page screenshot via Playwright.
 
@@ -412,16 +467,25 @@ def capture_screenshot(
             timeout_seconds=timeout_seconds,
             full_page=full_page,
             clip_selector=clip_selector,
+            allow_public_assets=allow_public_assets,
+            extract_html=extract_html,
         )
     return _capture_screenshot_subprocess(
         url,
         timeout_seconds=timeout_seconds,
         full_page=full_page,
         clip_selector=clip_selector,
+        allow_public_assets=allow_public_assets,
+        extract_html=extract_html,
     )
 
 
-def _capture_from_png(png: bytes) -> VisualCapture:
+def _capture_from_png(
+    png: bytes,
+    *,
+    html: str | None = None,
+    final_url: str | None = None,
+) -> VisualCapture:
     """Build a VisualCapture with hashes from already-captured PNG bytes."""
     ahash = average_hash(png)
     sha = hashlib.sha256(png).hexdigest()
@@ -445,6 +509,8 @@ def _capture_from_png(png: bytes) -> VisualCapture:
         width=width,
         height=height,
         phash=phash,
+        html=html,
+        final_url=final_url,
     )
 
 
@@ -454,6 +520,8 @@ def capture_with_provider_fallback(
     timeout_seconds: int = 45,
     full_page: bool = True,
     clip_selector: str | None = None,
+    allow_public_assets: bool = False,
+    extract_html: bool = False,
 ) -> VisualCapture:
     """Capture locally via Playwright, falling back to Context.dev on failure."""
     try:
@@ -462,6 +530,8 @@ def capture_with_provider_fallback(
             timeout_seconds=timeout_seconds,
             full_page=full_page,
             clip_selector=clip_selector,
+            allow_public_assets=allow_public_assets,
+            extract_html=extract_html,
         )
     except FetchError as exc:
         from app.services import context_dev

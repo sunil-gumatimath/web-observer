@@ -704,6 +704,8 @@ def monitor_brand_info(
         description=meta.description,
         logo_url=next(iter(meta.logo_candidates), None),
         hero_url=next(iter(meta.hero_candidates), None),
+        logo_candidates=list(meta.logo_candidates),
+        hero_candidates=list(meta.hero_candidates),
         assets_available=True,
     )
 

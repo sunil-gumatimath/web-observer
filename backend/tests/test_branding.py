@@ -427,3 +427,170 @@ def test_brand_asset_keys_deduplicates_and_handles_none():
             "title": "Ignore me",
         }
     ) == ["brand-assets/1/logo.png", "brand-assets/1/preview.png"]
+
+
+def _png_bytes(width: int, height: int) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), (30, 80, 160)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_store_brand_assets_omits_hero_url_when_download_fails(monkeypatch):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    monkeypatch.setattr(branding, "_download_image", lambda *_a, **_k: None)
+    monitor = SimpleNamespace(id=uuid4(), brand=None)
+    brand = branding.store_brand_assets(
+        monitor,
+        branding.BrandMeta(
+            title="Wikipedia",
+            hero_candidates=["https://upload.wikimedia.org/403.png"],
+        ),
+    )
+    assert brand["hero_path"] is None
+    assert brand["hero_url"] is None
+
+
+def test_store_brand_assets_rejects_tiny_icon_hero_and_keeps_wide_hero(monkeypatch):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    tiny_png = _png_bytes(200, 200)
+    wide_png = _png_bytes(1200, 630)
+    monkeypatch.setattr(branding, "put_bytes", lambda **_k: None)
+
+    monkeypatch.setattr(
+        branding,
+        "_download_image",
+        lambda u, **_k: tiny_png if "200" in u else wide_png,
+    )
+
+    m_tiny = SimpleNamespace(id=uuid4(), brand=None)
+    brand_tiny = branding.store_brand_assets(
+        m_tiny,
+        branding.BrandMeta(title="Python", hero_candidates=["https://example.com/200.png"]),
+    )
+    assert brand_tiny["hero_path"] is None
+    assert brand_tiny["hero_url"] is None
+
+    m_wide = SimpleNamespace(id=uuid4(), brand=None)
+    brand_wide = branding.store_brand_assets(
+        m_wide,
+        branding.BrandMeta(
+            title="Mixed",
+            hero_candidates=["https://example.com/200.png", "https://example.com/banner.png"],
+        ),
+    )
+    assert brand_wide["hero_path"] == f"brand-assets/{m_wide.id}/hero.png"
+    assert brand_wide["hero_url"] == "https://example.com/banner.png"
+
+
+def test_download_image_rejects_non_image_and_unavatar_placeholder(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        branding,
+        "fetch_binary",
+        lambda *_a, **_k: SimpleNamespace(
+            status_code=200,
+            content=b'{"error":"not found"}',
+            content_type="application/json",
+        ),
+    )
+    assert branding._download_image("https://example.com/bad.png") is None
+
+    unavatar_svg = b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><title>unavatar</title></svg>'
+    monkeypatch.setattr(
+        branding,
+        "fetch_binary",
+        lambda *_a, **_k: SimpleNamespace(
+            status_code=200,
+            content=unavatar_svg,
+            content_type="image/svg+xml",
+        ),
+    )
+    assert branding._download_image("https://unavatar.io/api.github.com") is None
+
+
+def test_logo_fallback_candidates_include_parent_domain_for_api_subdomains():
+    candidates = branding._logo_fallback_candidates("https://api.github.com/repos/python/cpython")
+    assert "https://www.google.com/s2/favicons?domain=api.github.com&sz=256" in candidates
+    assert "https://www.google.com/s2/favicons?domain=github.com&sz=256" in candidates
+
+
+def test_resolve_brand_preview_target_allows_timeout_and_503_but_raises_ssrf(monkeypatch):
+    from app.services.fetcher import FetchError, FetchResult
+
+    monkeypatch.setattr(
+        branding,
+        "fetch_url",
+        lambda *_a, **_k: (_ for _ in ()).throw(FetchError("read_timeout", "timed out")),
+    )
+    assert (
+        branding.resolve_brand_preview_target("https://slow.example.com/", mode="page_content")
+        == "https://slow.example.com/"
+    )
+
+    monkeypatch.setattr(
+        branding,
+        "fetch_url",
+        lambda url, **_k: FetchResult(
+            final_url=url,
+            status_code=503,
+            content=b"Service Unavailable",
+            text="Service Unavailable",
+            content_type="text/html",
+            latency_ms=5,
+        ),
+    )
+    assert (
+        branding.resolve_brand_preview_target("https://waf.example.com/", mode="page_content")
+        == "https://waf.example.com/"
+    )
+
+    monkeypatch.setattr(
+        branding,
+        "fetch_url",
+        lambda *_a, **_k: (_ for _ in ()).throw(FetchError("blocked_address", "blocked")),
+    )
+    try:
+        branding.resolve_brand_preview_target("http://127.0.0.1/", mode="page_content")
+        raise AssertionError("expected FetchError")
+    except FetchError as exc:
+        assert exc.code == "blocked_address"
+
+
+def test_store_live_preview_with_meta_enables_public_assets_and_parses_html(monkeypatch):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.services import visual
+
+    calls: dict = {}
+
+    def fake_capture(url, **kwargs):
+        calls["capture"] = (url, kwargs)
+        return SimpleNamespace(
+            png_bytes=b"png-bytes",
+            html="<html><head><title>Rendered SPA</title><meta name='description' content='SPA desc'></head></html>",
+            final_url="https://app.example.com/",
+        )
+
+    monkeypatch.setattr(branding, "resolve_brand_preview_target", lambda url, **_k: url)
+    monkeypatch.setattr(visual, "capture_with_provider_fallback", fake_capture)
+    monkeypatch.setattr(branding, "put_bytes", lambda **_k: None)
+
+    key, rendered_meta = branding.store_live_preview_with_meta(
+        uuid4(), "https://app.example.com/"
+    )
+    assert key is not None
+    assert calls["capture"][1]["allow_public_assets"] is True
+    assert calls["capture"][1]["extract_html"] is True
+    assert rendered_meta is not None
+    assert rendered_meta.title == "Rendered SPA"
+    assert rendered_meta.description == "SPA desc"

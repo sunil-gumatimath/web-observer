@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  brandHeroUrl,
   brandPreviewKind,
   brandPreviewUrl,
   hasBrandData,
   isLivePreviewStale,
+  needsBrandRefresh,
   normalizeBrandLookupUrl,
+  sanitizeExternalBrandUrl,
 } from "@/lib/brand";
 import type { MonitorBrand } from "@/lib/types";
 
@@ -99,5 +102,50 @@ describe("brandPreviewUrl", () => {
       "https://example.com/pricing",
     );
     expect(normalizeBrandLookupUrl("abc", "page_content")).toBeNull();
+  });
+
+  it("prefers live preview over un-rehosted hero_url when hero_path is missing", () => {
+    const brand: MonitorBrand = {
+      hero_path: null,
+      hero_url: "https://upload.wikimedia.org/403.png",
+      preview_path: "brand-assets/w/preview.png",
+      preview_at: "2026-01-01T00:00:00Z",
+    };
+    expect(brandHeroUrl(brand)).toBeNull();
+    expect(brandPreviewUrl(brand)).toContain("brand-assets/w/preview.png");
+    expect(brandPreviewKind(brand)).toBe("live");
+  });
+
+  it("filters defunct Clearbit logo URLs and flags stale brands for refresh", () => {
+    expect(sanitizeExternalBrandUrl("https://logo.clearbit.com/example.com?size=256")).toBeNull();
+    expect(sanitizeExternalBrandUrl("https://example.com/favicon.ico")).toBe(
+      "https://example.com/favicon.ico",
+    );
+
+    expect(
+      needsBrandRefresh({
+        title: "Example Domain",
+        logo_url: "https://logo.clearbit.com/example.com?size=256",
+        logo_path: null,
+      }),
+    ).toBe(true);
+    expect(
+      needsBrandRefresh({
+        title: "Wikipedia",
+        hero_url: "https://upload.wikimedia.org/403.png",
+        hero_path: null,
+      }),
+    ).toBe(true);
+    expect(
+      needsBrandRefresh({ logo_path: "brand-assets/a/logo.png" }, "site_links"),
+    ).toBe(true);
+    expect(
+      needsBrandRefresh({
+        title: "Healthy",
+        logo_path: "brand-assets/a/logo.png",
+        hero_path: "brand-assets/a/hero.png",
+        hero_url: "https://example.com/hero.png",
+      }),
+    ).toBe(false);
   });
 });

@@ -14,6 +14,7 @@ import {
 	Textarea,
 } from "@/components/ui";
 import { ThresholdEditor } from "@/components/threshold-editor";
+import { BrandLogo } from "@/components/brand-logo";
 import { alertConfigPatch } from "@/lib/alert-config";
 import { api } from "@/lib/api";
 import { brandLogoUrl, brandPreviewUrl, normalizeBrandLookupUrl } from "@/lib/brand";
@@ -83,9 +84,10 @@ export default function EditMonitorPage() {
 		description?: string | null;
 		logo_url?: string | null;
 		hero_url?: string | null;
+		logo_candidates?: string[];
+		hero_candidates?: string[];
 	} | null>(null);
-	const [brandLogoFailed, setBrandLogoFailed] = useState(false);
-	const [brandHeroFailed, setBrandHeroFailed] = useState(false);
+	const [brandHeroIdx, setBrandHeroIdx] = useState(0);
 	const [brandLoading, setBrandLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -123,8 +125,7 @@ export default function EditMonitorPage() {
 				setAlertConfig((m.alert_config as Record<string, unknown> | null) ?? null);
 				if (m.brand) {
 					skipInitialLookupRef.current = { url: m.url, mode: loadedMode };
-					setBrandLogoFailed(false);
-					setBrandHeroFailed(false);
+					setBrandHeroIdx(0);
 					setBrand({
 						title: m.brand.title,
 						description: m.brand.description,
@@ -147,6 +148,17 @@ export default function EditMonitorPage() {
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
 		const candidate = normalizeBrandLookupUrl(rawUrl ?? url, mode);
 		if (!candidate) return;
+		const orig = monitor ? normalizeBrandLookupUrl(monitor.url, mode) : null;
+		if (orig && candidate === orig && monitor?.brand) {
+			setBrandHeroIdx(0);
+			setBrand({
+				title: monitor.brand.title,
+				description: monitor.brand.description,
+				logo_url: brandLogoUrl(monitor.brand),
+				hero_url: brandPreviewUrl(monitor.brand),
+			});
+			return;
+		}
 		const seq = ++lookupSeqRef.current;
 		lookupAbortRef.current?.abort();
 		const ac = new AbortController();
@@ -156,16 +168,13 @@ export default function EditMonitorPage() {
 			const ws = await ensureWorkspace();
 			const info = await api.brandInfo(ws, candidate, { signal: ac.signal });
 			if (lookupSeqRef.current !== seq) return;
-			setBrandLogoFailed(false);
-			setBrandHeroFailed(false);
+			setBrandHeroIdx(0);
 			setBrand(info);
 			if (info.title && !nameRef.current.trim()) setName(info.title);
 		} catch {
 			if (ac.signal.aborted || lookupSeqRef.current !== seq) return;
-			const orig = monitor ? normalizeBrandLookupUrl(monitor.url, mode) : null;
 			if (orig && candidate === orig && monitor?.brand) {
-				setBrandLogoFailed(false);
-				setBrandHeroFailed(false);
+				setBrandHeroIdx(0);
 				setBrand({
 					title: monitor.brand.title,
 					description: monitor.brand.description,
@@ -312,46 +321,53 @@ export default function EditMonitorPage() {
 							</p>
 						) : null}
 					</div>
-					{brand ? (
-						<div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-3.5">
-							<div className="flex items-start gap-3">
-								{brand.logo_url && !brandLogoFailed ? (
-									<img
-										src={brand.logo_url}
-										alt=""
-										referrerPolicy="no-referrer"
-										onError={() => setBrandLogoFailed(true)}
-										className="h-9 w-9 rounded-md object-contain border border-[var(--hairline)] bg-[var(--surface-1)] p-0.5"
+					{brand ? (() => {
+						const lookupTarget = normalizeBrandLookupUrl(url, mode) || url;
+						const heroCandidates = brand.hero_candidates?.length
+							? brand.hero_candidates
+							: brand.hero_url
+								? [brand.hero_url]
+								: [];
+						const heroSrc = brandHeroIdx < heroCandidates.length ? heroCandidates[brandHeroIdx]! : null;
+						return (
+							<div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-3.5">
+								<div className="flex items-start gap-3">
+									<BrandLogo
+										brand={{ logo_url: brand.logo_url }}
+										extraFallbacks={brand.logo_candidates}
+										name={brand.title || name || monitor.name}
+										domain={lookupTarget}
+										size={36}
 									/>
+									<div className="min-w-0 flex-1">
+										{brand.title ? (
+											<p className="truncate text-sm font-medium text-[var(--fg)]">
+												{brand.title}
+											</p>
+										) : null}
+										{brand.description ? (
+											<p className="mt-0.5 line-clamp-2 text-xs text-[var(--ink-muted)]">
+												{brand.description}
+											</p>
+										) : (
+											<p className="text-xs text-[var(--ink-subtle)]">No brand description detected.</p>
+										)}
+									</div>
+								</div>
+								{heroSrc ? (
+									<div className="mt-3 overflow-hidden rounded-md border border-[var(--hairline)]">
+										<img
+											src={heroSrc}
+											alt="Website thumbnail preview"
+											referrerPolicy="no-referrer"
+											onError={() => setBrandHeroIdx((i) => i + 1)}
+											className="max-h-48 w-full object-cover object-top"
+										/>
+									</div>
 								) : null}
-								<div className="min-w-0 flex-1">
-									{brand.title ? (
-										<p className="truncate text-sm font-medium text-[var(--fg)]">
-											{brand.title}
-										</p>
-									) : null}
-									{brand.description ? (
-										<p className="mt-0.5 line-clamp-2 text-xs text-[var(--ink-muted)]">
-											{brand.description}
-										</p>
-									) : (
-										<p className="text-xs text-[var(--ink-subtle)]">No brand description detected.</p>
-									)}
-								</div>
 							</div>
-							{brand.hero_url && !brandHeroFailed ? (
-								<div className="mt-3 overflow-hidden rounded-md border border-[var(--hairline)]">
-									<img
-										src={brand.hero_url}
-										alt="Website thumbnail preview"
-										referrerPolicy="no-referrer"
-										onError={() => setBrandHeroFailed(true)}
-										className="max-h-48 w-full object-cover object-top"
-									/>
-								</div>
-							) : null}
-						</div>
-					) : null}
+						);
+					})() : null}
 					<div>
 						<Label htmlFor="mode">Mode</Label>
 						<Select

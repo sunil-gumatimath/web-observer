@@ -30,6 +30,24 @@ export const LIVE_PREVIEW_MAX_AGE_MS = 60 * 60 * 1000;
 
 export type BrandPreviewKind = "hero" | "live";
 
+const DEAD_LOGO_HOSTS = ["logo.clearbit.com"];
+
+/** Filter out known-defunct external logo providers left in legacy monitor records. */
+export function sanitizeExternalBrandUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const host = new URL(trimmed).hostname.toLowerCase();
+    if (DEAD_LOGO_HOSTS.some((dead) => host === dead || host.endsWith(`.${dead}`))) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return trimmed;
+}
+
 export function livePreviewUrl(brand: MonitorBrand | null | undefined): string | null {
   const url = brandAssetUrl(brand?.preview_path);
   if (!url) return null;
@@ -40,12 +58,16 @@ export function livePreviewUrl(brand: MonitorBrand | null | undefined): string |
 
 /** The site's own social/brand image (og:image) — the best brand preview. */
 export function brandHeroUrl(brand: MonitorBrand | null | undefined): string | null {
-  return brandAssetUrl(brand?.hero_path) || brand?.hero_url || null;
+  const rehosted = brandAssetUrl(brand?.hero_path);
+  if (rehosted) return rehosted;
+  // Never prefer an un-rehosted upstream hero_url over our own captured screenshot.
+  if (brand?.preview_path) return null;
+  return brand?.hero_url || null;
 }
 
 /** The brand mark (shown in the header, never used as the banner preview). */
 export function brandLogoUrl(brand: MonitorBrand | null | undefined): string | null {
-  return brandAssetUrl(brand?.logo_path) || brand?.logo_url || null;
+  return brandAssetUrl(brand?.logo_path) || sanitizeExternalBrandUrl(brand?.logo_url) || null;
 }
 
 /** True once brand discovery has produced anything usable for this monitor. */
@@ -54,11 +76,29 @@ export function hasBrandData(brand: MonitorBrand | null | undefined): boolean {
     brand &&
       (brand.title ||
         brand.logo_path ||
-        brand.logo_url ||
+        sanitizeExternalBrandUrl(brand.logo_url) ||
         brand.hero_path ||
         brand.hero_url ||
         brand.preview_path),
   );
+}
+
+/**
+ * True when an existing monitor's brand record has stale/broken legacy fields
+ * (e.g. dead Clearbit logo, un-rehosted hero_url, or pre-fallback feed/sitemap
+ * without title/hero) and should be refreshed in the background.
+ */
+export function needsBrandRefresh(
+  brand: MonitorBrand | null | undefined,
+  mode?: MonitorMode,
+): boolean {
+  if (!hasBrandData(brand)) return true;
+  if (brand?.logo_url && !sanitizeExternalBrandUrl(brand.logo_url)) return true;
+  if (brand?.hero_url && !brand.hero_path) return true;
+  if ((mode === "site_links" || mode === "rss_feed") && !brand?.title && !brand?.hero_path) {
+    return true;
+  }
+  return false;
 }
 
 /** Which kind of image `brandPreviewUrl` resolves to (hero > live). */

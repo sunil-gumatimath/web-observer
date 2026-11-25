@@ -54,6 +54,8 @@ export type BrandInfo = {
   description: string | null;
   logo_url: string | null;
   hero_url: string | null;
+  logo_candidates?: string[];
+  hero_candidates?: string[];
   assets_available: boolean;
 };
 

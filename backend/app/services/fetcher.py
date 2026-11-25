@@ -249,6 +249,7 @@ def fetch_binary(
     *,
     timeout_seconds: int,
     max_response_bytes: int,
+    extra_headers: dict[str, str] | None = None,
 ) -> FetchResult:
     """Fetch arbitrary bytes (images etc.) with the same SSRF protection as ``fetch_url``.
 
@@ -266,6 +267,8 @@ def fetch_binary(
         raise FetchError(exc.code, str(exc)) from exc
     timeout = httpx.Timeout(timeout_seconds, connect=min(10.0, timeout_seconds))
     headers = {"User-Agent": get_settings().http_user_agent}
+    if extra_headers:
+        headers.update(extra_headers)
 
     import time
 

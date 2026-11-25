@@ -23,6 +23,8 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             timeout_seconds=args.timeout,
             full_page=args.full_page,
             clip_selector=args.clip_selector or None,
+            allow_public_assets=args.allow_public_assets,
+            extract_html=args.extract_html,
         )
     except Exception as exc:  # noqa: BLE001
         # FetchError and others: surface message for parent parsing
@@ -46,6 +48,10 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         "height": capture.height,
         "png_path": args.out,
     }
+    if capture.html is not None:
+        meta["html"] = capture.html
+    if capture.final_url is not None:
+        meta["final_url"] = capture.final_url
     with open(args.meta, "w", encoding="utf-8") as f:
         json.dump(meta, f)
     return 0
@@ -98,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     shot.add_argument("--timeout", type=int, default=45)
     shot.add_argument("--full-page", action=argparse.BooleanOptionalAction, default=True)
     shot.add_argument("--clip-selector", default="")
+    shot.add_argument("--allow-public-assets", action="store_true", default=False)
+    shot.add_argument("--extract-html", action="store_true", default=False)
     shot.set_defaults(func=_cmd_screenshot)
 
     fetch = sub.add_parser("fetch", help="JS-rendered page fetch")

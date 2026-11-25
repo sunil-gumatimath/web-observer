@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { brandAssetUrl } from "@/lib/api";
+import { sanitizeExternalBrandUrl } from "@/lib/brand";
 import type { MonitorBrand } from "@/lib/types";
 
 function initials(name: string): string {
@@ -81,22 +82,34 @@ export function BrandLogo({
   brand,
   name,
   domain,
+  extraFallbacks,
   size = 28,
   className,
 }: {
   brand?: MonitorBrand | null;
   name: string;
   domain?: string;
+  extraFallbacks?: string[];
   size?: number;
   className?: string;
 }) {
   const primary = brandAssetUrl(brand?.logo_path);
-  const fallback = brand?.logo_url || null;
+  const fallback = sanitizeExternalBrandUrl(brand?.logo_url);
   const favicon = faviconFor(domain);
-  const sources = useMemo(
-    () => [primary, fallback, favicon].filter((s): s is string => !!s),
-    [primary, fallback, favicon],
-  );
+  const extraKey = (extraFallbacks ?? []).join("\n");
+  const sources = useMemo(() => {
+    const extras = extraKey ? extraKey.split("\n") : [];
+    const raw = [primary, fallback, ...extras, favicon];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const s of raw) {
+      if (s && !seen.has(s)) {
+        seen.add(s);
+        out.push(s);
+      }
+    }
+    return out;
+  }, [primary, fallback, extraKey, favicon]);
 
   return (
     <BrandLogoInner
