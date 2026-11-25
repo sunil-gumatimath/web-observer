@@ -23,6 +23,8 @@ import { relativeTime } from "@/lib/format";
 import { MONITOR_MODE_OPTIONS } from "@/lib/modes";
 import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
+import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import { usePageTitle } from "@/lib/use-page-title";
 import { exportFileName, triggerBlobDownload } from "@/lib/download";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
@@ -67,9 +69,13 @@ export default function MonitorsPage() {
 	usePageTitle("Monitors");
 	const router = useRouter();
 	const toast = useToast();
-	const [monitors, setMonitors] = useState<Monitor[]>([]);
+	const initialWs = readCache<string>("activeWorkspaceId")?.data ?? "";
+	const initialMonitors = initialWs
+		? readCache<Monitor[]>(cacheKeys.monitors(initialWs))
+		: undefined;
+	const [monitors, setMonitors] = useState<Monitor[]>(initialMonitors?.data ?? []);
 	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(true);
+	const [loading, setLoading] = useState(!initialMonitors);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [bulkBusy, setBulkBusy] = useState(false);
 	const [query, setQuery] = useState("");
@@ -78,14 +84,21 @@ export default function MonitorsPage() {
 	const [sortKey, setSortKey] = useState<SortKey>("name");
 	const [sortDir, setSortDir] = useState<SortDir>("asc");
 	const [refreshTick, setRefreshTick] = useState(0);
-	const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+	const [lastUpdated, setLastUpdated] = useState<Date | null>(
+		initialMonitors ? new Date(initialMonitors.updatedAt) : null,
+	);
 
 	useEffect(() => {
 		let cancelled = false;
+		const force = refreshTick > 0;
 		(async () => {
 			try {
 				const ws = await ensureWorkspace();
-				const list = await api.listMonitors(ws);
+				const list = await fetchCached(
+					cacheKeys.monitors(ws),
+					() => api.listMonitors(ws),
+					{ force, maxAgeMs: force ? 0 : 4_000 },
+				);
 				if (!cancelled) {
 					setMonitors(list);
 					setLastUpdated(new Date());
@@ -157,7 +170,12 @@ export default function MonitorsPage() {
 		try {
 			const ws = await ensureWorkspace();
 			await api.bulkAction(ws, { monitor_ids: Array.from(selected), action });
-			const list = await api.listMonitors(ws);
+			const list = await fetchCached(
+				cacheKeys.monitors(ws),
+				() => api.listMonitors(ws),
+				{ force: true },
+			);
+			writeCache(cacheKeys.monitors(ws), list);
 			setMonitors(list);
 			setSelected(new Set());
 			toast.success(`Bulk ${action} complete`);
@@ -402,6 +420,7 @@ export default function MonitorsPage() {
 													<tr
 														key={m.id}
 														className="cursor-pointer transition hover:bg-[var(--surface-2)]"
+														onMouseEnter={() => router.prefetch(`/monitors/${m.id}`)}
 														onClick={() => router.push(`/monitors/${m.id}`)}
 													>
 														<td className="px-2 py-3.5" onClick={(e) => e.stopPropagation()}>

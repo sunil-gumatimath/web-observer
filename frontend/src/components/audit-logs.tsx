@@ -3,19 +3,28 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, ErrorBox, SectionTitle } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fetchCached, readCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import type { AuditLogRow } from "@/lib/types";
 
 export function AuditLogsPanel({ workspaceId }: { workspaceId: string }) {
-  const [logs, setLogs] = useState<AuditLogRow[]>([]);
+  const initialLogs = workspaceId
+    ? readCache<AuditLogRow[]>(cacheKeys.auditLogs(workspaceId))?.data
+    : undefined;
+  const [logs, setLogs] = useState<AuditLogRow[]>(initialLogs ?? []);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     if (!workspaceId) return;
     setLoading(true);
     setErr(null);
     try {
-      const list = await api.listAuditLogs(workspaceId, { limit: 100 });
+      const list = await fetchCached(
+        cacheKeys.auditLogs(workspaceId),
+        () => api.listAuditLogs(workspaceId, { limit: 100 }),
+        { force, maxAgeMs: force ? 0 : 5_000 },
+      );
       setLogs(list);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load audit logs");
@@ -46,7 +55,7 @@ export function AuditLogsPanel({ workspaceId }: { workspaceId: string }) {
           variant="secondary"
           size="sm"
           disabled={loading}
-          onClick={load}
+          onClick={() => load(true)}
         >
           {loading ? "Loading…" : "Refresh"}
         </Button>

@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import { getClerkUserId, setClerkUserId } from "@/lib/auth-token";
 import { config } from "@/lib/config";
+import { clearQueryCache, fetchCached, writeCache } from "@/lib/query-cache";
 
 const STORAGE_KEY = "web_observer_workspace_id";
 const LEGACY_STORAGE_KEY = "mtw_workspace_id";
@@ -47,9 +48,11 @@ let workspacePromise: Promise<string> | null = null;
 let workspacePromiseUid: string | null = null;
 
 export function invalidateWorkspace(): void {
-  // Drop the tracked identity too: a stale Clerk user id would make the next
-  // ensureWorkspace() treat a fresh sign-in as a cache hit for the old user.
+  // Drop the tracked identity and query cache too: a stale Clerk user id or
+  // cached workspace data would make the next ensureWorkspace() or page load
+  // treat a fresh sign-in / workspace switch as a cache hit for the old user.
   setClerkUserId(null);
+  clearQueryCache();
   workspacePromise = null;
   workspacePromiseUid = null;
   if (typeof window !== "undefined") {
@@ -62,6 +65,13 @@ export function invalidateWorkspace(): void {
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
     if (e.key === STORAGE_KEY && e.newValue === null) invalidateWorkspace();
+  });
+}
+
+export function getCachedMe(options?: { force?: boolean; maxAgeMs?: number }) {
+  return fetchCached("me", () => api.me(), {
+    force: options?.force,
+    maxAgeMs: options?.maxAgeMs ?? 30_000,
   });
 }
 
@@ -86,7 +96,7 @@ export async function ensureWorkspace(): Promise<string> {
 
   workspacePromise = (async () => {
     if (config.clerkEnabled) {
-      const me = await api.me();
+      const me = await getCachedMe();
       // Keep the tracked user id in sync with the authenticated identity and
       // re-tag the cache so a subsequent user switch is detected.
       setClerkUserId(me.clerk_user_id);
@@ -100,10 +110,12 @@ export async function ensureWorkspace(): Promise<string> {
           : undefined;
         const id = match?.id ?? me.workspaces[0].id;
         setStoredWorkspaceId(id);
+        writeCache("activeWorkspaceId", id);
         return id;
       }
       const created = await api.createWorkspace("My workspace");
       setStoredWorkspaceId(created.id);
+      writeCache("activeWorkspaceId", created.id);
       return created.id;
     }
 
@@ -112,6 +124,7 @@ export async function ensureWorkspace(): Promise<string> {
       // Validate still accessible
       try {
         await api.getUsage(existing);
+        writeCache("activeWorkspaceId", existing);
         return existing;
       } catch {
         // fall through to seed
@@ -120,6 +133,7 @@ export async function ensureWorkspace(): Promise<string> {
 
     const seed = await api.seed();
     setStoredWorkspaceId(seed.workspace_id);
+    writeCache("activeWorkspaceId", seed.workspace_id);
     return seed.workspace_id;
   })().catch((err) => {
     // Don't cache failures; let the next caller retry.
