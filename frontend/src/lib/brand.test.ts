@@ -5,6 +5,7 @@ import {
   brandPreviewUrl,
   hasBrandData,
   isLivePreviewStale,
+  normalizeBrandLookupUrl,
 } from "@/lib/brand";
 import type { MonitorBrand } from "@/lib/types";
 
@@ -81,5 +82,22 @@ describe("brandPreviewUrl", () => {
   it("returns null when there is no preview asset at all", () => {
     expect(brandPreviewUrl(null)).toBeNull();
     expect(brandPreviewUrl({})).toBeNull();
+  });
+
+  it("normalizes GitHub shorthands and URLs for brand lookup", () => {
+    expect(normalizeBrandLookupUrl("vercel/next.js", "readme")).toBe(
+      "https://github.com/vercel/next.js",
+    );
+    expect(normalizeBrandLookupUrl("github.com/vercel/next.js", "readme")).toBe(
+      "https://github.com/vercel/next.js",
+    );
+    expect(normalizeBrandLookupUrl("https://github.com/vercel/next.js", "readme")).toBe(
+      "https://github.com/vercel/next.js",
+    );
+    expect(normalizeBrandLookupUrl("invalid", "readme")).toBeNull();
+    expect(normalizeBrandLookupUrl("example.com/pricing", "page_content")).toBe(
+      "https://example.com/pricing",
+    );
+    expect(normalizeBrandLookupUrl("abc", "page_content")).toBeNull();
   });
 });

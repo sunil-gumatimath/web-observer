@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
 import { Badge, Card, ModeBadge, SectionTitle } from "@/components/ui";
-import { api, brandAssetUrl } from "@/lib/api";
+import { api } from "@/lib/api";
+import { brandHeroUrl, livePreviewUrl } from "@/lib/brand";
 import { parseSummaryParts } from "@/lib/summary";
 import type { PublicShare } from "@/lib/types";
 
@@ -13,6 +15,7 @@ export default function PublicSharePage() {
   const token = params?.token ?? "";
   const [data, setData] = useState<PublicShare | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failedUrls, setFailedUrls] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!token) return;
@@ -40,8 +43,13 @@ export default function PublicSharePage() {
     );
   }
 
-  const logo = brandAssetUrl(data.monitor.brand?.logo_path);
-  const hero = brandAssetUrl(data.monitor.brand?.hero_path);
+  const brand = data.monitor.brand;
+  const previewCandidates = [
+    brandHeroUrl(brand),
+    brand?.hero_url || null,
+    livePreviewUrl(brand),
+  ].filter((u, idx, arr): u is string => Boolean(u) && arr.indexOf(u) === idx);
+  const previewSrc = previewCandidates.find((u) => !failedUrls[u]) ?? null;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -50,13 +58,12 @@ export default function PublicSharePage() {
       </Link>
 
       <div className="mt-6 flex items-start gap-4 rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-5">
-        {logo ? (
-          <img src={logo} alt="" className="h-12 w-12 rounded-lg border border-[var(--hairline)] object-contain" />
-        ) : (
-          <div className="flex h-12 w-12 items-center justify-center rounded-[8px] bg-[var(--surface-2)] border border-[var(--hairline)] text-lg font-bold text-[var(--ink)]">
-            {data.monitor.name?.slice(0, 1) || "W"}
-          </div>
-        )}
+        <BrandLogo
+          brand={brand}
+          name={data.monitor.name}
+          domain={data.monitor.url}
+          size={48}
+        />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-lg font-semibold text-[var(--ink)]">
             {data.monitor.name}
@@ -78,8 +85,16 @@ export default function PublicSharePage() {
         <ModeBadge mode={data.monitor.mode} />
       </div>
 
-      {hero ? (
-        <img src={hero} alt={`${data.monitor.name} screenshot`} className="mt-5 w-full rounded-xl border border-[var(--hairline)]" />
+      {previewSrc ? (
+        <img
+          src={previewSrc}
+          alt={`${data.monitor.name} preview`}
+          referrerPolicy="no-referrer"
+          onError={() =>
+            setFailedUrls((prev) => ({ ...prev, [previewSrc]: true }))
+          }
+          className="mt-5 max-h-64 w-full rounded-xl border border-[var(--hairline)] object-cover object-top"
+        />
       ) : null}
       {/* Gap: PublicShare exposes no screenshot URLs or run ids, so the
           VisualDiff slider cannot mount here. Screenshot blobs are reachable

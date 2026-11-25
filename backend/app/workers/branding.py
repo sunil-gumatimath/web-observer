@@ -107,12 +107,16 @@ def capture_brand_preview(monitor_id: str) -> None:
         if monitor is None:
             logger.warning("brand_preview_missing monitor_id=%s", monitor_id)
             return
+        monitor_id_str = str(monitor.id)
         url = monitor.url
+        mode = monitor.mode
 
     try:
-        key = store_live_preview(monitor_uuid, url)
+        key = store_live_preview(monitor_uuid, url, mode=mode)
     except Exception as exc:  # noqa: BLE001 - optional enrichment
-        logger.warning("brand_preview_capture_failed monitor_id=%s error=%s", monitor_id, exc)
+        logger.warning("brand_preview_capture_failed monitor_id=%s error=%s", monitor_id_str, exc)
+        return
+    if key is None:
         return
 
     with SessionLocal() as db:

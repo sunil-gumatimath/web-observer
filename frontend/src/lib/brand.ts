@@ -1,5 +1,29 @@
 import { brandAssetUrl } from "@/lib/api";
-import type { MonitorBrand } from "@/lib/types";
+import type { MonitorBrand, MonitorMode } from "@/lib/types";
+
+/** Normalize a monitor URL input for pre-save brand-info lookup (including GitHub shorthands). */
+export function normalizeBrandLookupUrl(
+  input: string,
+  mode?: MonitorMode,
+): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (mode === "readme") {
+    if (/^[\w.\-]+\/[\w.\-]+$/.test(trimmed)) {
+      return `https://github.com/${trimmed}`;
+    }
+    if (/^github\.com\/[\w.\-]+\/[\w.\-]+/i.test(trimmed)) {
+      return `https://${trimmed}`;
+    }
+    if (/^https?:\/\/(www\.)?github\.com\/[\w.\-]+\/[\w.\-]+/i.test(trimmed)) {
+      return trimmed;
+    }
+    return null;
+  }
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (candidate.length < 8 || !candidate.includes(".")) return null;
+  return candidate;
+}
 
 /** A live preview older than this is re-captured when the monitor page opens. */
 export const LIVE_PREVIEW_MAX_AGE_MS = 60 * 60 * 1000;

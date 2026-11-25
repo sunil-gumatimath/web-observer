@@ -74,9 +74,10 @@ def test_fetch_brand_info_uses_logo_fallbacks_when_page_fetch_fails(monkeypatch)
     monkeypatch.setattr(branding, "fetch_url", blocked)
     meta = fetch_brand_info("https://openai.com/news/")
 
-    assert "https://logo.clearbit.com/openai.com?size=256" in meta.logo_candidates
+    assert meta.from_fallback is True
     assert "https://www.google.com/s2/favicons?domain=openai.com&sz=256" in meta.logo_candidates
     assert "https://openai.com/favicon.ico" in meta.logo_candidates
+    assert all("clearbit.com" not in c for c in meta.logo_candidates)
 
 
 def test_parse_brand_meta_skips_empty_duplicate_meta():
@@ -194,7 +195,12 @@ def test_store_live_preview_stores_viewport_screenshot(monkeypatch):
     def fake_put(*, key, data, content_type):
         calls["put"] = (key, data, content_type)
 
-    monkeypatch.setattr(visual, "capture_screenshot", fake_capture)
+    monkeypatch.setattr(
+        branding,
+        "resolve_brand_preview_target",
+        lambda url, **_k: url,
+    )
+    monkeypatch.setattr(visual, "capture_with_provider_fallback", fake_capture)
     monkeypatch.setattr(branding, "put_bytes", fake_put)
     monitor_id = uuid4()
 
@@ -204,3 +210,148 @@ def test_store_live_preview_stores_viewport_screenshot(monkeypatch):
     assert calls["capture"][0] == "https://blog.cloudflare.com"
     assert calls["capture"][1]["full_page"] is False
     assert calls["put"] == (key, b"png-bytes", "image/png")
+
+
+def test_store_live_preview_skips_non_html_without_homepage(monkeypatch):
+    from uuid import uuid4
+
+    monkeypatch.setattr(branding, "resolve_brand_preview_target", lambda *_a, **_k: None)
+    assert (
+        branding.store_live_preview(
+            uuid4(), "https://api.github.com/repos/python/cpython", mode="json_field"
+        )
+        is None
+    )
+
+
+def test_fetch_brand_info_rss_falls_back_to_linked_html_homepage(monkeypatch):
+    from app.services.fetcher import FetchResult
+
+    rss = """<?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0"><channel>
+      <title>Cloudflare Blog</title>
+      <link>https://blog.cloudflare.com/</link>
+      <description>Latest posts from Cloudflare</description>
+    </channel></rss>"""
+    html = (
+        '<html><head><meta property="og:image" content="https://blog.cloudflare.com/og.png">'
+        '<link rel="icon" href="/favicon.png"></head></html>'
+    )
+
+    def fake_fetch(url, **_kwargs):
+        if url.endswith("/rss/"):
+            return FetchResult(
+                final_url=url,
+                status_code=200,
+                content=rss.encode(),
+                text=rss,
+                content_type="application/rss+xml",
+                latency_ms=10,
+            )
+        return FetchResult(
+            final_url="https://blog.cloudflare.com/",
+            status_code=200,
+            content=html.encode(),
+            text=html,
+            content_type="text/html; charset=utf-8",
+            latency_ms=10,
+        )
+
+    monkeypatch.setattr(branding, "fetch_url", fake_fetch)
+    meta = branding.fetch_brand_info("https://blog.cloudflare.com/rss/")
+    assert meta.title == "Cloudflare Blog"
+    assert meta.description == "Latest posts from Cloudflare"
+    assert "https://blog.cloudflare.com/og.png" in meta.hero_candidates
+    assert "https://blog.cloudflare.com/favicon.png" in meta.logo_candidates
+    assert meta.from_fallback is False
+
+
+def test_resolve_brand_preview_target_uses_html_homepage_for_sitemap_and_skips_api_json(
+    monkeypatch,
+):
+    from app.services.fetcher import FetchResult
+
+    def fake_fetch(url, **_kwargs):
+        if url == "https://www.cloudflare.com/sitemap.xml":
+            return FetchResult(
+                final_url=url,
+                status_code=200,
+                content=b"<urlset/>",
+                text="<urlset/>",
+                content_type="application/xml",
+                latency_ms=5,
+            )
+        if url == "https://www.cloudflare.com/":
+            return FetchResult(
+                final_url=url,
+                status_code=200,
+                content=b"<html><body>Home</body></html>",
+                text="<html><body>Home</body></html>",
+                content_type="text/html",
+                latency_ms=5,
+            )
+        return FetchResult(
+            final_url=url,
+            status_code=200,
+            content=b'{"ok": true}',
+            text='{"ok": true}',
+            content_type="application/json",
+            latency_ms=5,
+        )
+
+    monkeypatch.setattr(branding, "fetch_url", fake_fetch)
+    assert (
+        branding.resolve_brand_preview_target(
+            "https://www.cloudflare.com/sitemap.xml", mode="site_links"
+        )
+        == "https://www.cloudflare.com/"
+    )
+    assert (
+        branding.resolve_brand_preview_target(
+            "https://api.github.com/repos/python/cpython", mode="json_field"
+        )
+        is None
+    )
+
+
+def test_store_brand_assets_preserves_previous_meta_on_fallback_and_omits_dead_logo_url(
+    monkeypatch,
+):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    monkeypatch.setattr(branding, "_download_image", lambda *_a, **_k: None)
+    monitor = SimpleNamespace(
+        id=uuid4(),
+        brand={
+            "title": "Hacker News",
+            "description": "Links",
+            "logo_path": "brand-assets/x/logo.svg",
+            "logo_url": "https://news.ycombinator.com/y18.svg",
+            "preview_path": "brand-assets/x/preview.png",
+            "preview_at": "2026-01-01T00:00:00+00:00",
+        },
+    )
+    preserved = branding.store_brand_assets(
+        monitor,
+        branding.BrandMeta(
+            logo_candidates=["https://unavatar.io/news.ycombinator.com"],
+            from_fallback=True,
+        ),
+    )
+    assert preserved["title"] == "Hacker News"
+    assert preserved["description"] == "Links"
+    assert preserved["logo_path"] == "brand-assets/x/logo.svg"
+    assert preserved["logo_url"] == "https://news.ycombinator.com/y18.svg"
+
+    fresh_monitor = SimpleNamespace(id=uuid4(), brand=None)
+    no_logo = branding.store_brand_assets(
+        fresh_monitor,
+        branding.BrandMeta(
+            title="Example Domain",
+            logo_candidates=["https://example.com/favicon.ico"],
+            from_fallback=True,
+        ),
+    )
+    assert no_logo["logo_path"] is None
+    assert no_logo["logo_url"] is None
