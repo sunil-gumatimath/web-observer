@@ -189,7 +189,7 @@ class WorkspaceUpdate(BaseModel):
     llm_api_base: str | None = Field(default=None, max_length=2048)
     llm_model: str | None = Field(default=None, max_length=128)
     resend_api_key: str | None = None
-    email_from: str | None = None
+    email_from: str | None = Field(default=None, max_length=320)
 
     @field_validator("digest_cadence")
     @classmethod
@@ -231,7 +231,7 @@ class MonitorCreate(BaseModel):
     mode: str = "page_content"
     css_selector: str | None = Field(default=None, max_length=MAX_SELECTOR_LEN)
     schedule_interval_minutes: int | None = Field(default=None, ge=1)
-    timezone: str = "UTC"
+    timezone: str = Field(default="UTC", max_length=64)
     timeout_seconds: int = Field(default=30, ge=5, le=120)
     max_response_bytes: int = Field(default=2_000_000, ge=1024, le=10_000_000)
     notification_email: EmailStr | None = None
@@ -363,7 +363,7 @@ class MonitorUpdate(BaseModel):
     mode: str | None = None
     css_selector: str | None = Field(default=None, max_length=MAX_SELECTOR_LEN)
     schedule_interval_minutes: int | None = Field(default=None, ge=1)
-    timezone: str | None = None
+    timezone: str | None = Field(default=None, max_length=64)
     timeout_seconds: int | None = Field(default=None, ge=5, le=120)
     max_response_bytes: int | None = Field(default=None, ge=1024, le=10_000_000)
     enabled: bool | None = None
@@ -683,7 +683,7 @@ class MeOut(BaseModel):
 
 class NotificationChannelCreate(BaseModel):
     type: str = "email"
-    address: str = Field(min_length=3, max_length=2000)
+    address: str = Field(min_length=3, max_length=320)
     enabled: bool = True
 
     @field_validator("type")
@@ -708,7 +708,7 @@ class NotificationChannelCreate(BaseModel):
 
 
 class NotificationChannelUpdate(BaseModel):
-    address: str | None = Field(default=None, min_length=3, max_length=2000)
+    address: str | None = Field(default=None, min_length=3, max_length=320)
     enabled: bool | None = None
 
 

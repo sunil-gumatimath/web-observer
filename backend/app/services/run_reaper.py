@@ -107,18 +107,22 @@ def reap_stuck_runs(db: Session) -> int:
         # Fenced transition: only fires if the status is unchanged — a run
         # finishing right now keeps its terminal state untouched.
         # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+        orig_key = getattr(run, "idempotency_key", None)
+        update_values: dict[str, object] = {
+            "status": RunStatus.FAILED.value,
+            "error_code": "timeout_reaped",
+            "error_message": failure_message,
+            "finished_at": now,
+        }
+        if orig_key:
+            update_values["idempotency_key"] = f"{orig_key}:reaped:{run.id}"[:128]
         claimed = db.execute(
             sa_update(MonitorRun)
             .where(
                 MonitorRun.id == run.id,
                 MonitorRun.status == old_status,
             )
-            .values(
-                status=RunStatus.FAILED.value,
-                error_code="timeout_reaped",
-                error_message=failure_message,
-                finished_at=now,
-            )
+            .values(**update_values)
         )
         # rowcount exists on CursorResult; the Result stub omits it.
         if claimed.rowcount != 1:  # type: ignore[attr-defined]

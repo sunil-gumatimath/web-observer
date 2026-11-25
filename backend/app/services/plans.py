@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Monitor, Workspace
+from app.models import Monitor, Workspace, WorkspaceMember
 from app.services.usage import QuotaExceeded, get_or_create_counter
 
 
@@ -101,6 +101,17 @@ def assert_can_create_monitor(db: Session, workspace: Workspace) -> None:
     )
     if count is not None and count >= limits.max_monitors:
         raise QuotaExceeded(f"Plan {limits.name} allows {limits.max_monitors} monitors")
+
+
+def assert_can_add_member(db: Session, workspace: Workspace) -> None:
+    limits = get_plan(workspace)
+    count = db.scalar(
+        select(func.count())
+        .select_from(WorkspaceMember)
+        .where(WorkspaceMember.workspace_id == workspace.id)
+    )
+    if count is not None and count >= limits.seats:
+        raise QuotaExceeded(f"Plan {limits.name} allows {limits.seats} seats")
 
 
 def assert_can_run_check_for_workspace(db: Session, workspace: Workspace) -> None:

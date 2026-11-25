@@ -17,6 +17,7 @@ import jwt
 from fastapi import BackgroundTasks, Depends, Header, HTTPException, Request, status
 from jwt import PyJWKClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
@@ -104,7 +105,28 @@ def upsert_clerk_user(db: Session, *, clerk_user_id: str, email: str) -> User:
         else:
             user = User(clerk_user_id=clerk_user_id, email=email)
             db.add(user)
-        db.flush()
+        try:
+            with db.begin_nested():
+                db.flush()
+        except IntegrityError:
+            # Concurrent first-login request (e.g. /me + background sync) won
+            # the insert race; re-read the committed/visible row instead of 500.
+            db.expunge(user)
+            existing = db.scalar(select(User).where(User.clerk_user_id == clerk_user_id))
+            if existing is not None:
+                return existing
+            by_email = db.scalar(select(User).where(User.email == email))
+            if by_email is not None:
+                if by_email.clerk_user_id and by_email.clerk_user_id != clerk_user_id:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="This email is already linked to a different account.",
+                    ) from None
+                if not by_email.clerk_user_id:
+                    by_email.clerk_user_id = clerk_user_id
+                    db.flush()
+                return by_email
+            raise
     elif user.email != email and email:
         user.email = email
         db.flush()
@@ -356,6 +378,9 @@ def require_role(min_role: str):
 def list_user_workspaces(db: Session, principal: AuthPrincipal) -> list[Workspace]:
     if principal.is_internal:
         return list(db.scalars(select(Workspace).order_by(Workspace.created_at)).all())
+    if principal.api_key_workspace_id is not None:
+        ws = db.get(Workspace, principal.api_key_workspace_id)
+        return [ws] if ws is not None else []
     if principal.user is None:
         return []
     return list(
@@ -366,3 +391,68 @@ def list_user_workspaces(db: Session, principal: AuthPrincipal) -> list[Workspac
             .order_by(Workspace.created_at)
         ).all()
     )
+
+
+def resolve_principal_for_rate_limit(request: Request) -> AuthPrincipal | None:
+    """Best-effort verified principal lookup for SlowAPIMiddleware.
+
+    Runs before FastAPI route dependencies so per-principal rate limits key on
+    the verified caller rather than falling back to client IP. Never raises on
+    missing/invalid credentials; route dependencies remain authoritative.
+    """
+    settings = get_settings()
+    authorization = request.headers.get("authorization")
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        if not token:
+            return None
+        if token.startswith("mtw_"):
+            try:
+                from app.db import SessionLocal
+                from app.services.api_keys import lookup_api_key
+
+                session = SessionLocal()
+            except Exception:  # noqa: BLE001
+                return None
+            try:
+                found = lookup_api_key(session, token)
+                if found is None:
+                    return None
+                _key, ws, user = found
+                return AuthPrincipal(
+                    user=None,
+                    is_internal=False,
+                    email=user.email if user else f"apikey@{ws.id}",
+                    api_key_workspace_id=ws.id,
+                    role_hint="admin",
+                )
+            except Exception:  # noqa: BLE001
+                return None
+            finally:
+                try:
+                    session.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                session.close()
+        if not clerk_configured(settings):
+            return None
+        try:
+            payload = verify_clerk_token(token, settings)
+        except HTTPException:
+            return None
+        clerk_user_id = str(payload.get("sub") or "")
+        if not clerk_user_id:
+            return None
+        return AuthPrincipal(
+            user=None,
+            is_internal=False,
+            clerk_user_id=clerk_user_id,
+            email=None,
+        )
+
+    x_internal_token = request.headers.get("x-internal-token") or ""
+    if settings.internal_api_token and hmac.compare_digest(
+        x_internal_token, settings.internal_api_token
+    ):
+        return AuthPrincipal(user=None, is_internal=True, email="internal@local", role_hint="owner")
+    return None

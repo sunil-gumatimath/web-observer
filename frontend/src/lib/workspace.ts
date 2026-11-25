@@ -32,6 +32,17 @@ export function setStoredWorkspaceId(id: string) {
 }
 
 /**
+ * Atomically switch the active workspace in-memory and in localStorage so
+ * subsequent client-side navigations resolve the new workspace immediately.
+ */
+export function switchWorkspace(id: string): void {
+  invalidateWorkspace();
+  setStoredWorkspaceId(id);
+  writeCache("activeWorkspaceId", id);
+  workspacePromise = Promise.resolve(id);
+}
+
+/**
  * Resolve the active workspace:
  * - Clerk mode: GET /me (auto-provisions default workspace)
  * - Dev mode: seed internal workspace if needed

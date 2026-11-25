@@ -593,6 +593,20 @@ class SitemapCreateIn(BaseModel):
                 raise ValueError("individual URLs are capped at 2048 characters")
         return v
 
+    @field_validator("ignore_regexes")
+    @classmethod
+    def _check_ignore_regexes(cls, v: list[str] | None) -> list[str] | None:
+        from app.schemas import _validate_regex_patterns
+
+        return _validate_regex_patterns(v)
+
+    @field_validator("ignore_selectors")
+    @classmethod
+    def _check_ignore_selectors(cls, v: list[str] | None) -> list[str] | None:
+        from app.schemas import _validate_selector_list
+
+        return _validate_selector_list(v)
+
     @field_validator("mode")
     @classmethod
     def validate_mode(cls, v: str) -> str:
@@ -865,9 +879,14 @@ def update_monitor(
     # before any setattr below can overwrite a non-nullable column.
     for _non_null_field in (
         "name",
+        "mode",
+        "timezone",
         "schedule_interval_minutes",
         "timeout_seconds",
         "max_response_bytes",
+        "enabled",
+        "js_required",
+        "screenshots_enabled",
     ):
         if _non_null_field in data and data[_non_null_field] is None:
             db.rollback()
@@ -1067,6 +1086,9 @@ def delete_monitor(
         for obj_key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
             if obj_key:
                 object_keys.append(obj_key)
+        run_id = getattr(snap, "run_id", None)
+        if run_id:
+            object_keys.append(f"screenshots/{mid}/{run_id}.png")
 
     # Bulk SQL only — disable session sync so SA does not try to NULL out
     # non-nullable monitor_id FKs on in-session relationship state.
@@ -1219,6 +1241,7 @@ def bulk_action(
     object_keys: list[str] = []
     for m in monitors:
         mid = m.id
+        object_keys.extend(brand_asset_keys(getattr(m, "brand", None)))
         # Reuse bulk delete logic from single delete
         snapshots = db.scalars(
             select(Snapshot).where(
@@ -1229,6 +1252,9 @@ def bulk_action(
             for obj_key in (snap.raw_object_key, getattr(snap, "text_object_key", None)):
                 if obj_key:
                     object_keys.append(obj_key)
+            run_id = getattr(snap, "run_id", None)
+            if run_id:
+                object_keys.append(f"screenshots/{mid}/{run_id}.png")
         sync_off = {"synchronize_session": False}
         for bulk_stmt in (
             sa_delete(ChangeEvent).where(ChangeEvent.monitor_id == mid),
@@ -1595,24 +1621,34 @@ UNCATEGORIZED_ACTIVITY = "uncategorized"
 
 
 def _bucket_activity(
-    rows: Sequence[tuple[datetime | None, str | None]],
+    rows: Sequence[tuple],
     start_day,
     days: int,
 ) -> tuple[list[int], list[dict[str, int]]]:
-    """Bucket (created_at, category) rows into per-day counts + per-day category
-    maps (oldest first). Pure — unit-testable."""
+    """Bucket (day_or_ts, category[, count]) rows into per-day counts + per-day
+    category maps (oldest first). Pure — unit-testable."""
+    from datetime import date as _date
+
     counts = [0] * days
     per_day: list[dict[str, int]] = [{} for _ in range(days)]
-    for ts, cat in rows:
+    for row in rows:
+        ts, cat = row[0], row[1]
+        n = int(row[2]) if len(row) > 2 else 1
         if ts is None:
             continue
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=UTC)
-        day_index = (ts.date() - start_day).days
+        if isinstance(ts, str):
+            row_day = _date.fromisoformat(ts[:10])
+        elif isinstance(ts, datetime):
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=UTC)
+            row_day = ts.astimezone(UTC).date()
+        else:
+            row_day = ts
+        day_index = (row_day - start_day).days
         if 0 <= day_index < days:
-            counts[day_index] += 1
+            counts[day_index] += n
             key = cat or UNCATEGORIZED_ACTIVITY
-            per_day[day_index][key] = per_day[day_index].get(key, 0) + 1
+            per_day[day_index][key] = per_day[day_index].get(key, 0) + n
     return counts, per_day
 
 
@@ -1641,16 +1677,18 @@ def change_activity(
     start_day = today - timedelta(days=days - 1)
     start_dt = datetime(start_day.year, start_day.month, start_day.day, tzinfo=UTC)
 
-    q = select(ChangeEvent.created_at, ChangeEvent.change_category).where(
-        ChangeEvent.workspace_id == workspace_id,
-        ChangeEvent.created_at >= start_dt,
+    day_expr = func.date(ChangeEvent.created_at)
+    q = (
+        select(day_expr, ChangeEvent.change_category, func.count())
+        .where(
+            ChangeEvent.workspace_id == workspace_id,
+            ChangeEvent.created_at >= start_dt,
+        )
     )
     if not include_noise:
         q = q.where(ChangeEvent.is_noise.is_(False))
-    # Bound the payload: even a busy workspace rarely exceeds this in 90 days;
-    # the count query stays cheap (indexed workspace + created_at scan).
-    q = q.order_by(ChangeEvent.created_at.desc()).limit(20_000)
-    rows = [(r[0], r[1]) for r in db.execute(q).all()]
+    q = q.group_by(day_expr, ChangeEvent.change_category)
+    rows = [tuple(r) for r in db.execute(q).all()]
 
     counts, per_day = _bucket_activity(rows, start_day, days)
     totals: dict[str, int] = {}

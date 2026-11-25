@@ -181,7 +181,7 @@ def due_digest_workspaces(
         select(Workspace).where(Workspace.digest_cadence.in_(["daily", "weekly"]))
     ).all()
     for ws in workspaces:
-        hour = int(ws.digest_hour_utc or 14)
+        hour = int(ws.digest_hour_utc if ws.digest_hour_utc is not None else 14)
         if now.hour != hour:
             continue
         if ws.digest_cadence == "daily":

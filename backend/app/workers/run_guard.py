@@ -311,10 +311,16 @@ def execute_monitored_run(
 
         except DomainBlocked as exc:
             fail_run(db, run, "blocked_address", str(exc))
-            _record_failure_outcome(db, monitor, run, code="blocked_address", message=str(exc))
+            outbox_extra = _record_failure_outcome(
+                db, monitor, run, code="blocked_address", message=str(exc)
+            )
+            enqueue_outbox(outbox_extra)
         except SSRFError as exc:
             fail_run(db, run, exc.code, str(exc))
-            _record_failure_outcome(db, monitor, run, code=exc.code, message=str(exc))
+            outbox_extra = _record_failure_outcome(
+                db, monitor, run, code=exc.code, message=str(exc)
+            )
+            enqueue_outbox(outbox_extra)
         except FetchError as exc:
             if domain:
                 record_domain_failure(domain)

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Card } from "@/components/ui";
 import { api, type MeResponse } from "@/lib/api";
-import { setStoredWorkspaceId } from "@/lib/workspace";
+import { switchWorkspace } from "@/lib/workspace";
 import type { InvitePreview } from "@/lib/types";
 
 export default function InvitePage() {
@@ -36,7 +36,7 @@ export default function InvitePage() {
     try {
       const r = await api.redeemInvite(token);
       setDone(r.message);
-      setStoredWorkspaceId(r.workspace_id);
+      switchWorkspace(r.workspace_id);
       setTimeout(() => router.push("/dashboard"), 900);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not accept invite.");

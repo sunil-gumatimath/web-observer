@@ -27,7 +27,7 @@ import type {
   WorkspaceSettings,
 } from "@/lib/types";
 import { config } from "@/lib/config";
-import { ensureWorkspace, getCachedMe, setStoredWorkspaceId } from "@/lib/workspace";
+import { ensureWorkspace, getCachedMe, switchWorkspace } from "@/lib/workspace";
 import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
 import { cacheKeys } from "@/lib/route-prefetch";
 import { usePageTitle } from "@/lib/use-page-title";
@@ -110,7 +110,7 @@ export default function SettingsPage() {
     setError(null);
     try {
       const s = await api.seed();
-      setStoredWorkspaceId(s.workspace_id);
+      switchWorkspace(s.workspace_id);
       setWorkspaceId(s.workspace_id);
       toast.success("Workspace seeded", `${s.workspace_id} for ${s.email}`);
     } catch (e) {
@@ -120,7 +120,7 @@ export default function SettingsPage() {
 
   function saveWorkspace() {
     if (!workspaceId.trim()) return;
-    setStoredWorkspaceId(workspaceId.trim());
+    switchWorkspace(workspaceId.trim());
     toast.success("Workspace ID saved in this browser.");
   }
   async function savePrefs() {

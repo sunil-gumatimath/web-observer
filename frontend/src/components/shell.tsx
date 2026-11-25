@@ -158,8 +158,8 @@ function ClerkWorkspaceSwitcher() {
 			onChange={(e) => {
 				const id = e.target.value;
 				setCurrent(id);
-				setStoredWorkspaceId(id);
 				invalidateWorkspace();
+				setStoredWorkspaceId(id);
 				// Full reload is deliberate: workspace-scoped client caches
 				// must be rebuilt from scratch after a switch.
 				// eslint-disable-next-line @next/next/no-location-assign-relative-destination
