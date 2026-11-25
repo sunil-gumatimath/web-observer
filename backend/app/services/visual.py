@@ -14,12 +14,9 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.security.ssrf import (
-    browser_host_resolver_arg,
-    is_same_browser_host,
-    validate_url_for_fetch,
-)
+from app.security.ssrf import validate_url_for_fetch
 from app.services.fetcher import FetchError, FetchResult, detect_bot_challenge
+from app.services.safe_browser_proxy import SafeBrowserProxy
 
 logger = logging.getLogger(__name__)
 
@@ -148,12 +145,17 @@ _LAUNCH_ARGS = [
 ]
 
 
-def _launch_chromium(p, validated):  # type: ignore[no-untyped-def]
-    """Launch Chromium pinned to the DNS result validated for this page."""
+def _launch_chromium(p, proxy_url: str):  # type: ignore[no-untyped-def]
+    """Launch Chromium so all page traffic passes through the pinned proxy."""
     try:
         return p.chromium.launch(
             headless=True,
-            args=[*_LAUNCH_ARGS, browser_host_resolver_arg(validated)],
+            args=[
+                *_LAUNCH_ARGS,
+                f"--proxy-server={proxy_url}",
+                "--proxy-bypass-list=<-loopback>",
+                "--host-resolver-rules=MAP * ~NOTFOUND",
+            ],
         )
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)
@@ -191,8 +193,8 @@ def _capture_screenshot_inline(
     timeout_ms = max(10_000, timeout_seconds * 1000)
     png: bytes
     try:
-        with sync_playwright() as p:
-            browser = _launch_chromium(p, validated)
+        with sync_playwright() as p, SafeBrowserProxy() as proxy:
+            browser = _launch_chromium(p, proxy.url)
             context = None
             try:
                 context = browser.new_context(
@@ -206,22 +208,11 @@ def _capture_screenshot_inline(
                     window.navigator.chrome = { runtime: {} };
                 """)
 
-                def _route_handler(route, request):  # type: ignore[no-untyped-def]
-                    try:
-                        if not is_same_browser_host(request.url, validated.hostname):
-                            return route.abort()
-                        validate_url_for_fetch(request.url, resolve_dns=True)
-                    except Exception:
-                        return route.abort()
-                    return route.continue_()
-
-                page.route("**/*", _route_handler)
                 page.goto(validated.url, wait_until="domcontentloaded", timeout=timeout_ms)
                 try:
                     page.wait_for_load_state("networkidle", timeout=min(20_000, timeout_ms))
                 except PlaywrightTimeout:
-                    # Best-effort: sites with long-lived connections never
-                    # reach networkidle, so a timeout here is not an error.
+                    # Sites with long-lived connections never reach networkidle.
                     logger.debug("networkidle_timeout url=%s", validated.url)
 
                 # Sites with long-lived connections never reach networkidle.
@@ -453,13 +444,14 @@ def capture_with_provider_fallback(
     *,
     timeout_seconds: int = 45,
     clip_selector: str | None = None,
+    full_page: bool = True,
 ) -> VisualCapture:
     """Capture locally via Playwright, falling back to Context.dev on failure."""
     try:
         return capture_screenshot(
             url,
             timeout_seconds=timeout_seconds,
-            full_page=True,
+            full_page=full_page,
             clip_selector=clip_selector,
         )
     except FetchError as exc:
@@ -472,6 +464,7 @@ def capture_with_provider_fallback(
                 url,
                 timeout_seconds=timeout_seconds,
                 clip_selector=clip_selector,
+                full_page=full_page,
             )
         except Exception as provider_exc:  # noqa: BLE001 - never mask the original
             logger.warning("visual_provider_fallback_failed url=%s error=%s", url, provider_exc)

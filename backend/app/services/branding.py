@@ -442,9 +442,9 @@ def store_live_preview(monitor_id: uuid.UUID, url: str) -> str:
     ``FetchError`` (SSRF-blocked, bot challenge, timeout, ...) — callers decide
     how to degrade; the UI keeps showing the hero/logo in that case.
     """
-    from app.services.visual import capture_screenshot
+    from app.services.visual import capture_with_provider_fallback
 
-    capture = capture_screenshot(url, timeout_seconds=30, full_page=False)
+    capture = capture_with_provider_fallback(url, timeout_seconds=30, full_page=False)
     key = _brand_object_key(monitor_id, "preview", "png")
     put_bytes(key=key, data=capture.png_bytes, content_type="image/png")
     return key
