@@ -295,3 +295,17 @@ def test_bot_challenge_message_is_mode_aware() -> None:
     assert "JavaScript rendering" not in plain
     browser = bot_challenge_message("https://example.com", "Cloudflare challenge", "page_content")
     assert "JavaScript rendering" in browser
+
+
+def test_duplicate_standard_meta_prefers_name_over_property() -> None:
+    url = "https://example.com/"
+    name_first = (
+        '<meta name="description" content="Standard"><meta property="description" content="Stale">'
+    )
+    property_first = (
+        '<meta property="description" content="Stale"><meta name="description" content="Standard">'
+    )
+    for html in (name_first, property_first):
+        items = extract_html_meta_items(html, url)
+        assert "meta description: Standard" in items
+        assert not any("Stale" in item for item in items)
