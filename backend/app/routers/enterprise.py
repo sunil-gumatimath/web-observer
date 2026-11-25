@@ -587,11 +587,12 @@ def retry_webhook_delivery(
     principal: Principal,
     workspace: Workspace = Depends(require_role("admin")),
 ) -> dict:
-    """Re-enqueue a failed or stuck webhook delivery.
+    """Re-enqueue a failed or pending webhook delivery.
 
-    Resets the delivery to ``pending`` (and clears its attempt counter so the
-    full retry budget is available again), then dispatches the delivery actor.
-    Succeeded deliveries are not re-sent.
+    Moves the delivery back to ``pending`` without resetting its ``attempts``
+    counter (preserving the 5-attempt automatic retry cap in
+    :func:`deliver_webhook`), then dispatches the delivery actor. Succeeded and
+    in-flight ``processing`` deliveries are not re-sent.
     """
     delivery = db.scalar(
         select(WebhookDelivery).where(
@@ -625,7 +626,7 @@ def retry_webhook_delivery(
             WebhookDelivery.workspace_id == workspace_id,
             WebhookDelivery.status.in_(("failed", "pending")),
         )
-        .values(status="pending", last_error=None, next_attempt_at=None, attempts=0)
+        .values(status="pending", last_error=None)
     )
     if claimed.rowcount != 1:  # type: ignore[attr-defined]
         db.rollback()
