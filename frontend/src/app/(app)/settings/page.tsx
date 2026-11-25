@@ -381,11 +381,12 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     setErr(null);
     try {
       await api.deleteApiKey(workspaceId, keyId);
-      setApiKeys((prev) => {
-        const next = prev.filter((k) => k.id !== keyId);
-        writeCache(cacheKeys.apiKeys(workspaceId), next);
-        return next;
-      });
+      const current = readCache<ApiKeyRow[]>(cacheKeys.apiKeys(workspaceId))?.data ?? apiKeys;
+      writeCache(
+        cacheKeys.apiKeys(workspaceId),
+        current.filter((k) => k.id !== keyId),
+      );
+      setApiKeys((prev) => prev.filter((k) => k.id !== keyId));
       toast.success("API key revoked");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to revoke API key");
@@ -412,11 +413,12 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     setErr(null);
     try {
       await api.deleteWebhook(workspaceId, endpointId);
-      setWebhooks((prev) => {
-        const next = prev.filter((w) => w.id !== endpointId);
-        writeCache(cacheKeys.webhooks(workspaceId), next);
-        return next;
-      });
+      const current = readCache<WebhookOut[]>(cacheKeys.webhooks(workspaceId))?.data ?? webhooks;
+      writeCache(
+        cacheKeys.webhooks(workspaceId),
+        current.filter((w) => w.id !== endpointId),
+      );
+      setWebhooks((prev) => prev.filter((w) => w.id !== endpointId));
       toast.success("Webhook deleted");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to delete webhook");
