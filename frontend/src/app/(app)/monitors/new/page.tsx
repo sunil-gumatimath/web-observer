@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
 	Button,
 	Card,
@@ -16,6 +16,7 @@ import {
 import { ThresholdEditor } from "@/components/threshold-editor";
 import { SelectorPicker } from "@/components/selector-picker";
 import { api } from "@/lib/api";
+import { normalizeBrandLookupUrl } from "@/lib/brand";
 import type {
 	BrandInfo,
 	MonitorMode,
@@ -116,41 +117,61 @@ export default function NewMonitorPage() {
 	const [runNow, setRunNow] = useState(true);
 	const [brand, setBrand] = useState<BrandInfo | null>(null);
 	const [brandLoading, setBrandLoading] = useState(false);
+	const [brandHeroFailed, setBrandHeroFailed] = useState(false);
+	const [brandLogoFailed, setBrandLogoFailed] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
+	const nameRef = useRef(name);
+	useEffect(() => {
+		nameRef.current = name;
+	}, [name]);
+	const lookupSeqRef = useRef(0);
+	const lookupAbortRef = useRef<AbortController | null>(null);
 
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
-		if (isReadmeMode(mode)) return;
-		const candidate = normalizeUrl(rawUrl ?? url, mode);
-		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
+		const candidate = normalizeBrandLookupUrl(rawUrl ?? url, mode);
+		if (!candidate) return;
+		const seq = ++lookupSeqRef.current;
+		lookupAbortRef.current?.abort();
+		const ac = new AbortController();
+		lookupAbortRef.current = ac;
 		setBrandLoading(true);
 		try {
 			const ws = await ensureWorkspace();
-			const info = await api.brandInfo(ws, candidate);
+			const info = await api.brandInfo(ws, candidate, { signal: ac.signal });
+			if (lookupSeqRef.current !== seq) return;
+			setBrandHeroFailed(false);
+			setBrandLogoFailed(false);
 			setBrand(info);
-			if (info.title && !name.trim()) setName(info.title);
-		} catch {
+			if (info.title && !nameRef.current.trim()) setName(info.title);
+		} catch (err) {
+			if (ac.signal.aborted || lookupSeqRef.current !== seq) return;
+			void err;
 			setBrand(null);
 		} finally {
-			setBrandLoading(false);
+			if (lookupSeqRef.current === seq) setBrandLoading(false);
 		}
-	}, [url, name, mode]);
+	}, [url, mode]);
 
-	// Auto-lookup brand on typing with debounce (skip for readme)
+	// Auto-lookup brand on typing with debounce (supports GitHub shorthands in readme mode)
 	useEffect(() => {
-		if (isReadmeMode(mode)) {
-			const timer = setTimeout(() => setBrand(null), 0);
-			return () => clearTimeout(timer);
-		}
-		const candidate = normalizeUrl(url, mode);
-		if (!candidate || candidate.length < 8 || !candidate.includes(".")) {
-			const timer = setTimeout(() => setBrand(null), 0);
+		const candidate = normalizeBrandLookupUrl(url, mode);
+		if (!candidate) {
+			lookupSeqRef.current += 1;
+			lookupAbortRef.current?.abort();
+			const timer = setTimeout(() => {
+				setBrand(null);
+				setBrandLoading(false);
+			}, 0);
 			return () => clearTimeout(timer);
 		}
 		const timer = setTimeout(() => {
-			lookupBrand(candidate);
+			void lookupBrand(candidate);
 		}, 600);
-		return () => clearTimeout(timer);
+		return () => {
+			clearTimeout(timer);
+			lookupAbortRef.current?.abort();
+		};
 	}, [url, lookupBrand, mode]);
 
 	async function onSubmit(e: FormEvent) {
@@ -289,28 +310,26 @@ export default function NewMonitorPage() {
 							</div>
 						) : brand ? (
 							<div className="overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)]">
-								{brand.hero_url ? (
+								{brand.hero_url && !brandHeroFailed ? (
 									<div className="relative h-20 w-full overflow-hidden bg-[var(--surface-2)]">
 										<img
 											src={brand.hero_url}
 											alt=""
+											referrerPolicy="no-referrer"
 											className="size-full object-cover object-top"
-											onError={(e) => {
-												(e.target as HTMLElement).parentElement!.style.display = "none";
-											}}
+											onError={() => setBrandHeroFailed(true)}
 										/>
 										<div className="absolute inset-0 bg-[#010102]/20" />
 									</div>
 								) : null}
 								<div className="flex items-start gap-3 p-3.5">
-									{brand.logo_url ? (
+									{brand.logo_url && !brandLogoFailed ? (
 										<img
 											src={brand.logo_url}
 											alt=""
+											referrerPolicy="no-referrer"
 											className="h-10 w-10 shrink-0 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] object-contain p-1"
-											onError={(e) => {
-												(e.target as HTMLElement).style.display = "none";
-											}}
+											onError={() => setBrandLogoFailed(true)}
 										/>
 									) : null}
 									<div className="min-w-0 flex-1">

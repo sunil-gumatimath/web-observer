@@ -452,6 +452,7 @@ def capture_with_provider_fallback(
     url: str,
     *,
     timeout_seconds: int = 45,
+    full_page: bool = True,
     clip_selector: str | None = None,
 ) -> VisualCapture:
     """Capture locally via Playwright, falling back to Context.dev on failure."""
@@ -459,7 +460,7 @@ def capture_with_provider_fallback(
         return capture_screenshot(
             url,
             timeout_seconds=timeout_seconds,
-            full_page=True,
+            full_page=full_page,
             clip_selector=clip_selector,
         )
     except FetchError as exc:
@@ -472,6 +473,7 @@ def capture_with_provider_fallback(
                 url,
                 timeout_seconds=timeout_seconds,
                 clip_selector=clip_selector,
+                full_page=full_page,
             )
         except Exception as provider_exc:  # noqa: BLE001 - never mask the original
             logger.warning("visual_provider_fallback_failed url=%s error=%s", url, provider_exc)

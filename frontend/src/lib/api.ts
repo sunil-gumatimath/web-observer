@@ -655,10 +655,11 @@ export const api = {
     ),
 
   // --- webdog.ai parity: brand-aware dashboard ---
-  brandInfo: (workspaceId: string, url: string) =>
+  brandInfo: (workspaceId: string, url: string, opts?: { signal?: AbortSignal }) =>
     request<BrandInfo>(`/api/v1/workspaces/${workspaceId}/monitors/brand-info`, {
       method: "POST",
       body: JSON.stringify({ url }),
+      signal: opts?.signal,
     }),
 
   enrichBrand: (workspaceId: string, monitorId: string) =>

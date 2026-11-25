@@ -225,8 +225,6 @@ function MonitorDetailInner() {
 		if (hasBrandData(monitor.brand)) return;
 		if (autoBrandFor.current === monitor.id) return;
 		autoBrandFor.current = monitor.id;
-		// This flow owns the screenshot for this monitor; skip effect 2.
-		autoPreviewFor.current = monitor.id;
 		const ws = workspaceId;
 		const id = monitor.id;
 		const justCreated = Date.now() - Date.parse(monitor.created_at) < BRAND_ENRICH_GRACE_MS;
@@ -247,8 +245,11 @@ function MonitorDetailInner() {
 				}
 				if (latest) {
 					setMonitor(latest);
-					// The worker also queued a screenshot; pick it up when it lands.
-					if (!brandHeroUrl(latest.brand)) {
+					// Only wait if the screenshot hasn't landed yet and there is no
+					// hero image. Leave autoPreviewFor unset when a hero exists so
+					// Effect 2 can still recover if that hero fails to render.
+					if (!brandHeroUrl(latest.brand) && isLivePreviewStale(latest.brand)) {
+						autoPreviewFor.current = id;
 						await waitForLivePreview(ws, latest.brand?.preview_at ?? null);
 					}
 					return;
@@ -257,7 +258,10 @@ function MonitorDetailInner() {
 				const updated = await api.enrichBrand(ws, id);
 				if (!mountedRef.current || monitorIdRef.current !== id) return;
 				setMonitor(updated);
-				await waitForLivePreview(ws, updated.brand?.preview_at ?? null);
+				if (!brandHeroUrl(updated.brand) && isLivePreviewStale(updated.brand)) {
+					autoPreviewFor.current = id;
+					await waitForLivePreview(ws, updated.brand?.preview_at ?? null);
+				}
 			} catch {
 				// Brand is cosmetic; the brand card / favicon fallback stays.
 			}

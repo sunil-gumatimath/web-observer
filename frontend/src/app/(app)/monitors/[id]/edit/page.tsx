@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
 	Button,
 	Card,
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui";
 import { ThresholdEditor } from "@/components/threshold-editor";
 import { alertConfigPatch } from "@/lib/alert-config";
-import { api, brandAssetUrl } from "@/lib/api";
+import { api } from "@/lib/api";
+import { brandLogoUrl, brandPreviewUrl, normalizeBrandLookupUrl } from "@/lib/brand";
 import {
 	isReadmeMode,
 	MONITOR_MODE_OPTIONS,
@@ -83,9 +84,18 @@ export default function EditMonitorPage() {
 		logo_url?: string | null;
 		hero_url?: string | null;
 	} | null>(null);
+	const [brandLogoFailed, setBrandLogoFailed] = useState(false);
+	const [brandHeroFailed, setBrandHeroFailed] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
+	const nameRef = useRef(name);
+	useEffect(() => {
+		nameRef.current = name;
+	}, [name]);
+	const lookupSeqRef = useRef(0);
+	const lookupAbortRef = useRef<AbortController | null>(null);
+	const skipInitialLookupRef = useRef<{ url: string; mode: MonitorMode } | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -98,8 +108,9 @@ export default function EditMonitorPage() {
 				if (cancelled) return;
 				setMonitor(m);
 				setName(m.name);
+				const loadedMode = (m.mode as MonitorMode) || "page_content";
 				setUrl(m.url);
-				setMode((m.mode as MonitorMode) || "page_content");
+				setMode(loadedMode);
 				setIntervalRaw(String(m.schedule_interval_minutes));
 				setTimezone(m.timezone);
 				setJsRequired(Boolean(m.js_required));
@@ -110,11 +121,14 @@ export default function EditMonitorPage() {
 				setCssSelector(m.css_selector ?? null);
 				setAlertConfig((m.alert_config as Record<string, unknown> | null) ?? null);
 				if (m.brand) {
+					skipInitialLookupRef.current = { url: m.url, mode: loadedMode };
+					setBrandLogoFailed(false);
+					setBrandHeroFailed(false);
 					setBrand({
 						title: m.brand.title,
 						description: m.brand.description,
-						logo_url: brandAssetUrl(m.brand.logo_path) || m.brand.logo_url,
-						hero_url: brandAssetUrl(m.brand.hero_path) || m.brand.hero_url,
+						logo_url: brandLogoUrl(m.brand),
+						hero_url: brandPreviewUrl(m.brand),
 					});
 				}
 			} catch (e) {
@@ -130,28 +144,45 @@ export default function EditMonitorPage() {
 	}, [monitorId]);
 
 	const lookupBrand = useCallback(async (rawUrl?: string) => {
-		if (isReadmeMode(mode)) return;
-		const candidate = normalizeUrl(rawUrl ?? url, mode);
-		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
+		const candidate = normalizeBrandLookupUrl(rawUrl ?? url, mode);
+		if (!candidate) return;
+		const seq = ++lookupSeqRef.current;
+		lookupAbortRef.current?.abort();
+		const ac = new AbortController();
+		lookupAbortRef.current = ac;
 		try {
 			const ws = await ensureWorkspace();
-			const info = await api.brandInfo(ws, candidate);
+			const info = await api.brandInfo(ws, candidate, { signal: ac.signal });
+			if (lookupSeqRef.current !== seq) return;
+			setBrandLogoFailed(false);
+			setBrandHeroFailed(false);
 			setBrand(info);
-			if (info.title && !name.trim()) setName(info.title);
+			if (info.title && !nameRef.current.trim()) setName(info.title);
 		} catch {
-			// keep current brand
+			// keep current brand on aborted or transient lookup errors
 		}
-	}, [url, name, mode]);
+	}, [url, mode]);
 
-	// Auto-lookup brand on URL change with debounce (skip for readme)
+	// Auto-lookup brand on URL change with debounce (supports GitHub shorthands in readme mode)
 	useEffect(() => {
-		if (isReadmeMode(mode)) return;
-		const candidate = normalizeUrl(url, mode);
-		if (!candidate || candidate.length < 8 || !candidate.includes(".")) return;
+		const initial = skipInitialLookupRef.current;
+		if (initial && initial.url === url && initial.mode === mode) {
+			return;
+		}
+		skipInitialLookupRef.current = null;
+		const candidate = normalizeBrandLookupUrl(url, mode);
+		if (!candidate) {
+			lookupSeqRef.current += 1;
+			lookupAbortRef.current?.abort();
+			return;
+		}
 		const timer = setTimeout(() => {
-			lookupBrand(candidate);
+			void lookupBrand(candidate);
 		}, 600);
-		return () => clearTimeout(timer);
+		return () => {
+			clearTimeout(timer);
+			lookupAbortRef.current?.abort();
+		};
 	}, [url, lookupBrand, mode]);
 
 	async function onSubmit(e: FormEvent) {
@@ -253,10 +284,12 @@ export default function EditMonitorPage() {
 					{brand ? (
 						<div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-3.5">
 							<div className="flex items-start gap-3">
-								{brand.logo_url ? (
+								{brand.logo_url && !brandLogoFailed ? (
 									<img
 										src={brand.logo_url}
 										alt=""
+										referrerPolicy="no-referrer"
+										onError={() => setBrandLogoFailed(true)}
 										className="h-9 w-9 rounded-md object-contain border border-[var(--hairline)] bg-[var(--surface-1)] p-0.5"
 									/>
 								) : null}
@@ -275,11 +308,13 @@ export default function EditMonitorPage() {
 									)}
 								</div>
 							</div>
-							{brand.hero_url ? (
+							{brand.hero_url && !brandHeroFailed ? (
 								<div className="mt-3 overflow-hidden rounded-md border border-[var(--hairline)]">
 									<img
 										src={brand.hero_url}
 										alt="Website thumbnail preview"
+										referrerPolicy="no-referrer"
+										onError={() => setBrandHeroFailed(true)}
 										className="max-h-48 w-full object-cover object-top"
 									/>
 								</div>
