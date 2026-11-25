@@ -163,7 +163,16 @@ export default function EditMonitorPage() {
 		} catch {
 			if (ac.signal.aborted || lookupSeqRef.current !== seq) return;
 			const orig = monitor ? normalizeBrandLookupUrl(monitor.url, mode) : null;
-			if (!orig || candidate !== orig) {
+			if (orig && candidate === orig && monitor?.brand) {
+				setBrandLogoFailed(false);
+				setBrandHeroFailed(false);
+				setBrand({
+					title: monitor.brand.title,
+					description: monitor.brand.description,
+					logo_url: brandLogoUrl(monitor.brand),
+					hero_url: brandPreviewUrl(monitor.brand),
+				});
+			} else {
 				setBrand(null);
 			}
 		} finally {
@@ -182,7 +191,10 @@ export default function EditMonitorPage() {
 		if (!candidate) {
 			lookupSeqRef.current += 1;
 			lookupAbortRef.current?.abort();
-			return;
+			const timer = setTimeout(() => {
+				setBrandLoading(false);
+			}, 0);
+			return () => clearTimeout(timer);
 		}
 		const timer = setTimeout(() => {
 			void lookupBrand(candidate);

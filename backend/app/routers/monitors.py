@@ -780,7 +780,7 @@ def enrich_monitor_brand(
     db.refresh(monitor)
     latest_brand = getattr(monitor, "brand", None) or {}
     for preview_key in ("preview_path", "preview_at"):
-        if latest_brand.get(preview_key) and not brand.get(preview_key):
+        if latest_brand.get(preview_key):
             brand[preview_key] = latest_brand[preview_key]
     monitor.brand = brand
     db.commit()
