@@ -111,6 +111,8 @@ def import_monitors(
             if raw_rx is not None and not isinstance(raw_rx, list):
                 raise ValueError("ignore_regexes must be a list of strings")
             raw_alert = row.get("alert_config")
+            if isinstance(raw_alert, str) and not raw_alert.strip():
+                raw_alert = None
             if raw_alert is not None and not isinstance(raw_alert, dict):
                 raise ValueError("alert_config must be an object")
             row["ignore_selectors"] = _validate_selector_list(raw_sel)

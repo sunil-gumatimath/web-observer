@@ -29,7 +29,9 @@ _PROVIDER_FAILOVER_CODES = frozenset({"bot_challenge", "http_error", "read_timeo
 _PROVIDER_HTTP_STATUSES = frozenset({401, 403, 429})
 
 
-def _try_provider_fallback(url: str, *, timeout_seconds: int) -> FetchResult | None:
+def _try_provider_fallback(
+    url: str, *, timeout_seconds: int, max_response_bytes: int
+) -> FetchResult | None:
     """Attempt Context.dev markdown scrape; return None on provider error."""
     started = time.perf_counter()
     try:
@@ -37,11 +39,17 @@ def _try_provider_fallback(url: str, *, timeout_seconds: int) -> FetchResult | N
     except Exception as provider_exc:  # noqa: BLE001 - never mask the original
         logger.warning("page_provider_fallback_failed url=%s error=%s", url, provider_exc)
         return None
+    encoded = markdown.encode("utf-8")
+    if len(encoded) > max_response_bytes:
+        raise FetchError(
+            "response_too_large",
+            f"Provider response size exceeds limit {max_response_bytes}",
+        )
     logger.info("page_provider_fallback_used url=%s chars=%s", url, len(markdown))
     return FetchResult(
         final_url=url,
         status_code=200,
-        content=markdown.encode("utf-8"),
+        content=encoded,
         text=markdown,
         content_type="text/markdown; charset=utf-8",
         latency_ms=round((time.perf_counter() - started) * 1000),
@@ -82,7 +90,9 @@ def fetch_page_with_provider_fallback(
             raise
         if exc.code == "http_error" and exc.http_status not in _PROVIDER_HTTP_STATUSES:
             raise
-        fallback = _try_provider_fallback(url, timeout_seconds=timeout_seconds)
+        fallback = _try_provider_fallback(
+            url, timeout_seconds=timeout_seconds, max_response_bytes=max_response_bytes
+        )
         if fallback is None:
             raise
         return fallback
@@ -92,7 +102,9 @@ def fetch_page_with_provider_fallback(
         and result.status_code in _PROVIDER_HTTP_STATUSES
         and context_dev.is_configured()
     ):
-        fallback = _try_provider_fallback(url, timeout_seconds=timeout_seconds)
+        fallback = _try_provider_fallback(
+            url, timeout_seconds=timeout_seconds, max_response_bytes=max_response_bytes
+        )
         if fallback is not None:
             return fallback
     return result

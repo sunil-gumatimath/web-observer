@@ -221,3 +221,62 @@ def test_csv_cell_neutralizes_formula_prefixes() -> None:
     assert _csv_cell("normal name") == "normal name"
     assert _csv_cell(None) == ""
     assert _csv_cell(42) == 42
+
+
+def test_bulk_import_accepts_blank_alert_config_cell(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services import bulk_import
+
+    monkeypatch.setattr(
+        bulk_import, "get_plan", lambda ws: SimpleNamespace(name="free", min_interval_minutes=5)
+    )
+    monkeypatch.setattr(bulk_import, "validate_url_for_fetch", lambda *a, **k: None)
+    monkeypatch.setattr(bulk_import, "assert_can_create_monitor", lambda *a, **k: None)
+
+    class _Scalars:
+        def all(self):
+            return []
+
+    class _DB:
+        def scalars(self, stmt):
+            return _Scalars()
+
+        def add(self, obj):
+            if getattr(obj, "id", None) is None:
+                obj.id = uuid.uuid4()
+
+        def flush(self):
+            return None
+
+    rows = [{"name": "ok", "url": "https://example.com", "alert_config": "   "}]
+    res = bulk_import.import_monitors(_DB(), SimpleNamespace(id=uuid.uuid4(), plan="free"), rows)
+    assert len(res.created) == 1
+    assert res.errors == []
+
+
+def test_provider_fallback_enforces_max_response_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services import context_dev
+    from app.services.fetcher import FetchError, FetchResult
+    from app.workers.checks import fetch_page_with_provider_fallback
+
+    monkeypatch.setattr(context_dev, "is_configured", lambda: True)
+    monkeypatch.setattr(context_dev, "scrape_markdown", lambda url, timeout_seconds=30: "x" * 1024)
+
+    def fake_primary(url, **kwargs):
+        return FetchResult(
+            final_url=url,
+            status_code=429,
+            content=b"rate limited",
+            text="rate limited",
+            content_type="text/html",
+            latency_ms=10,
+        )
+
+    with pytest.raises(FetchError) as exc:
+        fetch_page_with_provider_fallback(
+            "https://example.com",
+            monitor_mode="page_content",
+            timeout_seconds=30,
+            max_response_bytes=100,
+            primary=fake_primary,
+        )
+    assert exc.value.code == "response_too_large"

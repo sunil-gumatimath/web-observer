@@ -238,7 +238,14 @@ def _capture_screenshot_inline(
                     if req_url.startswith(("data:", "blob:", "about:")):
                         return route.continue_()
                     try:
-                        if allow_public_assets:
+                        is_public_get = (
+                            allow_public_assets
+                            and request.method == "GET"
+                            and request.resource_type in _PUBLIC_ASSET_TYPES
+                            and req_url.startswith(("http://", "https://"))
+                            and not _is_ignored_tracker_url(req_url)
+                        )
+                        if is_public_get:
                             cached = asset_cache.get(req_url)
                             if cached is not None:
                                 status, body, ctype = cached
@@ -246,12 +253,7 @@ def _capture_screenshot_inline(
                         if is_same_browser_host(req_url, validated.hostname):
                             validate_url_for_fetch(req_url, resolve_dns=True)
                             return route.continue_()
-                        if (
-                            allow_public_assets
-                            and request.resource_type in _PUBLIC_ASSET_TYPES
-                            and req_url.startswith(("http://", "https://"))
-                            and not _is_ignored_tracker_url(req_url)
-                        ):
+                        if is_public_get:
                             if asset_count[0] >= _MAX_PUBLIC_ASSETS_PER_CAPTURE:
                                 return route.abort()
                             asset_count[0] += 1
