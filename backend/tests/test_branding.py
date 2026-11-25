@@ -355,3 +355,46 @@ def test_store_brand_assets_preserves_previous_meta_on_fallback_and_omits_dead_l
     )
     assert no_logo["logo_path"] is None
     assert no_logo["logo_url"] is None
+
+
+def test_resolve_brand_preview_target_allows_large_and_403_html_pages(monkeypatch):
+    from app.services.fetcher import FetchError, FetchResult
+
+    def large_html(_url, **_kwargs):
+        raise FetchError("response_too_large", "too big", http_status=200)
+
+    monkeypatch.setattr(branding, "fetch_url", large_html)
+    assert (
+        branding.resolve_brand_preview_target("https://example.com/big-page", mode="page_content")
+        == "https://example.com/big-page"
+    )
+
+    def forbidden_root(url, **_kwargs):
+        return FetchResult(
+            final_url=url,
+            status_code=403,
+            content=b"Forbidden",
+            text="Forbidden",
+            content_type="text/html",
+            latency_ms=5,
+        )
+
+    monkeypatch.setattr(branding, "fetch_url", forbidden_root)
+    assert (
+        branding.resolve_brand_preview_target("https://example.com/", mode="page_content")
+        == "https://example.com/"
+    )
+
+
+def test_parse_feed_brand_meta_ignores_hub_and_xml_alternate_links():
+    atom = """<?xml version="1.0" encoding="UTF-8"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <title>Example Engineering</title>
+      <link rel="hub" href="https://pubsubhubbub.appspot.com/"/>
+      <link rel="alternate" type="text/html" href="https://example.com/blog"/>
+      <link rel="alternate" type="application/atom+xml" href="https://example.com/feed.atom"/>
+      <link rel="self" href="https://example.com/feed.atom"/>
+    </feed>"""
+    meta, site_url = branding._parse_feed_brand_meta(atom, "https://example.com/feed.atom")
+    assert meta.title == "Example Engineering"
+    assert site_url == "https://example.com/blog"

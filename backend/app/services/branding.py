@@ -305,8 +305,10 @@ def _parse_feed_brand_meta(xml_text: str, final_url: str) -> tuple[BrandMeta, st
             meta.description = text[:500]
         elif name == "link":
             rel = (child.attrib.get("rel") or "").lower()
+            link_type = (child.attrib.get("type") or "").lower()
             href = (child.attrib.get("href") or text or "").strip()
-            if href and (not site_url or rel == "alternate") and rel != "self":
+            is_page_link = rel in ("", "alternate") and (not link_type or "html" in link_type)
+            if href and is_page_link and (not site_url or rel == "alternate"):
                 resolved = _abs(final_url, href)
                 if resolved and resolved.startswith(("http://", "https://")):
                     site_url = resolved
@@ -662,6 +664,8 @@ def resolve_brand_preview_target(
             return None
         if exc.code == "bot_challenge" or exc.http_status in (401, 403, 429):
             return url
+        if exc.code == "response_too_large" and (exc.http_status is None or exc.http_status < 400):
+            return url
         raise
     except Exception:  # noqa: BLE001
         if is_non_html_mode:
@@ -670,6 +674,8 @@ def resolve_brand_preview_target(
 
     final_url = result.final_url or url
     if result.status_code < 400 and _is_html_response(result.content_type, result.text):
+        return final_url
+    if not is_non_html_mode and result.status_code in (401, 403, 429):
         return final_url
 
     site_url: str | None = None

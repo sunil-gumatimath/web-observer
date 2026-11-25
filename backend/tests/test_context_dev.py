@@ -129,6 +129,14 @@ def test_scrape_screenshot_png_decodes_inline_data_url(monkeypatch):
     assert seen["body"]["formats"] == {"screenshot": True}
     assert seen["body"]["screenshotParams"] == {"area": "fullPage", "format": "png"}
 
+    with _client(handler) as client:
+        raw_viewport = context_dev.scrape_screenshot_png(
+            "https://example.com", timeout_seconds=9, full_page=False, client=client
+        )
+
+    assert raw_viewport == png
+    assert seen["body"]["screenshotParams"] == {"area": "viewport", "format": "png"}
+
 
 def test_context_key_is_a_masked_server_setting(monkeypatch):
     from app.config import _OVERRIDE_CHECKED_FIELDS, _SECRET_FIELDS, get_settings
@@ -501,16 +509,30 @@ def test_visual_capture_falls_back_to_provider_screenshot(monkeypatch):
     def fail(*args, **kwargs):
         raise FetchError("internal_error", "Playwright unavailable")
 
+    seen_calls: list[dict] = []
+
+    def fake_scrape(url, **kwargs):
+        seen_calls.append({"url": url, **kwargs})
+        return png
+
     monkeypatch.setattr(visual, "capture_screenshot", fail)
     monkeypatch.setattr(context_dev, "is_configured", lambda: True)
-    monkeypatch.setattr(context_dev, "scrape_screenshot_png", lambda url, **kwargs: png)
+    monkeypatch.setattr(context_dev, "scrape_screenshot_png", fake_scrape)
 
     capture = visual.capture_with_provider_fallback(
-        "https://example.com/page", timeout_seconds=45, clip_selector=None
+        "https://example.com/page", timeout_seconds=45, full_page=False, clip_selector=None
     )
 
     assert capture.png_bytes == png
     assert capture.sha256
     assert capture.phash
+    assert seen_calls == [
+        {
+            "url": "https://example.com/page",
+            "timeout_seconds": 45,
+            "clip_selector": None,
+            "full_page": False,
+        }
+    ]
     with Image.open(__import__("io").BytesIO(capture.png_bytes)) as im:
         assert im.size == (4, 4)

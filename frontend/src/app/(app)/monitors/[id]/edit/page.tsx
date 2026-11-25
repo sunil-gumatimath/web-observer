@@ -95,6 +95,7 @@ export default function EditMonitorPage() {
 	}, [name]);
 	const lookupSeqRef = useRef(0);
 	const lookupAbortRef = useRef<AbortController | null>(null);
+	const skipInitialLookupRef = useRef<{ url: string; mode: MonitorMode } | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -107,8 +108,9 @@ export default function EditMonitorPage() {
 				if (cancelled) return;
 				setMonitor(m);
 				setName(m.name);
+				const loadedMode = (m.mode as MonitorMode) || "page_content";
 				setUrl(m.url);
-				setMode((m.mode as MonitorMode) || "page_content");
+				setMode(loadedMode);
 				setIntervalRaw(String(m.schedule_interval_minutes));
 				setTimezone(m.timezone);
 				setJsRequired(Boolean(m.js_required));
@@ -119,6 +121,7 @@ export default function EditMonitorPage() {
 				setCssSelector(m.css_selector ?? null);
 				setAlertConfig((m.alert_config as Record<string, unknown> | null) ?? null);
 				if (m.brand) {
+					skipInitialLookupRef.current = { url: m.url, mode: loadedMode };
 					setBrandLogoFailed(false);
 					setBrandHeroFailed(false);
 					setBrand({
@@ -162,6 +165,11 @@ export default function EditMonitorPage() {
 
 	// Auto-lookup brand on URL change with debounce (supports GitHub shorthands in readme mode)
 	useEffect(() => {
+		const initial = skipInitialLookupRef.current;
+		if (initial && initial.url === url && initial.mode === mode) {
+			return;
+		}
+		skipInitialLookupRef.current = null;
 		const candidate = normalizeBrandLookupUrl(url, mode);
 		if (!candidate) {
 			lookupSeqRef.current += 1;

@@ -255,11 +255,11 @@ function MonitorDetailInner() {
 					return;
 				}
 				// Nothing arrived (or the monitor is old): discover it now.
-				autoPreviewFor.current = id;
 				const updated = await api.enrichBrand(ws, id);
 				if (!mountedRef.current || monitorIdRef.current !== id) return;
 				setMonitor(updated);
-				if (!brandHeroUrl(updated.brand)) {
+				if (!brandHeroUrl(updated.brand) && isLivePreviewStale(updated.brand)) {
+					autoPreviewFor.current = id;
 					await waitForLivePreview(ws, updated.brand?.preview_at ?? null);
 				}
 			} catch {

@@ -473,6 +473,7 @@ def capture_with_provider_fallback(
                 url,
                 timeout_seconds=timeout_seconds,
                 clip_selector=clip_selector,
+                full_page=full_page,
             )
         except Exception as provider_exc:  # noqa: BLE001 - never mask the original
             logger.warning("visual_provider_fallback_failed url=%s error=%s", url, provider_exc)

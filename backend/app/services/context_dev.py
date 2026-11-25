@@ -182,10 +182,13 @@ def scrape_screenshot_png(
     *,
     timeout_seconds: float = 30,
     clip_selector: str | None = None,
+    full_page: bool = True,
     client: httpx.Client | None = None,
 ) -> bytes:
     """Capture a PNG screenshot via Context.dev (inline base64 data URL)."""
-    area: Any = {"selector": clip_selector} if clip_selector else "fullPage"
+    area: Any = (
+        {"selector": clip_selector} if clip_selector else ("fullPage" if full_page else "viewport")
+    )
     payload = _request(
         "POST",
         "/web/scrape",
