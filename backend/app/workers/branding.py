@@ -135,7 +135,9 @@ def capture_brand_preview(monitor_id: str) -> None:
             try:
                 current_brand = store_brand_assets(monitor, rendered_meta)
             except Exception as exc:  # noqa: BLE001
-                logger.debug("brand_preview_meta_backfill_failed monitor_id=%s error=%s", monitor_id_str, exc)
+                logger.debug(
+                    "brand_preview_meta_backfill_failed monitor_id=%s error=%s", monitor_id_str, exc
+                )
         # Assign a new dict so SQLAlchemy detects the JSONB change.
         monitor.brand = {
             **current_brand,

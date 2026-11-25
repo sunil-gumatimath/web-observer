@@ -585,9 +585,7 @@ def test_store_live_preview_with_meta_enables_public_assets_and_parses_html(monk
     monkeypatch.setattr(visual, "capture_with_provider_fallback", fake_capture)
     monkeypatch.setattr(branding, "put_bytes", lambda **_k: None)
 
-    key, rendered_meta = branding.store_live_preview_with_meta(
-        uuid4(), "https://app.example.com/"
-    )
+    key, rendered_meta = branding.store_live_preview_with_meta(uuid4(), "https://app.example.com/")
     assert key is not None
     assert calls["capture"][1]["allow_public_assets"] is True
     assert calls["capture"][1]["extract_html"] is True

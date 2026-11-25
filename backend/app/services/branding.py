@@ -513,9 +513,7 @@ def is_unsafe_svg(data: bytes) -> bool:
     return bool(_UNSAFE_SVG_RE.search(text))
 
 
-_IMAGE_ACCEPT_HEADER = (
-    "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
-)
+_IMAGE_ACCEPT_HEADER = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
 _MIN_HERO_WIDTH = 300
 _MIN_HERO_HEIGHT = 150
 
