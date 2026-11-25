@@ -345,8 +345,10 @@ export default function NewMonitorPage() {
 											<p className="mt-0.5 line-clamp-2 text-xs text-[var(--ink-muted)] leading-relaxed">
 												{brand.description}
 											</p>
+										) : brand.title ? (
+											<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">Title and site icon detected.</p>
 										) : (
-											<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">Logo and title detected.</p>
+											<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">Site icon preview (no metadata detected).</p>
 										)}
 									</div>
 								</div>

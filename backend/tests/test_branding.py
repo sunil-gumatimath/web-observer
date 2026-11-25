@@ -398,3 +398,32 @@ def test_parse_feed_brand_meta_ignores_hub_and_xml_alternate_links():
     meta, site_url = branding._parse_feed_brand_meta(atom, "https://example.com/feed.atom")
     assert meta.title == "Example Engineering"
     assert site_url == "https://example.com/blog"
+
+
+def test_abs_rejects_non_http_schemes():
+    assert branding._abs("https://example.com/a", "/b.png") == "https://example.com/b.png"
+    assert branding._abs("https://example.com/a", "file:///etc/passwd") is None
+    assert branding._abs("https://example.com/a", "ftp://example.com/logo.png") is None
+    assert branding._abs("https://example.com/a", "javascript:alert(1)") is None
+    assert branding._abs("https://example.com/a", "data:image/png;base64,abc") is None
+
+
+def test_sniff_image_type_handles_large_svg_header_and_non_svg_xml():
+    padded_svg = b"<!-- " + (b"x" * 700) + b' --><svg xmlns="http://www.w3.org/2000/svg"/>'
+    assert branding.sniff_image_type(padded_svg) == ("svg", "image/svg+xml")
+
+    plain_xml = b'<?xml version="1.0"?><error>not found</error>'
+    assert branding.sniff_image_type(plain_xml) != ("svg", "image/svg+xml")
+
+
+def test_brand_asset_keys_deduplicates_and_handles_none():
+    assert branding.brand_asset_keys(None) == []
+    assert branding.brand_asset_keys({}) == []
+    assert branding.brand_asset_keys(
+        {
+            "logo_path": "brand-assets/1/logo.png",
+            "hero_path": "brand-assets/1/logo.png",
+            "preview_path": "brand-assets/1/preview.png",
+            "title": "Ignore me",
+        }
+    ) == ["brand-assets/1/logo.png", "brand-assets/1/preview.png"]

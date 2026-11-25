@@ -29,28 +29,19 @@ function faviconFor(domain?: string): string | null {
   }
 }
 
-export function BrandLogo({
-  brand,
+function BrandLogoInner({
+  sources,
   name,
-  domain,
-  size = 28,
+  size,
   className,
 }: {
-  brand?: MonitorBrand | null;
+  sources: string[];
   name: string;
-  domain?: string;
-  size?: number;
+  size: number;
   className?: string;
 }) {
-  const primary = brandAssetUrl(brand?.logo_path);
-  const fallback = brand?.logo_url || null;
-  const favicon = faviconFor(domain);
   const [errStep, setErrStep] = useState(0);
   // 0 -> re-hosted logo, 1 -> origin logo_url, 2 -> domain favicon, 3 -> avatar
-  const sources = useMemo(
-    () => [primary, fallback, favicon].filter((s): s is string => !!s),
-    [primary, fallback, favicon],
-  );
   const src = errStep < sources.length ? sources[errStep]! : null;
 
   if (src) {
@@ -83,5 +74,37 @@ export function BrandLogo({
     >
       {initials(name)}
     </span>
+  );
+}
+
+export function BrandLogo({
+  brand,
+  name,
+  domain,
+  size = 28,
+  className,
+}: {
+  brand?: MonitorBrand | null;
+  name: string;
+  domain?: string;
+  size?: number;
+  className?: string;
+}) {
+  const primary = brandAssetUrl(brand?.logo_path);
+  const fallback = brand?.logo_url || null;
+  const favicon = faviconFor(domain);
+  const sources = useMemo(
+    () => [primary, fallback, favicon].filter((s): s is string => !!s),
+    [primary, fallback, favicon],
+  );
+
+  return (
+    <BrandLogoInner
+      key={sources.join("|")}
+      sources={sources}
+      name={name}
+      size={size}
+      className={className}
+    />
   );
 }
