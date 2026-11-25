@@ -13,6 +13,8 @@ import {
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import { ensureWorkspace } from "@/lib/workspace";
+import { invalidateCachePrefix } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import { usePageTitle } from "@/lib/use-page-title";
 import type { MonitorCreateInput } from "@/lib/types";
 
@@ -69,6 +71,10 @@ export default function ImportPage() {
 				res = await api.bulkImportMonitors(ws, { jsonItems: items });
 			}
 			const errors = res.errors ?? [];
+			if (res.created_count > 0) {
+				invalidateCachePrefix(cacheKeys.monitors(ws));
+				invalidateCachePrefix(cacheKeys.usage(ws));
+			}
 			setResult(
 				`Created ${res.created_count}. Skipped ${res.skipped?.length ?? 0}. Errors ${errors.length}.`,
 			);

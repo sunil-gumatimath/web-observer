@@ -15,10 +15,12 @@ import {
 import { api, type ExportFormat } from "@/lib/api";
 import { exportFileName, triggerBlobDownload } from "@/lib/download";
 import { relativeTime } from "@/lib/format";
-import type { Monitor, MonitorRunLog } from "@/lib/types";
+import type { Monitor, MonitorRunLog, RunLogPage } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { ensureWorkspace } from "@/lib/workspace";
+import { fetchCached, readCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 
 type Outcome = "all" | "success" | "failed" | "changed";
 
@@ -34,43 +36,73 @@ function statusTone(status: string): "neutral" | "success" | "danger" | "info" {
 
 export default function LogsPage() {
 	usePageTitle("Logs");
-	const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-	const [monitors, setMonitors] = useState<Monitor[]>([]);
-	const [rows, setRows] = useState<MonitorRunLog[]>([]);
-	const [total, setTotal] = useState(0);
+	const initialWs = readCache<string>("activeWorkspaceId")?.data ?? null;
+	const initialMonitors = initialWs
+		? readCache<Monitor[]>(cacheKeys.monitors(initialWs))?.data
+		: undefined;
+	const initialLogs = initialWs
+		? readCache<RunLogPage>(
+				cacheKeys.runLogs(initialWs, {
+					monitorId: "all",
+					outcome: "all",
+					from: "",
+					to: "",
+					limit: PAGE_SIZE,
+				}),
+			)?.data
+		: undefined;
+
+	const [workspaceId, setWorkspaceId] = useState<string | null>(initialWs);
+	const [monitors, setMonitors] = useState<Monitor[]>(initialMonitors ?? []);
+	const [rows, setRows] = useState<MonitorRunLog[]>(initialLogs?.items ?? []);
+	const [total, setTotal] = useState(initialLogs?.total ?? 0);
 	const [outcome, setOutcome] = useState<Outcome>("all");
 	const [monitorFilter, setMonitorFilter] = useState<string>("all");
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
 	const [limit, setLimit] = useState(PAGE_SIZE);
-	const [loading, setLoading] = useState(true);
+	const [loading, setLoading] = useState(!initialLogs);
 	const [error, setError] = useState<string | null>(null);
 	const [refreshTick, setRefreshTick] = useState(0);
 	const [exporting, setExporting] = useState<ExportFormat | null>(null);
 
 	const load = useCallback(
-		async (ws: string, lim: number) => {
-			const page = await api.listRunLogs(ws, {
-				...(monitorFilter !== "all" ? { monitorId: monitorFilter } : {}),
-				...(outcome !== "all" ? { outcome } : {}),
-				...(dateFrom ? { from: dateFrom } : {}),
-				...(dateTo ? { to: dateTo } : {}),
+		async (ws: string, lim: number, force = false): Promise<RunLogPage> => {
+			const key = cacheKeys.runLogs(ws, {
+				monitorId: monitorFilter,
+				outcome,
+				from: dateFrom,
+				to: dateTo,
 				limit: lim,
 			});
-			setRows(page.items);
-			setTotal(page.total);
+			return fetchCached(
+				key,
+				() =>
+					api.listRunLogs(ws, {
+						...(monitorFilter !== "all" ? { monitorId: monitorFilter } : {}),
+						...(outcome !== "all" ? { outcome } : {}),
+						...(dateFrom ? { from: dateFrom } : {}),
+						...(dateTo ? { to: dateTo } : {}),
+						limit: lim,
+					}),
+				{ force, maxAgeMs: force ? 0 : 4_000 },
+			);
 		},
 		[monitorFilter, outcome, dateFrom, dateTo],
 	);
 
 	useEffect(() => {
 		let cancelled = false;
+		const force = refreshTick > 0;
 		(async () => {
 			try {
 				const ws = await ensureWorkspace();
 				if (cancelled) return;
 				setWorkspaceId(ws);
-				await load(ws, limit);
+				const page = await load(ws, limit, force);
+				if (cancelled) return;
+				setRows(page.items);
+				setTotal(page.total);
 			} catch (e) {
 				if (!cancelled)
 					setError(e instanceof Error ? e.message : "Failed to load run logs");
@@ -90,7 +122,11 @@ export default function LogsPage() {
 		(async () => {
 			try {
 				const ws = await ensureWorkspace();
-				const list = await api.listMonitors(ws);
+				const list = await fetchCached(
+					cacheKeys.monitors(ws),
+					() => api.listMonitors(ws),
+					{ maxAgeMs: 10_000 },
+				);
 				if (!cancelled) setMonitors(list);
 			} catch {
 				// Non-fatal: the dropdown stays empty, list still shows monitor names.
@@ -174,6 +210,21 @@ export default function LogsPage() {
 					onChange={(key) => {
 						setOutcome(key);
 						setLimit(PAGE_SIZE);
+						if (workspaceId) {
+							const cached = readCache<RunLogPage>(
+								cacheKeys.runLogs(workspaceId, {
+									monitorId: monitorFilter,
+									outcome: key,
+									from: dateFrom,
+									to: dateTo,
+									limit: PAGE_SIZE,
+								}),
+							);
+							if (cached) {
+								setRows(cached.data.items);
+								setTotal(cached.data.total);
+							}
+						}
 					}}
 				/>
 			</div>

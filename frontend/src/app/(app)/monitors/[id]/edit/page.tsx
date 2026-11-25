@@ -31,6 +31,8 @@ import {
 } from "@/lib/modes";
 import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
+import { invalidateCachePrefix } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import { usePageTitle } from "@/lib/use-page-title";
 
 function normalizeUrl(input: string, mode?: MonitorMode): string {
@@ -264,6 +266,7 @@ export default function EditMonitorPage() {
 				// thresholds in place when the editor is blanked.
 				...alertConfigPatch(alertConfig),
 			});
+			invalidateCachePrefix(cacheKeys.monitors(workspaceId));
 			router.push(`/monitors/${monitorId}`);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to update monitor");

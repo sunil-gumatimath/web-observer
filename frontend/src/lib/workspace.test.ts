@@ -37,6 +37,7 @@ vi.mock("@/lib/config", () => ({
 }));
 
 import { ensureWorkspace, invalidateWorkspace } from "@/lib/workspace";
+import { readCache } from "@/lib/query-cache";
 
 describe("workspace cache invalidation", () => {
   beforeEach(() => {
@@ -87,5 +88,43 @@ describe("workspace cache invalidation", () => {
     });
     await expect(ensureWorkspace()).resolves.toBe("ws-b");
     expect(meMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores stale publication and rejection after invalidateWorkspace()", async () => {
+    let rejectOldMe!: (err: Error) => void;
+    meMock.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectOldMe = reject;
+        }),
+    );
+
+    const oldPromise = ensureWorkspace();
+    invalidateWorkspace();
+
+    getClerkUserIdMock.mockReturnValue("user-b");
+    let resolveNewMe!: (v: unknown) => void;
+    meMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveNewMe = resolve;
+        }),
+    );
+
+    const newPromise = ensureWorkspace();
+    // Stale failure must not clear the newer resolution's promise.
+    rejectOldMe(new Error("aborted"));
+    await expect(oldPromise).rejects.toThrow("aborted");
+
+    // A concurrent caller must still reuse the newer in-flight promise (no extra /me call).
+    const concurrentPromise = ensureWorkspace();
+    expect(meMock).toHaveBeenCalledTimes(2);
+
+    resolveNewMe({
+      clerk_user_id: "user-b",
+      workspaces: [{ id: "ws-b", name: "B", created_at: "" }],
+    });
+    await expect(Promise.all([newPromise, concurrentPromise])).resolves.toEqual(["ws-b", "ws-b"]);
+    expect(readCache<string>("activeWorkspaceId")?.data).toBe("ws-b");
   });
 });

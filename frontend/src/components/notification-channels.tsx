@@ -13,6 +13,8 @@ import {
 	SuccessBox,
 } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fetchCached, readCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import { useToast } from "@/components/toasts";
 import type { NotificationChannel } from "@/lib/types";
 
@@ -22,17 +24,22 @@ export function NotificationChannelsPanel({
 	workspaceId: string;
 }) {
 	const toast = useToast();
-	const [channels, setChannels] = useState<NotificationChannel[]>([]);
+	const initialChannels = readCache<NotificationChannel[]>(cacheKeys.channels(workspaceId))?.data;
+	const [channels, setChannels] = useState<NotificationChannel[]>(initialChannels ?? []);
 	const [type, setType] = useState<"email" | "slack" | "discord">("email");
 	const [address, setAddress] = useState("");
 	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(true);
+	const [loading, setLoading] = useState(!initialChannels);
 	const [busyId, setBusyId] = useState<string | null>(null);
 	const [adding, setAdding] = useState(false);
 	const [testMsg, setTestMsg] = useState<string | null>(null);
 
-	const load = useCallback(async () => {
-		const list = await api.listNotificationChannels(workspaceId);
+	const load = useCallback(async (force = false) => {
+		const list = await fetchCached(
+			cacheKeys.channels(workspaceId),
+			() => api.listNotificationChannels(workspaceId),
+			{ force, maxAgeMs: force ? 0 : 5_000 },
+		);
 		setChannels(list);
 	}, [workspaceId]);
 
@@ -59,7 +66,7 @@ export function NotificationChannelsPanel({
 		try {
 			await api.createNotificationChannel(workspaceId, { type, address });
 			setAddress("");
-			await load();
+			await load(true);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to add channel");
 		} finally {
@@ -73,7 +80,7 @@ export function NotificationChannelsPanel({
 			await api.updateNotificationChannel(workspaceId, channel.id, {
 				enabled: !channel.enabled,
 			});
-			await load();
+			await load(true);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to update channel");
 		} finally {
@@ -103,7 +110,7 @@ export function NotificationChannelsPanel({
 		setError(null);
 		try {
 			await api.deleteNotificationChannel(workspaceId, channel.id);
-			await load();
+			await load(true);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to delete channel");
 		} finally {

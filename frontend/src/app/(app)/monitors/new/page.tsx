@@ -37,6 +37,8 @@ import {
 	showsSelector,
 } from "@/lib/modes";
 import { ensureWorkspace } from "@/lib/workspace";
+import { invalidateCachePrefix } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import { usePageTitle } from "@/lib/use-page-title";
 
 function normalizeUrl(input: string, mode?: MonitorMode): string {
@@ -224,6 +226,8 @@ export default function NewMonitorPage() {
 					: {}),
 				run_now: runNow,
 			});
+			invalidateCachePrefix(cacheKeys.monitors(ws));
+			invalidateCachePrefix(cacheKeys.usage(ws));
 			// run_now is handled server-side in the same POST to avoid a second
 			// round-trip (~0.7s saved). No second await here — navigate immediately.
 			router.push(`/monitors/${monitor.id}?fresh=1`);
@@ -820,6 +824,10 @@ function SitemapDiscovery({
 				ignore_selectors: ignore.length ? ignore : null,
 				ignore_regexes: ignoreRegex.length ? ignoreRegex : null,
 			});
+			if (res.created_count > 0) {
+				invalidateCachePrefix(cacheKeys.monitors(ws));
+				invalidateCachePrefix(cacheKeys.usage(ws));
+			}
 			setResult(res);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Failed to create monitors");

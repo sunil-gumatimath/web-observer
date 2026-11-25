@@ -31,6 +31,8 @@ import {
 import type { ChangeEvent, Monitor, MonitorRun, SnapshotAccess, ValuePoint } from "@/lib/types";
 import { ValueChart } from "@/components/value-chart";
 import { ensureWorkspace } from "@/lib/workspace";
+import { invalidateCachePrefix } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import { usePageTitle } from "@/lib/use-page-title";
 import { CapturedContentPreview } from "@/components/captured-content-preview";
 import { parseSummaryParts, stripDecoration } from "@/lib/summary";
@@ -530,6 +532,8 @@ function MonitorDetailInner() {
 		setError(null);
 		try {
 			await api.deleteMonitor(workspaceId, monitor.id);
+			invalidateCachePrefix(cacheKeys.monitors(workspaceId));
+			invalidateCachePrefix(cacheKeys.usage(workspaceId));
 			router.push("/monitors");
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Delete failed");
@@ -793,6 +797,7 @@ function MonitorDetailInner() {
 									onClick={() =>
 										withAction(async () => {
 											await api.pauseMonitor(workspaceId!, monitor.id);
+											invalidateCachePrefix(cacheKeys.monitors(workspaceId!));
 										})
 									}
 								>
@@ -806,6 +811,7 @@ function MonitorDetailInner() {
 									onClick={() =>
 										withAction(async () => {
 											await api.resumeMonitor(workspaceId!, monitor.id);
+											invalidateCachePrefix(cacheKeys.monitors(workspaceId!));
 										})
 									}
 								>

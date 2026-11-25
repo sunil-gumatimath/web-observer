@@ -20,9 +20,16 @@ import {
 } from "@/components/ui";
 import { api, type MeResponse } from "@/lib/api";
 import { useToast } from "@/components/toasts";
-import type { ApiKeyRow, WebhookDelivery, WebhookOut, WorkspaceSettings } from "@/lib/types";
+import type {
+  ApiKeyRow,
+  WebhookDelivery,
+  WebhookOut,
+  WorkspaceSettings,
+} from "@/lib/types";
 import { config } from "@/lib/config";
-import { ensureWorkspace, setStoredWorkspaceId } from "@/lib/workspace";
+import { ensureWorkspace, getCachedMe, setStoredWorkspaceId } from "@/lib/workspace";
+import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import { usePageTitle } from "@/lib/use-page-title";
 
 /** "14:00 UTC" rendered in the visitor's timezone, e.g. "9:00 AM". */
@@ -43,41 +50,56 @@ export default function SettingsPage() {
   usePageTitle("Settings");
 
   const toast = useToast();
-  const [workspaceId, setWorkspaceId] = useState("");
-  const [me, setMe] = useState<MeResponse | null>(null);
+  const initialWs = readCache<string>("activeWorkspaceId")?.data ?? "";
+  const initialMe = readCache<MeResponse>(cacheKeys.me())?.data ?? null;
+  const initialHealth = readCache<string>(cacheKeys.health())?.data ?? "…";
+  const initialWorkspace = initialWs
+    ? readCache<Awaited<ReturnType<typeof api.getWorkspace>>>(cacheKeys.workspace(initialWs))?.data
+    : undefined;
+  const initialKeySettings = initialWs
+    ? readCache<WorkspaceSettings>(cacheKeys.workspaceSettings(initialWs))?.data ?? null
+    : null;
+
+  const [workspaceId, setWorkspaceId] = useState(initialWs);
+  const [me, setMe] = useState<MeResponse | null>(initialMe);
   const [error, setError] = useState<string | null>(null);
-  const [apiStatus, setApiStatus] = useState<string>("…");
-  const [digestCadence, setDigestCadence] = useState("none");
-  const [digestHour, setDigestHour] = useState(14);
-  const [aiEnabled, setAiEnabled] = useState(true);
+  const [apiStatus, setApiStatus] = useState<string>(initialHealth);
+  const [digestCadence, setDigestCadence] = useState(initialWorkspace?.digest_cadence || "none");
+  const [digestHour, setDigestHour] = useState(initialWorkspace?.digest_hour_utc ?? 14);
+  const [aiEnabled, setAiEnabled] = useState(initialWorkspace ? initialWorkspace.ai_summaries_enabled !== false : true);
   const [savingPrefs, setSavingPrefs] = useState(false);
-  const [keySettings, setKeySettings] = useState<WorkspaceSettings | null>(null);
+  const [keySettings, setKeySettings] = useState<WorkspaceSettings | null>(initialKeySettings);
   useEffect(() => {
-    api
-      .health()
-      .then((h) => setApiStatus(`${h.status} v${h.version}`))
+    fetchCached(
+      cacheKeys.health(),
+      () => api.health().then((h) => `${h.status} v${h.version}`),
+      { maxAgeMs: 30_000 },
+    )
+      .then(setApiStatus)
       .catch(() => setApiStatus("unreachable"));
 
-    api
-      .me()
+    getCachedMe({ maxAgeMs: 30_000 })
       .then(setMe)
       .catch(() => setMe(null));
 
     ensureWorkspace()
       .then(async (id) => {
         setWorkspaceId(id);
-        try {
-          const ws = await api.getWorkspace(id);
+        const [wsRes, settingsRes] = await Promise.allSettled([
+          fetchCached(cacheKeys.workspace(id), () => api.getWorkspace(id), { maxAgeMs: 5_000 }),
+          fetchCached(cacheKeys.workspaceSettings(id), () => api.getWorkspaceSettings(id), { maxAgeMs: 5_000 }),
+        ]);
+        if (wsRes.status === "fulfilled") {
+          const ws = wsRes.value;
           setDigestCadence(ws.digest_cadence || "none");
           setDigestHour(ws.digest_hour_utc ?? 14);
           setAiEnabled(ws.ai_summaries_enabled !== false);
-        } catch {
-          /* ignore */
         }
-        api
-          .getWorkspaceSettings(id)
-          .then(setKeySettings)
-          .catch(() => setKeySettings(null));
+        if (settingsRes.status === "fulfilled") {
+          setKeySettings(settingsRes.value);
+        } else {
+          setKeySettings(null);
+        }
       })
       .catch(() => {
         /* keep stored id */
@@ -106,11 +128,12 @@ export default function SettingsPage() {
     setSavingPrefs(true);
     setError(null);
     try {
-      await api.updateWorkspace(workspaceId, {
+      const updated = await api.updateWorkspace(workspaceId, {
         digest_cadence: digestCadence,
         digest_hour_utc: digestHour,
         ai_summaries_enabled: aiEnabled,
       });
+      writeCache(cacheKeys.workspace(workspaceId), updated);
       toast.success("Preferences saved");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save preferences";
@@ -316,28 +339,36 @@ const EMPTY_PLACEHOLDER =
 /** Optional tools for solo use — billing/plan upgrades are skipped. */
 function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
   const toast = useToast();
+  const initialKeys = readCache<ApiKeyRow[]>(cacheKeys.apiKeys(workspaceId))?.data;
+  const initialWebhooks = readCache<WebhookOut[]>(cacheKeys.webhooks(workspaceId))?.data;
+  const initialDeliveries = readCache<WebhookDelivery[]>(cacheKeys.webhookDeliveries(workspaceId))?.data;
+
   const [apiKeyName, setApiKeyName] = useState("default");
   const [apiKey, setApiKey] = useState<string | null>(null);
-  const [apiKeys, setApiKeys] = useState<ApiKeyRow[]>([]);
+  const [apiKeys, setApiKeys] = useState<ApiKeyRow[]>(initialKeys ?? []);
   const [apiKeysLoading, setApiKeysLoading] = useState(false);
 
   const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
   const [webhookUrl, setWebhookUrl] = useState("");
-  const [webhooks, setWebhooks] = useState<WebhookOut[]>([]);
+  const [webhooks, setWebhooks] = useState<WebhookOut[]>(initialWebhooks ?? []);
   const [webhooksLoading, setWebhooksLoading] = useState(false);
 
   const [err, setErr] = useState<string | null>(null);
   const [creatingKey, setCreatingKey] = useState(false);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
 
-  const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
+  const [deliveries, setDeliveries] = useState<WebhookDelivery[]>(initialDeliveries ?? []);
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
-  const loadApiKeys = useCallback(async () => {
+  const loadApiKeys = useCallback(async (force = false) => {
     setApiKeysLoading(true);
     try {
-      const list = await api.listApiKeys(workspaceId);
+      const list = await fetchCached(
+        cacheKeys.apiKeys(workspaceId),
+        () => api.listApiKeys(workspaceId),
+        { force, maxAgeMs: force ? 0 : 5_000 },
+      );
       setApiKeys(list);
     } catch {
       /* non-fatal */
@@ -350,6 +381,11 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     setErr(null);
     try {
       await api.deleteApiKey(workspaceId, keyId);
+      const current = readCache<ApiKeyRow[]>(cacheKeys.apiKeys(workspaceId))?.data ?? apiKeys;
+      writeCache(
+        cacheKeys.apiKeys(workspaceId),
+        current.filter((k) => k.id !== keyId),
+      );
       setApiKeys((prev) => prev.filter((k) => k.id !== keyId));
       toast.success("API key revoked");
     } catch (e) {
@@ -357,10 +393,14 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  const loadWebhooks = useCallback(async () => {
+  const loadWebhooks = useCallback(async (force = false) => {
     setWebhooksLoading(true);
     try {
-      const list = await api.listWebhooks(workspaceId);
+      const list = await fetchCached(
+        cacheKeys.webhooks(workspaceId),
+        () => api.listWebhooks(workspaceId),
+        { force, maxAgeMs: force ? 0 : 5_000 },
+      );
       setWebhooks(list);
     } catch {
       /* non-fatal */
@@ -373,6 +413,11 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     setErr(null);
     try {
       await api.deleteWebhook(workspaceId, endpointId);
+      const current = readCache<WebhookOut[]>(cacheKeys.webhooks(workspaceId))?.data ?? webhooks;
+      writeCache(
+        cacheKeys.webhooks(workspaceId),
+        current.filter((w) => w.id !== endpointId),
+      );
       setWebhooks((prev) => prev.filter((w) => w.id !== endpointId));
       toast.success("Webhook deleted");
     } catch (e) {
@@ -380,10 +425,14 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  const loadDeliveries = useCallback(async () => {
+  const loadDeliveries = useCallback(async (force = false) => {
     setDeliveriesLoading(true);
     try {
-      const list = await api.listWebhookDeliveries(workspaceId, { limit: 50 });
+      const list = await fetchCached(
+        cacheKeys.webhookDeliveries(workspaceId),
+        () => api.listWebhookDeliveries(workspaceId, { limit: 50 }),
+        { force, maxAgeMs: force ? 0 : 5_000 },
+      );
       setDeliveries(list);
     } catch {
       /* non-fatal: keep any prior list */
@@ -409,7 +458,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
     try {
       await api.retryWebhookDelivery(workspaceId, deliveryId);
       toast.success("Webhook delivery re-enqueued");
-      await loadDeliveries();
+      await loadDeliveries(true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Retry failed");
     } finally {
@@ -428,7 +477,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="section-label">API keys</p>
-          <Button type="button" variant="secondary" size="sm" disabled={apiKeysLoading} onClick={loadApiKeys}>
+          <Button type="button" variant="secondary" size="sm" disabled={apiKeysLoading} onClick={() => loadApiKeys(true)}>
             {apiKeysLoading ? "Loading…" : "Refresh"}
           </Button>
         </div>
@@ -456,7 +505,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
                   "API key created",
                   "Copy it now — it will not be shown again.",
                 );
-                await loadApiKeys();
+                await loadApiKeys(true);
               } catch (e) {
                 setErr(e instanceof Error ? e.message : "API key failed");
               } finally {
@@ -523,7 +572,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
       <Card className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="section-label">Outbound webhooks</p>
-          <Button type="button" variant="secondary" size="sm" disabled={webhooksLoading} onClick={loadWebhooks}>
+          <Button type="button" variant="secondary" size="sm" disabled={webhooksLoading} onClick={() => loadWebhooks(true)}>
             {webhooksLoading ? "Loading…" : "Refresh"}
           </Button>
         </div>
@@ -549,7 +598,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
                   setWebhookSecret(r.secret);
                   toast.success("Webhook created", "Store the signing secret securely.");
                   setWebhookUrl("");
-                  await loadWebhooks();
+                  await loadWebhooks(true);
                 } catch (e) {
                   setErr(e instanceof Error ? e.message : "Webhook failed");
                 } finally {
@@ -621,7 +670,7 @@ function EnterprisePanel({ workspaceId }: { workspaceId: string }) {
       <Card className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <p className="section-label">Webhook deliveries</p>
-          <Button type="button" variant="secondary" size="sm" disabled={deliveriesLoading} onClick={loadDeliveries}>
+          <Button type="button" variant="secondary" size="sm" disabled={deliveriesLoading} onClick={() => loadDeliveries(true)}>
             {deliveriesLoading ? "Loading…" : "Refresh"}
           </Button>
         </div>

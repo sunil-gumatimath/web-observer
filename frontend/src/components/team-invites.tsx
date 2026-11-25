@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, Input, Label, SectionTitle, Select } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import type { InviteRow } from "@/lib/types";
 
 const ROLES = ["member", "admin", "viewer", "owner"] as const;
 
 export function TeamInvites({ workspaceId }: { workspaceId: string }) {
-  const [invites, setInvites] = useState<InviteRow[]>([]);
+  const initialInvites = workspaceId
+    ? readCache<InviteRow[]>(cacheKeys.invites(workspaceId))?.data
+    : undefined;
+  const [invites, setInvites] = useState<InviteRow[]>(initialInvites ?? []);
   const [role, setRole] = useState<string>("member");
   const [maxUses, setMaxUses] = useState(5);
   const [expiresDays, setExpiresDays] = useState(7);
@@ -17,10 +22,13 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback((force = false) => {
     if (!workspaceId) return;
-    api
-      .listInvites(workspaceId)
+    fetchCached(
+      cacheKeys.invites(workspaceId),
+      () => api.listInvites(workspaceId),
+      { force, maxAgeMs: force ? 0 : 5_000 },
+    )
       .then(setInvites)
       .catch(() => setErr("Could not load invites."));
   }, [workspaceId]);
@@ -41,7 +49,7 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
       });
       setGenerated(`${window.location.origin}${r.url}`);
       setMsg("Share the link below. The full token is shown only once.");
-      load();
+      load(true);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to create invite");
     } finally {
@@ -52,6 +60,11 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
   async function revoke(id: string) {
     try {
       await api.revokeInvite(workspaceId, id);
+      const current = readCache<InviteRow[]>(cacheKeys.invites(workspaceId))?.data ?? invites;
+      writeCache(
+        cacheKeys.invites(workspaceId),
+        current.filter((r) => r.id !== id),
+      );
       setInvites((rows) => rows.filter((r) => r.id !== id));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to revoke invite");

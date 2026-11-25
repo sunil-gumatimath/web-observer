@@ -17,8 +17,13 @@ import { useEffect, useRef } from "react";
  * The callback is held in a ref, so callers can pass an inline arrow without
  * re-creating the timer on every render.
  */
-export function useAutoRefresh(onTick: () => void, intervalMs = 15_000): void {
+export function useAutoRefresh(
+	onTick: () => void,
+	intervalMs = 15_000,
+	minRefreshGapMs = 3_000,
+): void {
 	const tickRef = useRef(onTick);
+	const lastTickAtRef = useRef(0);
 
 	useEffect(() => {
 		tickRef.current = onTick;
@@ -26,10 +31,23 @@ export function useAutoRefresh(onTick: () => void, intervalMs = 15_000): void {
 
 	useEffect(() => {
 		let id: number | null = null;
+		// Seed initial mount time so an immediate focus event doesn't double-fetch
+		// right after the page's own initial load.
+		lastTickAtRef.current = Date.now();
+
+		const fire = () => {
+			lastTickAtRef.current = Date.now();
+			tickRef.current();
+		};
+
+		const fireIfStale = () => {
+			if (Date.now() - lastTickAtRef.current < minRefreshGapMs) return;
+			fire();
+		};
 
 		const start = () => {
 			if (id != null) return;
-			id = window.setInterval(() => tickRef.current(), intervalMs);
+			id = window.setInterval(fire, intervalMs);
 		};
 		const stop = () => {
 			if (id == null) return;
@@ -39,15 +57,19 @@ export function useAutoRefresh(onTick: () => void, intervalMs = 15_000): void {
 
 		const onVisibilityChange = () => {
 			if (document.visibilityState === "visible") {
-				// Data is stale by definition after being away: refresh now
-				// rather than waiting out the remaining interval.
-				tickRef.current();
+				// Data is stale after being away: refresh now rather than waiting
+				// out the remaining interval, while coalescing with window focus.
+				fireIfStale();
 				start();
 			} else {
 				stop();
 			}
 		};
-		const onFocus = () => tickRef.current();
+		const onFocus = () => {
+			if (document.visibilityState === "visible") {
+				fireIfStale();
+			}
+		};
 
 		if (document.visibilityState === "visible") start();
 		document.addEventListener("visibilitychange", onVisibilityChange);
@@ -58,5 +80,5 @@ export function useAutoRefresh(onTick: () => void, intervalMs = 15_000): void {
 			document.removeEventListener("visibilitychange", onVisibilityChange);
 			window.removeEventListener("focus", onFocus);
 		};
-	}, [intervalMs]);
+	}, [intervalMs, minRefreshGapMs]);
 }

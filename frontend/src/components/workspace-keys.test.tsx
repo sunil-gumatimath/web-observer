@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorkspaceKeys } from "./workspace-keys";
+import { clearQueryCache, writeCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 
 const SERVER_BASE = "https://api.kilo.ai/api/gateway";
 
@@ -40,6 +42,7 @@ function stubApis() {
 describe("WorkspaceKeys", () => {
   afterEach(() => {
     cleanup();
+    clearQueryCache();
     mocks.getWorkspaceSettings.mockReset();
     mocks.getModelCatalog.mockReset();
     mocks.updateWorkspaceKeys.mockReset();
@@ -75,5 +78,53 @@ describe("WorkspaceKeys", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save keys/ }));
 
     await waitFor(() => expect(screen.getByText(/422 base required/)).toBeTruthy());
+  });
+
+  it("preserves user edits made while mount revalidation is pending", async () => {
+    stubApis();
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValue(1_000);
+    writeCache(cacheKeys.workspaceSettings("ws-1"), {
+      as_llm_api_key: false,
+      llm_api_base: SERVER_BASE,
+      llm_model: "reflection/beam-free",
+      as_resend_api_key: false,
+      email_from: "cached@example.com",
+    });
+    // Advance beyond maxAgeMs so mount triggers background revalidation.
+    nowSpy.mockReturnValue(10_000);
+
+    let resolveFresh!: (v: unknown) => void;
+    mocks.getWorkspaceSettings.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFresh = resolve;
+        }),
+    );
+
+    try {
+      render(<WorkspaceKeys workspaceId="ws-1" />);
+      const senderInput = screen.getByPlaceholderText("alerts@yourdomain.com") as HTMLInputElement;
+      expect(senderInput.value).toBe("cached@example.com");
+
+      fireEvent.change(senderInput, { target: { value: "edited@example.com" } });
+
+      await waitFor(() => expect(mocks.getWorkspaceSettings).toHaveBeenCalledTimes(1));
+      resolveFresh({
+        as_llm_api_key: false,
+        llm_api_base: SERVER_BASE,
+        llm_model: "reflection/beam-free",
+        as_resend_api_key: false,
+        email_from: "server@example.com",
+      });
+
+      await waitFor(() => {
+        expect((screen.getByPlaceholderText("alerts@yourdomain.com") as HTMLInputElement).value).toBe(
+          "edited@example.com",
+        );
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 });

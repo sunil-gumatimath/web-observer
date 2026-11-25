@@ -4,22 +4,31 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, ErrorBox, SectionTitle, Select, SuccessBox } from "@/components/ui";
 import { ConfirmButton } from "@/components/confirm-dialog";
 import { api } from "@/lib/api";
+import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import type { WorkspaceMemberRow } from "@/lib/types";
 
 const ROLES = ["owner", "admin", "member", "viewer"] as const;
 
 export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
-  const [members, setMembers] = useState<WorkspaceMemberRow[]>([]);
+  const initialMembers = workspaceId
+    ? readCache<WorkspaceMemberRow[]>(cacheKeys.members(workspaceId))?.data
+    : undefined;
+  const [members, setMembers] = useState<WorkspaceMemberRow[]>(initialMembers ?? []);
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     if (!workspaceId) return;
     setLoading(true);
     try {
-      const list = await api.listMembers(workspaceId);
+      const list = await fetchCached(
+        cacheKeys.members(workspaceId),
+        () => api.listMembers(workspaceId),
+        { force, maxAgeMs: force ? 0 : 5_000 },
+      );
       setMembers(list);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load members");
@@ -42,8 +51,13 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
     setMsg(null);
     try {
       const updated = await api.updateMemberRole(workspaceId, userId, newRole);
+      const current = readCache<WorkspaceMemberRow[]>(cacheKeys.members(workspaceId))?.data ?? members;
+      writeCache(
+        cacheKeys.members(workspaceId),
+        current.map((m) => (m.user_id === userId ? { ...m, role: updated.role } : m)),
+      );
       setMembers((prev) =>
-        prev.map((m) => (m.user_id === userId ? { ...m, role: updated.role } : m))
+        prev.map((m) => (m.user_id === userId ? { ...m, role: updated.role } : m)),
       );
       setMsg(`Role updated to ${newRole}.`);
     } catch (e) {
@@ -58,6 +72,11 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
     setMsg(null);
     try {
       await api.removeMember(workspaceId, userId);
+      const current = readCache<WorkspaceMemberRow[]>(cacheKeys.members(workspaceId))?.data ?? members;
+      writeCache(
+        cacheKeys.members(workspaceId),
+        current.filter((m) => m.user_id !== userId),
+      );
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
       setMsg("Member removed from workspace.");
     } catch (e) {
@@ -79,7 +98,7 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
           variant="secondary"
           size="sm"
           disabled={loading}
-          onClick={load}
+          onClick={() => load(true)}
         >
           {loading ? "Refreshing…" : "Refresh"}
         </Button>
