@@ -175,8 +175,23 @@ def _launch_chromium(p, validated):  # type: ignore[no-untyped-def]
         raise
 
 
-_PUBLIC_ASSET_TYPES = {"stylesheet", "image", "font"}
-_MAX_PUBLIC_ASSETS_PER_CAPTURE = 40
+_PUBLIC_ASSET_TYPES = {"stylesheet", "image", "font", "script", "xhr", "fetch"}
+_MAX_PUBLIC_ASSETS_PER_CAPTURE = 60
+_IGNORED_TRACKER_HOSTS = {
+    "www.googletagmanager.com",
+    "www.google-analytics.com",
+    "analytics.google.com",
+    "connect.facebook.net",
+    "static.hotjar.com",
+}
+
+
+def _is_ignored_tracker_url(url: str) -> bool:
+    """True for third-party analytics hosts that should never burn preview asset slots."""
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    return host in _IGNORED_TRACKER_HOSTS
 
 
 def _capture_screenshot_inline(
@@ -235,6 +250,7 @@ def _capture_screenshot_inline(
                             allow_public_assets
                             and request.resource_type in _PUBLIC_ASSET_TYPES
                             and req_url.startswith(("http://", "https://"))
+                            and not _is_ignored_tracker_url(req_url)
                         ):
                             if asset_count[0] >= _MAX_PUBLIC_ASSETS_PER_CAPTURE:
                                 return route.abort()

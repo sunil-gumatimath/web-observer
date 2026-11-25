@@ -51,3 +51,15 @@ def test_object_exists_reports_stored_and_missing_keys(tmp_path, monkeypatch) ->
 def test_object_exists_rejects_traversal(tmp_path, monkeypatch) -> None:
     _local_storage(tmp_path, monkeypatch)
     assert storage.object_exists("../outside.png") is False
+
+
+def test_public_asset_types_allow_cdn_scripts_and_filter_trackers() -> None:
+    from app.services import visual
+
+    assert {"stylesheet", "image", "font", "script", "xhr", "fetch"}.issubset(
+        visual._PUBLIC_ASSET_TYPES
+    )
+    assert visual._is_ignored_tracker_url("https://www.googletagmanager.com/gtag/js?id=G-123")
+    assert not visual._is_ignored_tracker_url(
+        "https://cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"
+    )
