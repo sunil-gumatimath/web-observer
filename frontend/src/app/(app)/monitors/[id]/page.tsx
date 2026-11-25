@@ -200,6 +200,7 @@ function MonitorDetailInner() {
 				const latest = await api.getMonitor(ws, monitorIdRef.current);
 				if (!mountedRef.current) return;
 				if ((latest.brand?.preview_at ?? null) !== baselineAt) {
+					setScreenshotFailed(false);
 					setMonitor(latest);
 					return;
 				}
@@ -574,6 +575,9 @@ function MonitorDetailInner() {
 		const baseline = monitor.brand?.preview_at ?? null;
 		try {
 			const updated = await api.enrichBrand(workspaceId, monitor.id);
+			setHeroFailed(false);
+			setHeroErrorUrl(null);
+			setScreenshotFailed(false);
 			setMonitor(updated);
 			void waitForLivePreview(workspaceId, baseline);
 		} catch (e) {

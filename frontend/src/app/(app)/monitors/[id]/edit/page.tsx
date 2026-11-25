@@ -86,6 +86,7 @@ export default function EditMonitorPage() {
 	} | null>(null);
 	const [brandLogoFailed, setBrandLogoFailed] = useState(false);
 	const [brandHeroFailed, setBrandHeroFailed] = useState(false);
+	const [brandLoading, setBrandLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -150,6 +151,7 @@ export default function EditMonitorPage() {
 		lookupAbortRef.current?.abort();
 		const ac = new AbortController();
 		lookupAbortRef.current = ac;
+		setBrandLoading(true);
 		try {
 			const ws = await ensureWorkspace();
 			const info = await api.brandInfo(ws, candidate, { signal: ac.signal });
@@ -159,9 +161,15 @@ export default function EditMonitorPage() {
 			setBrand(info);
 			if (info.title && !nameRef.current.trim()) setName(info.title);
 		} catch {
-			// keep current brand on aborted or transient lookup errors
+			if (ac.signal.aborted || lookupSeqRef.current !== seq) return;
+			const orig = monitor ? normalizeBrandLookupUrl(monitor.url, mode) : null;
+			if (!orig || candidate !== orig) {
+				setBrand(null);
+			}
+		} finally {
+			if (lookupSeqRef.current === seq) setBrandLoading(false);
 		}
-	}, [url, mode]);
+	}, [url, mode, monitor]);
 
 	// Auto-lookup brand on URL change with debounce (supports GitHub shorthands in readme mode)
 	useEffect(() => {
@@ -265,11 +273,22 @@ export default function EditMonitorPage() {
 						/>
 					</div>
 					<div>
-						<Label htmlFor="url">URL</Label>
+						<div className="flex items-center justify-between">
+							<Label htmlFor="url">URL</Label>
+							{brandLoading ? (
+								<span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--primary)]">
+									<svg className="size-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+										<circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+										<path d="M12 2a10 10 0 0 1 10 10" />
+									</svg>
+									Discovering brand…
+								</span>
+							) : null}
+						</div>
 						<Input
 							id="url"
 							required
-							type={isReadmeMode(mode) ? "text" : "url"}
+							type="text"
 							value={url}
 							onBlur={() => lookupBrand()}
 							onChange={(e) => setUrl(e.target.value)}

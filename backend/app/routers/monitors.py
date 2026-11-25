@@ -64,7 +64,7 @@ from app.schemas import (
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.audit import write_audit
-from app.services.branding import fetch_brand_info, store_brand_assets
+from app.services.branding import brand_asset_keys, fetch_brand_info, store_brand_assets
 from app.services.bulk_import import import_monitors
 from app.services.diffing import unified_diff
 from app.services.pipeline import SNAPSHOT_DB_PREVIEW_CHARS
@@ -679,7 +679,9 @@ def create_from_sitemap(
     "/workspaces/{workspace_id}/monitors/brand-info",
     response_model=BrandInfoOut,
 )
+@limiter.limit("30/minute")
 def monitor_brand_info(
+    request: Request,
     workspace_id: UUID,
     body: BrandInfoRequest,
     db: Db,
@@ -773,7 +775,14 @@ def enrich_monitor_brand(
     """Discover and re-host brand assets (logo/hero/title/description) for a monitor."""
     monitor = _get_monitor(db, workspace_id, monitor_id)
     meta = fetch_brand_info(monitor.url)
-    monitor.brand = store_brand_assets(monitor, meta)
+    brand = store_brand_assets(monitor, meta)
+    # Re-read in case capture_brand_preview committed a newer preview while we were fetching.
+    db.refresh(monitor)
+    latest_brand = getattr(monitor, "brand", None) or {}
+    for preview_key in ("preview_path", "preview_at"):
+        if latest_brand.get(preview_key) and not brand.get(preview_key):
+            brand[preview_key] = latest_brand[preview_key]
+    monitor.brand = brand
     db.commit()
     db.refresh(monitor)
     # Explicit user refresh: bypass the cooldown (the route is rate-limited).
@@ -940,6 +949,7 @@ def update_monitor(
     # Brand assets (logo/hero/screenshot) belong to the old URL; drop them and
     # re-discover for the new one so the banner never shows another site's brand.
     url_changed = "url" in data and data["url"] != monitor.url
+    old_brand_keys = brand_asset_keys(getattr(monitor, "brand", None)) if url_changed else []
 
     for key, value in data.items():
         if key == "tags":
@@ -999,6 +1009,11 @@ def update_monitor(
 
     db.commit()
     db.refresh(monitor)
+    for obj_key in old_brand_keys:
+        try:
+            delete_object(obj_key)
+        except StorageError as exc:
+            logger.debug("brand_asset_delete_failed key=%s error=%s", obj_key, exc)
     if url_changed:
         enqueue_brand_enrichment_for([str(monitor.id)])
     write_audit(
@@ -1039,7 +1054,7 @@ def delete_monitor(
 
     # Collect storage keys now, but only delete them AFTER the DB commit
     # succeeds: a rolled-back delete must not leave dangling DB references.
-    object_keys: list[str] = []
+    object_keys: list[str] = brand_asset_keys(getattr(monitor, "brand", None))
     snapshots = db.scalars(
         select(Snapshot).where(
             Snapshot.monitor_id == mid,

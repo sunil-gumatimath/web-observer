@@ -39,13 +39,18 @@ class BrandMeta:
 
 
 def _abs(base_url: str, candidate: str) -> str | None:
+    from urllib.parse import urlparse
+
     candidate = (candidate or "").strip().strip("\"'")
     if not candidate:
         return None
     low = candidate.lower()
     if low.startswith("data:") or low.startswith("blob:") or low.startswith("javascript:"):
         return None
-    return urljoin(base_url, candidate)
+    resolved = urljoin(base_url, candidate)
+    if urlparse(resolved).scheme.lower() not in ("http", "https"):
+        return None
+    return resolved
 
 
 def _logo_fallback_candidates(url: str) -> list[str]:
@@ -515,7 +520,8 @@ def sniff_image_type(data: bytes) -> tuple[str, str]:
     # AVIF: ftypavif / ftypavis
     if b"ftypavif" in head[:32] or b"ftypavis" in head[:32]:
         return "avif", "image/avif"
-    if b"<svg" in head or head.startswith(b"<?xml"):
+    # SVGs often have leading XML comments/license headers > 512 bytes.
+    if b"<svg" in data[:4096].lower():
         return "svg", "image/svg+xml"
     if len(data) > 4 and data[:4] == b"\x00\x00\x01\x00":
         return "ico", "image/x-icon"
@@ -711,6 +717,18 @@ def store_live_preview(
     key = _brand_object_key(monitor_id, "preview", "png")
     put_bytes(key=key, data=capture.png_bytes, content_type="image/png")
     return key
+
+
+def brand_asset_keys(brand: dict | None) -> list[str]:
+    """Return deduplicated storage object keys stored in a monitor's brand dict."""
+    if not isinstance(brand, dict):
+        return []
+    keys: list[str] = []
+    for field_name in ("logo_path", "hero_path", "preview_path"):
+        val = brand.get(field_name)
+        if isinstance(val, str) and val and val not in keys:
+            keys.append(val)
+    return keys
 
 
 def brand_asset_allowed(object_key: str | None) -> bool:
