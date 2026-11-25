@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 36" width="160" height="36" fill="none">
+  <rect x="1" y="1" width="158" height="34" rx="17" fill="#141516" stroke="rgba(255,255,255,0.12)"/>
+  <circle cx="18" cy="18" r="10" fill="#5e6ad2"/>
+  <circle cx="18" cy="18" r="4.5" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="36" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="12" font-weight="600" fill="#f7f8f8">Web Observer</text>
+</svg>

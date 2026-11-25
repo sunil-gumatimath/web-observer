@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Web Observer - Cyber Owl">
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#0b0f19" stroke="rgba(255,255,255,0.12)" stroke-width="1.2"/>
+  <path d="M19 22 L24 26 H40 L45 22 L43 36 C43 45, 21 45, 21 36 Z" fill="#151e32" stroke="#253554" stroke-width="1.5"/>
+  <circle cx="26" cy="31" r="7.5" fill="#0b1120" stroke="#06b6d4" stroke-width="2"/>
+  <circle cx="26" cy="31" r="3.5" fill="#22d3ee"/>
+  <circle cx="38" cy="31" r="11" stroke="#10b981" stroke-width="1" stroke-dasharray="2 2" opacity="0.6"/>
+  <circle cx="38" cy="31" r="7.5" fill="#0b1120" stroke="#10b981" stroke-width="2"/>
+  <circle cx="38" cy="31" r="3.5" fill="#34d399"/>
+  <path d="M30 36 L34 36 L32 41 Z" fill="#f59e0b"/>
+</svg>

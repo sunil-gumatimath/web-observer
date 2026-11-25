@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Web Observer - Prism Crystal">
+  <defs>
+    <linearGradient id="prism-solo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#090d16" stroke="rgba(255,255,255,0.12)" stroke-width="1.2"/>
+  <polygon points="32,15 47,24 32,32 17,24" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <polygon points="17,24 32,32 32,50 17,41" fill="#0f172a" stroke="#1e293b" stroke-width="1.5"/>
+  <polygon points="32,32 47,24 47,41 32,50" fill="url(#prism-solo)" stroke="#10b981" stroke-width="1.5"/>
+  <path d="M32 19 L36 26 H28 Z" fill="none" stroke="#38bdf8" stroke-width="1.5"/>
+  <circle cx="40" cy="37" r="3" fill="#34d399"/>
+</svg>

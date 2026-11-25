@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Web Observer"><title>Web Observer</title><rect x="2" y="2" width="60" height="60" rx="17" fill="#111827"/><rect x="2.5" y="2.5" width="59" height="59" rx="16.5" stroke="#fff" stroke-opacity=".12"/><path d="M20 14h15l9 9v27H20z" fill="#1f2937" stroke="#f3f4f6" stroke-width="2.5" stroke-linejoin="round"/><path d="M35 14v9h9" stroke="#f3f4f6" stroke-width="2.5" stroke-linejoin="round"/><path d="M25 41h5l3.5-8 4.5 13 3-5h4" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Web Observer">
+  <title>Web Observer</title>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#0f1011" stroke="#23252a" stroke-width="1.5"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" stroke="#ffffff" stroke-opacity="0.08"/>
+  <!-- Terminal Prompt Chevron ❯ -->
+  <path d="M19 20 L31 32 L19 44" stroke="#828fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Blinking Cursor _ -->
+  <path d="M36 43 H47" stroke="#34d399" stroke-width="5" stroke-linecap="round"/>
+</svg>

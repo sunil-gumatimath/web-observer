@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Web Observer - Focus Binoculars">
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#0a0e1a" stroke="rgba(255,255,255,0.12)" stroke-width="1.2"/>
+  <circle cx="23" cy="33" r="11" fill="#131b2e" stroke="#0284c7" stroke-width="2.5"/>
+  <circle cx="41" cy="33" r="11" fill="#131b2e" stroke="#10b981" stroke-width="2.5"/>
+  <path d="M28 29 H36 M28 37 H36" stroke="#475569" stroke-width="2" stroke-linecap="round"/>
+  <rect x="30" y="24" width="4" height="4" rx="1" fill="#94a3b8"/>
+  <circle cx="23" cy="33" r="4.5" fill="#38bdf8"/>
+  <circle cx="41" cy="33" r="4.5" fill="#34d399"/>
+  <circle cx="41" cy="33" r="8" stroke="#34d399" stroke-width="1" stroke-dasharray="2 2"/>
+</svg>

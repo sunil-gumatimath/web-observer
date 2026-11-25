@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 32" width="180" height="32" fill="none">
+  <rect x="0" y="4" width="24" height="24" rx="6" fill="#18191a" stroke="#34343a"/>
+  <text x="6" y="20" font-family="ui-monospace, monospace" font-size="12" font-weight="700" fill="#828fff">❯_</text>
+  <text x="32" y="21" font-family="-apple-system, system-ui, sans-serif" font-size="14" font-weight="600" fill="#f7f8f8">web <tspan font-family="monospace" fill="#62666d">/</tspan> <tspan font-weight="400" fill="#8a8f98">observer</tspan></text>
+</svg>
