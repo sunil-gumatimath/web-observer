@@ -223,6 +223,11 @@ def _capture_screenshot_inline(
                     if req_url.startswith(("data:", "blob:", "about:")):
                         return route.continue_()
                     try:
+                        if allow_public_assets:
+                            cached = asset_cache.get(req_url)
+                            if cached is not None:
+                                status, body, ctype = cached
+                                return route.fulfill(status=status, body=body, content_type=ctype)
                         if is_same_browser_host(req_url, validated.hostname):
                             validate_url_for_fetch(req_url, resolve_dns=True)
                             return route.continue_()
@@ -231,10 +236,6 @@ def _capture_screenshot_inline(
                             and request.resource_type in _PUBLIC_ASSET_TYPES
                             and req_url.startswith(("http://", "https://"))
                         ):
-                            cached = asset_cache.get(req_url)
-                            if cached is not None:
-                                status, body, ctype = cached
-                                return route.fulfill(status=status, body=body, content_type=ctype)
                             if asset_count[0] >= _MAX_PUBLIC_ASSETS_PER_CAPTURE:
                                 return route.abort()
                             asset_count[0] += 1
@@ -246,6 +247,17 @@ def _capture_screenshot_inline(
                                 max_response_bytes=2_000_000,
                             )
                             ctype = res.content_type or "application/octet-stream"
+                            final_res_url = res.final_url or req_url
+                            asset_cache[final_res_url] = (res.status_code, res.content, ctype)
+                            if (
+                                request.resource_type == "stylesheet"
+                                and final_res_url.rstrip("/") != req_url.rstrip("/")
+                                and final_res_url.startswith(("http://", "https://"))
+                            ):
+                                return route.fulfill(
+                                    status=302,
+                                    headers={"Location": final_res_url},
+                                )
                             asset_cache[req_url] = (res.status_code, res.content, ctype)
                             return route.fulfill(
                                 status=res.status_code,

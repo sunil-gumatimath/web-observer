@@ -701,9 +701,13 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
             brand["logo_path"] = previous["logo_path"]
             brand["logo_url"] = previous.get("logo_url")
     for hero_src in meta.hero_candidates:
-        if hero_src == brand.get("logo_url") and brand["logo_path"]:
-            # Reuse stored logo as hero only if it is large enough for a banner.
-            if stored_logo_bytes is None or _is_usable_hero_image(stored_logo_bytes):
+        if (
+            hero_src == brand.get("logo_url")
+            and brand["logo_path"]
+            and stored_logo_bytes is not None
+        ):
+            # Reuse freshly downloaded logo as hero only if it is large enough for a banner.
+            if _is_usable_hero_image(stored_logo_bytes):
                 brand["hero_path"] = brand["logo_path"]
                 brand["hero_url"] = hero_src
                 break

@@ -592,3 +592,28 @@ def test_store_live_preview_with_meta_enables_public_assets_and_parses_html(monk
     assert rendered_meta is not None
     assert rendered_meta.title == "Rendered SPA"
     assert rendered_meta.description == "SPA desc"
+
+
+def test_store_brand_assets_does_not_reuse_unvalidated_preserved_logo_as_hero(monkeypatch):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    tiny_png = _png_bytes(32, 32)
+    monkeypatch.setattr(branding, "_download_image", lambda *_a, **_k: tiny_png)
+    monitor = SimpleNamespace(
+        id=uuid4(),
+        brand={
+            "logo_path": "brand-assets/x/logo.png",
+            "logo_url": "https://example.com/favicon.png",
+        },
+    )
+    brand = branding.store_brand_assets(
+        monitor,
+        branding.BrandMeta(
+            hero_candidates=["https://example.com/favicon.png"],
+            from_fallback=True,
+        ),
+    )
+    assert brand["logo_path"] == "brand-assets/x/logo.png"
+    assert brand["hero_path"] is None
+    assert brand["hero_url"] is None
