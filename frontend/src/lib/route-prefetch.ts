@@ -13,8 +13,9 @@ export const cacheKeys = {
   monitors: (ws: string) => `monitors:${ws}`,
   usage: (ws: string) => `usage:${ws}`,
   alertsSummary: (ws: string) => `alertsSummary:${ws}`,
-  alertsWithNoise: (ws: string, limit: number) => `alertsWithNoise:${ws}:${limit}`,
-  alertsUnread: (ws: string, limit: number) => `alertsUnread:${ws}:${limit}`,
+  alertsSignal: (ws: string, limit: number) => `alerts:${ws}:signal:${limit}`,
+  alertsNoise: (ws: string, limit: number) => `alerts:${ws}:noise:${limit}`,
+  alertsUnread: (ws: string, limit: number) => `alerts:${ws}:unread:${limit}`,
   channels: (ws: string) => `channels:${ws}`,
   activity: (ws: string, days: number) => `activity:${ws}:${days}`,
   runLogs: (
@@ -75,8 +76,8 @@ export function prefetchRouteData(href: string): void {
       } else if (href === "/alerts") {
         await Promise.allSettled([
           fetchCached(
-            cacheKeys.alertsWithNoise(ws, 100),
-            () => api.listAlerts(ws, { unread_only: false, include_noise: true, limit: 100 }),
+            cacheKeys.alertsSignal(ws, 100),
+            () => api.listAlerts(ws, { unread_only: false, include_noise: false, limit: 100 }),
             opts,
           ),
           fetchCached(cacheKeys.alertsSummary(ws), () => api.alertsSummary(ws), opts),

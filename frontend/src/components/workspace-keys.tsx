@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, Input, Label, SectionTitle, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
@@ -35,6 +35,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [forceCustom, setForceCustom] = useState(false);
   const [forceCustomBase, setForceCustomBase] = useState(false);
+  const dirtyRef = useRef({ llmBase: false, llmModel: false, emailFrom: false });
 
   // The provider whose base URL matches the current selection. Models are
   // filtered to that provider so a model id is never paired with a base that
@@ -70,18 +71,26 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
 
   useEffect(() => {
     if (!workspaceId) return;
+    let cancelled = false;
+    dirtyRef.current = { llmBase: false, llmModel: false, emailFrom: false };
     fetchCached(
       cacheKeys.workspaceSettings(workspaceId),
       () => api.getWorkspaceSettings(workspaceId),
       { maxAgeMs: 5_000 },
     )
       .then((s) => {
+        if (cancelled) return;
         setSettings(s);
-        setLlmBase(s.llm_api_base ?? "");
-        setLlmModel(s.llm_model ?? "");
-        setEmailFrom(s.email_from ?? "");
+        if (!dirtyRef.current.llmBase) setLlmBase(s.llm_api_base ?? "");
+        if (!dirtyRef.current.llmModel) setLlmModel(s.llm_model ?? "");
+        if (!dirtyRef.current.emailFrom) setEmailFrom(s.email_from ?? "");
       })
-      .catch(() => setErr("Could not load workspace settings."));
+      .catch(() => {
+        if (!cancelled) setErr("Could not load workspace settings.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [workspaceId]);
 
   useEffect(() => {
@@ -136,6 +145,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
       setResendKey("");
       const fresh = await api.getWorkspaceSettings(workspaceId);
       writeCache(cacheKeys.workspaceSettings(workspaceId), fresh);
+      dirtyRef.current = { llmBase: false, llmModel: false, emailFrom: false };
       setSettings(fresh);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to save keys");
@@ -183,6 +193,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
             value={baseSelectValue}
             onChange={(e) => {
               const v = e.target.value;
+              dirtyRef.current.llmBase = true;
               if (v === "__custom__") {
                 setForceCustomBase(true);
                 if (!isCustomBase) setLlmBase("");
@@ -200,6 +211,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
                   llmModel &&
                   !nextProvider.models.some((m) => m.value === llmModel)
                 ) {
+                  dirtyRef.current.llmModel = true;
                   setLlmModel("");
                   setForceCustom(false);
                 }
@@ -220,7 +232,10 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
               className="mt-2"
               placeholder="https://your-gateway.example.com/v1"
               value={llmBase}
-              onChange={(e) => setLlmBase(e.target.value)}
+              onChange={(e) => {
+                dirtyRef.current.llmBase = true;
+                setLlmBase(e.target.value);
+              }}
             />
           ) : null}
           <p className="mt-1 text-[11px] text-[var(--ink-subtle)]">
@@ -233,6 +248,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
             value={modelSelectValue}
             onChange={(e) => {
               const v = e.target.value;
+              dirtyRef.current.llmModel = true;
               if (v === "__custom__") {
                 setForceCustom(true);
                 if (!isCustomModel) setLlmModel("");
@@ -255,7 +271,10 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
               className="mt-2"
               placeholder="custom/model-name  e.g. openai/gpt-4o-mini"
               value={llmModel}
-              onChange={(e) => setLlmModel(e.target.value)}
+              onChange={(e) => {
+                dirtyRef.current.llmModel = true;
+                setLlmModel(e.target.value);
+              }}
             />
           ) : null}
           <p className="mt-1 text-[11px] text-[var(--ink-subtle)]">
@@ -295,7 +314,10 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
           <Input
             placeholder="alerts@yourdomain.com"
             value={emailFrom}
-            onChange={(e) => setEmailFrom(e.target.value)}
+            onChange={(e) => {
+              dirtyRef.current.emailFrom = true;
+              setEmailFrom(e.target.value);
+            }}
           />
         </div>
       </div>

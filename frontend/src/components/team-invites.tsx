@@ -60,11 +60,12 @@ export function TeamInvites({ workspaceId }: { workspaceId: string }) {
   async function revoke(id: string) {
     try {
       await api.revokeInvite(workspaceId, id);
-      setInvites((rows) => {
-        const next = rows.filter((r) => r.id !== id);
-        writeCache(cacheKeys.invites(workspaceId), next);
-        return next;
-      });
+      const current = readCache<InviteRow[]>(cacheKeys.invites(workspaceId))?.data ?? invites;
+      writeCache(
+        cacheKeys.invites(workspaceId),
+        current.filter((r) => r.id !== id),
+      );
+      setInvites((rows) => rows.filter((r) => r.id !== id));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to revoke invite");
     }

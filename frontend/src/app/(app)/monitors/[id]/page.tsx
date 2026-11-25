@@ -779,6 +779,7 @@ function MonitorDetailInner() {
 									onClick={() =>
 										withAction(async () => {
 											await api.pauseMonitor(workspaceId!, monitor.id);
+											invalidateCachePrefix(cacheKeys.monitors(workspaceId!));
 										})
 									}
 								>
@@ -792,6 +793,7 @@ function MonitorDetailInner() {
 									onClick={() =>
 										withAction(async () => {
 											await api.resumeMonitor(workspaceId!, monitor.id);
+											invalidateCachePrefix(cacheKeys.monitors(workspaceId!));
 										})
 									}
 								>

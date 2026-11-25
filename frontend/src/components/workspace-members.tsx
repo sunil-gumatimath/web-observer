@@ -51,11 +51,14 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
     setMsg(null);
     try {
       const updated = await api.updateMemberRole(workspaceId, userId, newRole);
-      setMembers((prev) => {
-        const next = prev.map((m) => (m.user_id === userId ? { ...m, role: updated.role } : m));
-        writeCache(cacheKeys.members(workspaceId), next);
-        return next;
-      });
+      const current = readCache<WorkspaceMemberRow[]>(cacheKeys.members(workspaceId))?.data ?? members;
+      writeCache(
+        cacheKeys.members(workspaceId),
+        current.map((m) => (m.user_id === userId ? { ...m, role: updated.role } : m)),
+      );
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === userId ? { ...m, role: updated.role } : m)),
+      );
       setMsg(`Role updated to ${newRole}.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to update role");
@@ -69,11 +72,12 @@ export function WorkspaceMembers({ workspaceId }: { workspaceId: string }) {
     setMsg(null);
     try {
       await api.removeMember(workspaceId, userId);
-      setMembers((prev) => {
-        const next = prev.filter((m) => m.user_id !== userId);
-        writeCache(cacheKeys.members(workspaceId), next);
-        return next;
-      });
+      const current = readCache<WorkspaceMemberRow[]>(cacheKeys.members(workspaceId))?.data ?? members;
+      writeCache(
+        cacheKeys.members(workspaceId),
+        current.filter((m) => m.user_id !== userId),
+      );
+      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
       setMsg("Member removed from workspace.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to remove member");

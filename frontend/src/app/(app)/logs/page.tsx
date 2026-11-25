@@ -67,7 +67,7 @@ export default function LogsPage() {
 	const [exporting, setExporting] = useState<ExportFormat | null>(null);
 
 	const load = useCallback(
-		async (ws: string, lim: number, force = false) => {
+		async (ws: string, lim: number, force = false): Promise<RunLogPage> => {
 			const key = cacheKeys.runLogs(ws, {
 				monitorId: monitorFilter,
 				outcome,
@@ -75,7 +75,7 @@ export default function LogsPage() {
 				to: dateTo,
 				limit: lim,
 			});
-			const page = await fetchCached(
+			return fetchCached(
 				key,
 				() =>
 					api.listRunLogs(ws, {
@@ -87,8 +87,6 @@ export default function LogsPage() {
 					}),
 				{ force, maxAgeMs: force ? 0 : 4_000 },
 			);
-			setRows(page.items);
-			setTotal(page.total);
 		},
 		[monitorFilter, outcome, dateFrom, dateTo],
 	);
@@ -101,7 +99,10 @@ export default function LogsPage() {
 				const ws = await ensureWorkspace();
 				if (cancelled) return;
 				setWorkspaceId(ws);
-				await load(ws, limit, force);
+				const page = await load(ws, limit, force);
+				if (cancelled) return;
+				setRows(page.items);
+				setTotal(page.total);
 			} catch (e) {
 				if (!cancelled)
 					setError(e instanceof Error ? e.message : "Failed to load run logs");

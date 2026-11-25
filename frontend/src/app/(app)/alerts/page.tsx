@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Badge,
 	Button,
@@ -24,7 +24,9 @@ import { api } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import type { AlertInboxItem, AlertsSummary, ChangeEventDetail, Monitor } from "@/lib/types";
 import { usePageTitle } from "@/lib/use-page-title";
-import { ensureWorkspace } from "@/lib/workspace";
+import { getClerkUserId } from "@/lib/auth-token";
+import { config } from "@/lib/config";
+import { ensureWorkspace, invalidateWorkspace } from "@/lib/workspace";
 import { fetchCached, invalidateCachePrefix, readCache } from "@/lib/query-cache";
 import { cacheKeys } from "@/lib/route-prefetch";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
@@ -50,26 +52,29 @@ function impactLevel(a: AlertInboxItem): ImpactFilter | null {
 	return null;
 }
 
-/** Filter raw `include_noise: true` / `unread_only` alerts for the active tab. */
+/** Filter raw alerts for the active tab. */
 function filterAlertsForTab(list: AlertInboxItem[], f: Filter): AlertInboxItem[] {
 	if (f === "noise") return list.filter((a) => a.is_noise);
 	if (f === "all") return list.filter((a) => !a.is_noise);
 	return list;
 }
 
+function alertCacheKey(ws: string, f: Filter, lim: number): string {
+	if (f === "unread") return cacheKeys.alertsUnread(ws, lim);
+	if (f === "noise") return cacheKeys.alertsNoise(ws, lim);
+	return cacheKeys.alertsSignal(ws, lim);
+}
+
 async function fetchAlertsTabData(ws: string, f: Filter, lim: number, force = false) {
 	const opts = { force, maxAgeMs: force ? 0 : 4_000 };
-	const listKey =
-		f === "unread"
-			? cacheKeys.alertsUnread(ws, lim)
-			: cacheKeys.alertsWithNoise(ws, lim);
+	const listKey = alertCacheKey(ws, f, lim);
 	const [rawList, sum, mons] = await Promise.all([
 		fetchCached(
 			listKey,
 			() =>
 				api.listAlerts(ws, {
 					unread_only: f === "unread",
-					include_noise: f === "noise" || f === "all",
+					include_noise: f === "noise",
 					limit: lim,
 				}),
 			opts,
@@ -77,9 +82,9 @@ async function fetchAlertsTabData(ws: string, f: Filter, lim: number, force = fa
 		fetchCached(cacheKeys.alertsSummary(ws), () => api.alertsSummary(ws), opts),
 		fetchCached(
 			cacheKeys.monitors(ws),
-			() => api.listMonitors(ws).catch(() => []),
+			() => api.listMonitors(ws),
 			{ force, maxAgeMs: force ? 0 : 15_000 },
-		),
+		).catch(() => []),
 	]);
 	return {
 		items: filterAlertsForTab(rawList, f),
@@ -90,9 +95,18 @@ async function fetchAlertsTabData(ws: string, f: Filter, lim: number, force = fa
 
 export default function AlertsPage() {
 	usePageTitle("Alerts");
-	const initialWs = readCache<string>("activeWorkspaceId")?.data ?? null;
+	const currentAuthUid = config.clerkEnabled ? getClerkUserId() : null;
+	const rawInitialWs = readCache<string>("activeWorkspaceId")?.data ?? null;
+	const cachedWsUid = readCache<string | null>("activeWorkspaceUid")?.data ?? null;
+	const identityChanged = Boolean(
+		config.clerkEnabled &&
+			rawInitialWs &&
+			currentAuthUid !== null &&
+			cachedWsUid !== currentAuthUid,
+	);
+	const initialWs = identityChanged ? null : rawInitialWs;
 	const initialRawAlerts = initialWs
-		? readCache<AlertInboxItem[]>(cacheKeys.alertsWithNoise(initialWs, PAGE_SIZE))
+		? readCache<AlertInboxItem[]>(cacheKeys.alertsSignal(initialWs, PAGE_SIZE))
 		: undefined;
 	const initialSummary = initialWs
 		? readCache<AlertsSummary | null>(cacheKeys.alertsSummary(initialWs))?.data ?? null
@@ -122,6 +136,7 @@ export default function AlertsPage() {
 	const [lastUpdated, setLastUpdated] = useState<Date | null>(
 		initialRawAlerts ? new Date(initialRawAlerts.updatedAt) : null,
 	);
+	const activeWsRef = useRef<string | null>(initialWs);
 
 	// Cache of fetched diff details for inline expansion
 	const [expandedDiffs, setExpandedDiffs] = useState<Record<string, ChangeEventDetail>>({});
@@ -139,8 +154,23 @@ export default function AlertsPage() {
 		const force = refreshTick > 0;
 		(async () => {
 			try {
+				if (identityChanged) {
+					invalidateWorkspace();
+				}
 				const ws = await ensureWorkspace();
 				if (cancelled) return;
+				if (activeWsRef.current !== null && activeWsRef.current !== ws) {
+					// Reset mounted state from any previous workspace/user before loading.
+					setAlerts([]);
+					setSummary(null);
+					setMonitors([]);
+					setExpandedDiffs({});
+					setLoadingDiffs({});
+					setError(null);
+					setLastUpdated(null);
+					setLoading(true);
+				}
+				activeWsRef.current = ws;
 				setWorkspaceId(ws);
 				const { items, sum, mons } = await fetchAlertsTabData(ws, filter, limit, force);
 				if (cancelled) return;
@@ -158,7 +188,7 @@ export default function AlertsPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [filter, limit, refreshTick]);
+	}, [filter, identityChanged, limit, refreshTick]);
 
 	// 15s cadence plus an immediate refresh on tab focus/visibility; the old
 	// flat 60s timer left new alerts invisible for up to a minute.
@@ -226,8 +256,7 @@ export default function AlertsPage() {
 		setError(null);
 		try {
 			await api.markChangeRead(workspaceId, alert.id, isRead);
-			invalidateCachePrefix(`alertsWithNoise:${workspaceId}:`);
-			invalidateCachePrefix(`alertsUnread:${workspaceId}:`);
+			invalidateCachePrefix(`alerts:${workspaceId}:`);
 			invalidateCachePrefix(`alertsSummary:${workspaceId}`);
 			toast.success(isRead ? "Marked as read" : "Marked as unread", alert.monitor_name);
 		} catch (e) {
@@ -248,8 +277,7 @@ export default function AlertsPage() {
 		try {
 			const sum = await api.markAllAlertsRead(workspaceId);
 			setSummary(sum);
-			invalidateCachePrefix(`alertsWithNoise:${workspaceId}:`);
-			invalidateCachePrefix(`alertsUnread:${workspaceId}:`);
+			invalidateCachePrefix(`alerts:${workspaceId}:`);
 			await load(workspaceId, filter, limit, true);
 			toast.success("Inbox cleared", "All alerts marked as read.");
 		} catch (e) {
@@ -272,8 +300,7 @@ export default function AlertsPage() {
 		try {
 			await api.markChangeNoise(workspaceId, alert.id, nextNoise);
 			toast.success(nextNoise ? "Moved to noise" : "Restored to signal", alert.monitor_name);
-			invalidateCachePrefix(`alertsWithNoise:${workspaceId}:`);
-			invalidateCachePrefix(`alertsUnread:${workspaceId}:`);
+			invalidateCachePrefix(`alerts:${workspaceId}:`);
 			await load(workspaceId, filter, limit, true);
 		} catch (e) {
 			setAlerts(prev);
@@ -378,11 +405,9 @@ export default function AlertsPage() {
 						setFilter(key);
 						setLimit(PAGE_SIZE);
 						if (workspaceId) {
-							const keyCache =
-								key === "unread"
-									? cacheKeys.alertsUnread(workspaceId, PAGE_SIZE)
-									: cacheKeys.alertsWithNoise(workspaceId, PAGE_SIZE);
-							const cached = readCache<AlertInboxItem[]>(keyCache);
+							const cached = readCache<AlertInboxItem[]>(
+								alertCacheKey(workspaceId, key, PAGE_SIZE),
+							);
 							if (cached) {
 								setAlerts(filterAlertsForTab(cached.data, key));
 							}

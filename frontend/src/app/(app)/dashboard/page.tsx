@@ -91,26 +91,26 @@ export default function DashboardPage() {
     (async () => {
       try {
         const ws = await ensureWorkspace();
+        // Warm change activity in parallel without blocking the four core dashboard requests.
+        void fetchCached(
+          cacheKeys.activity(ws, 14),
+          () => api.getChangeActivity(ws, { days: 28 }),
+          opts,
+        ).catch(() => null);
+
         const [m, u, a, c] = await Promise.all([
           fetchCached(cacheKeys.monitors(ws), () => api.listMonitors(ws), opts),
           fetchCached(cacheKeys.usage(ws), () => api.getUsage(ws), opts),
           fetchCached(
             cacheKeys.alertsSummary(ws),
-            () => api.alertsSummary(ws).catch(() => null),
-            opts,
-          ),
-          fetchCached(
-            cacheKeys.channels(ws),
-            () => api.listNotificationChannels(ws).catch(() => []),
-            opts,
-          ),
-          // Warm change activity in parallel instead of waiting for <ActivityCard>
-          // to mount after `loading` clears.
-          fetchCached(
-            cacheKeys.activity(ws, 14),
-            () => api.getChangeActivity(ws, { days: 28 }),
+            () => api.alertsSummary(ws),
             opts,
           ).catch(() => null),
+          fetchCached(
+            cacheKeys.channels(ws),
+            () => api.listNotificationChannels(ws),
+            opts,
+          ).catch(() => []),
         ]);
         const hasChecksAlready =
           (u?.checks_count ?? 0) > 0 || m.some((item) => Boolean(item.latest_change));
@@ -149,11 +149,9 @@ export default function DashboardPage() {
     setBulkBusy(true);
     try {
       await api.pauseAllMonitors(workspaceId);
-      setMonitors((prev) => {
-        const next = prev.map((m) => ({ ...m, enabled: false }));
-        writeCache(cacheKeys.monitors(workspaceId), next);
-        return next;
-      });
+      const pausedMonitors = monitors.map((m) => ({ ...m, enabled: false }));
+      writeCache(cacheKeys.monitors(workspaceId), pausedMonitors);
+      setMonitors((prev) => prev.map((m) => ({ ...m, enabled: false })));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to pause monitors");
     } finally {
@@ -166,11 +164,9 @@ export default function DashboardPage() {
     setBulkBusy(true);
     try {
       await api.resumeAllMonitors(workspaceId);
-      setMonitors((prev) => {
-        const next = prev.map((m) => ({ ...m, enabled: true }));
-        writeCache(cacheKeys.monitors(workspaceId), next);
-        return next;
-      });
+      const resumedMonitors = monitors.map((m) => ({ ...m, enabled: true }));
+      writeCache(cacheKeys.monitors(workspaceId), resumedMonitors);
+      setMonitors((prev) => prev.map((m) => ({ ...m, enabled: true })));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to resume monitors");
     } finally {

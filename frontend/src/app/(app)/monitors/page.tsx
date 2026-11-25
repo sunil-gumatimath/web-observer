@@ -23,7 +23,7 @@ import { relativeTime } from "@/lib/format";
 import { MONITOR_MODE_OPTIONS } from "@/lib/modes";
 import type { Monitor, MonitorMode } from "@/lib/types";
 import { ensureWorkspace } from "@/lib/workspace";
-import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
+import { fetchCached, readCache } from "@/lib/query-cache";
 import { cacheKeys } from "@/lib/route-prefetch";
 import { usePageTitle } from "@/lib/use-page-title";
 import { exportFileName, triggerBlobDownload } from "@/lib/download";
@@ -175,7 +175,6 @@ export default function MonitorsPage() {
 				() => api.listMonitors(ws),
 				{ force: true },
 			);
-			writeCache(cacheKeys.monitors(ws), list);
 			setMonitors(list);
 			setSelected(new Set());
 			toast.success(`Bulk ${action} complete`);

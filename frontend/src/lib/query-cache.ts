@@ -1,7 +1,7 @@
 /**
  * Lightweight workspace-scoped client cache with in-flight deduplication and
- * epoch-based invalidation so switching tabs renders cached data immediately
- * while revalidating in the background.
+ * epoch + per-key ownership guards so switching tabs renders cached data
+ * immediately while stale or invalidated requests can never overwrite newer state.
  */
 
 export type CacheEntry<T> = {
@@ -9,9 +9,21 @@ export type CacheEntry<T> = {
   updatedAt: number;
 };
 
+type InflightEntry = {
+  promise: Promise<unknown>;
+  token: symbol;
+};
+
 const store = new Map<string, CacheEntry<unknown>>();
-const inflight = new Map<string, Promise<unknown>>();
+const inflight = new Map<string, InflightEntry>();
+const latestTokens = new Map<string, symbol>();
 let cacheEpoch = 0;
+
+function setStoreEntry<T>(key: string, data: T): CacheEntry<T> {
+  const entry: CacheEntry<T> = { data, updatedAt: Date.now() };
+  store.set(key, entry);
+  return entry;
+}
 
 /** Read a cached entry synchronously (returns undefined on miss). */
 export function readCache<T>(key: string): CacheEntry<T> | undefined {
@@ -27,11 +39,11 @@ export function isCacheFresh(
   return Date.now() - entry.updatedAt < maxAgeMs;
 }
 
-/** Write a value to the cache under the current epoch. */
+/** Write a value to the cache under the current epoch, superseding older fetches. */
 export function writeCache<T>(key: string, data: T): CacheEntry<T> {
-  const entry: CacheEntry<T> = { data, updatedAt: Date.now() };
-  store.set(key, entry);
-  return entry;
+  latestTokens.set(key, Symbol("write"));
+  inflight.delete(key);
+  return setStoreEntry(key, data);
 }
 
 /** Update an existing cached entry if present. */
@@ -46,12 +58,19 @@ export function clearQueryCache(): void {
   cacheEpoch += 1;
   store.clear();
   inflight.clear();
+  latestTokens.clear();
 }
 
-/** Drop cached entries matching a prefix (e.g. after a mutation). */
+/** Drop cached entries and invalidate matching in-flight requests by prefix. */
 export function invalidateCachePrefix(prefix: string): void {
   for (const key of store.keys()) {
     if (key.startsWith(prefix)) store.delete(key);
+  }
+  for (const key of inflight.keys()) {
+    if (key.startsWith(prefix)) inflight.delete(key);
+  }
+  for (const key of latestTokens.keys()) {
+    if (key.startsWith(prefix)) latestTokens.delete(key);
   }
 }
 
@@ -61,8 +80,9 @@ export function invalidateCachePrefix(prefix: string): void {
  * - When `maxAgeMs > 0` and `force` is false, a fresh entry is returned
  *   without issuing a network request.
  * - Concurrent callers for the same `key` share one in-flight promise.
- * - If `clearQueryCache()` runs while a request is in flight, the stale
- *   response is discarded instead of poisoning the next user/workspace.
+ * - If `clearQueryCache()`, `invalidateCachePrefix()`, or a newer forced
+ *   request supersedes this call, its response is discarded instead of
+ *   overwriting newer state.
  */
 export function fetchCached<T>(
   key: string,
@@ -77,24 +97,27 @@ export function fetchCached<T>(
     if (cached && isCacheFresh(cached, maxAgeMs)) {
       return Promise.resolve(cached.data);
     }
-    const existing = inflight.get(key) as Promise<T> | undefined;
-    if (existing) return existing;
+    const existing = inflight.get(key);
+    if (existing) return existing.promise as Promise<T>;
   }
 
   const startEpoch = cacheEpoch;
+  const token = Symbol(key);
+  latestTokens.set(key, token);
+
   const promise = fetcher()
     .then((data) => {
-      if (startEpoch === cacheEpoch) {
-        writeCache(key, data);
+      if (startEpoch === cacheEpoch && latestTokens.get(key) === token) {
+        setStoreEntry(key, data);
       }
       return data;
     })
     .finally(() => {
-      if (inflight.get(key) === promise) {
+      if (inflight.get(key)?.token === token) {
         inflight.delete(key);
       }
     });
 
-  inflight.set(key, promise);
+  inflight.set(key, { promise, token });
   return promise;
 }

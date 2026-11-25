@@ -58,8 +58,71 @@ describe("query-cache", () => {
     expect(readCache("ws:me")).toBeUndefined();
   });
 
+  it("invalidates pending in-flight requests on prefix invalidation without breaking post-invalidation dedupe", async () => {
+    let resolveStale!: (v: string[]) => void;
+    const stalePromise = fetchCached(
+      "monitors:ws1",
+      () =>
+        new Promise<string[]>((resolve) => {
+          resolveStale = resolve;
+        }),
+    );
+
+    invalidateCachePrefix("monitors:ws1");
+
+    let resolveFresh!: (v: string[]) => void;
+    const freshFetcher = vi.fn(
+      () =>
+        new Promise<string[]>((resolve) => {
+          resolveFresh = resolve;
+        }),
+    );
+
+    const p1 = fetchCached("monitors:ws1", freshFetcher);
+    const p2 = fetchCached("monitors:ws1", freshFetcher);
+    expect(freshFetcher).toHaveBeenCalledTimes(1);
+
+    resolveFresh(["m1", "m2"]);
+    await expect(Promise.all([p1, p2])).resolves.toEqual([["m1", "m2"], ["m1", "m2"]]);
+
+    // Stale pre-invalidation response resolving last must not overwrite fresh data.
+    resolveStale(["m1"]);
+    await expect(stalePromise).resolves.toEqual(["m1"]);
+    expect(readCache<string[]>("monitors:ws1")?.data).toEqual(["m1", "m2"]);
+  });
+
+  it("prevents a superseded in-flight request from overwriting a newer forced result", async () => {
+    let resolveSlowOld!: (v: string) => void;
+    let resolveFastNew!: (v: string) => void;
+
+    const oldPromise = fetchCached(
+      "monitors:ws1",
+      () =>
+        new Promise<string>((resolve) => {
+          resolveSlowOld = resolve;
+        }),
+    );
+
+    const forcedPromise = fetchCached(
+      "monitors:ws1",
+      () =>
+        new Promise<string>((resolve) => {
+          resolveFastNew = resolve;
+        }),
+      { force: true },
+    );
+
+    resolveFastNew("new-list");
+    await expect(forcedPromise).resolves.toBe("new-list");
+    expect(readCache<string>("monitors:ws1")?.data).toBe("new-list");
+
+    resolveSlowOld("old-list");
+    await expect(oldPromise).resolves.toBe("old-list");
+    expect(readCache<string>("monitors:ws1")?.data).toBe("new-list");
+  });
+
   it("supports prefix invalidation and optimistic updates", () => {
-    writeCache("alerts:ws1:all:100", [1, 2]);
+    writeCache("alerts:ws1:signal:100", [1, 2]);
     writeCache("alerts:ws1:unread:100", [1]);
     writeCache("monitors:ws1", ["m1"]);
 
@@ -67,7 +130,7 @@ describe("query-cache", () => {
     expect(readCache<string[]>("monitors:ws1")?.data).toEqual(["m1", "m2"]);
 
     invalidateCachePrefix("alerts:ws1:");
-    expect(readCache("alerts:ws1:all:100")).toBeUndefined();
+    expect(readCache("alerts:ws1:signal:100")).toBeUndefined();
     expect(readCache("alerts:ws1:unread:100")).toBeUndefined();
     expect(readCache("monitors:ws1")?.data).toEqual(["m1", "m2"]);
   });

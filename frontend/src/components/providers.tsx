@@ -2,8 +2,8 @@
 
 import { ToastProvider } from "@/components/toasts";
 import { useAuth } from "@clerk/nextjs";
-import { useEffect, type ReactNode } from "react";
-import { setAuthTokenGetter, setClerkUserId } from "@/lib/auth-token";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { getClerkUserId, setAuthTokenGetter, setClerkUserId } from "@/lib/auth-token";
 import { config } from "@/lib/config";
 import { invalidateWorkspace } from "@/lib/workspace";
 
@@ -17,7 +17,9 @@ import { invalidateWorkspace } from "@/lib/workspace";
  * API calls already wait for a token in `lib/api.ts`.
  */
 function ClerkTokenBridge({ children }: { children: ReactNode }) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn, userId } = useAuth();
+  const prevUserIdRef = useRef<string | null>(null);
+  const [sessionGeneration, setSessionGeneration] = useState(0);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -33,15 +35,35 @@ function ClerkTokenBridge({ children }: { children: ReactNode }) {
   }, [getToken, isLoaded]);
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
+    if (!isLoaded) return;
+    if (!isSignedIn || !userId) {
+      const hadUser = prevUserIdRef.current !== null || getClerkUserId() !== null;
+      prevUserIdRef.current = null;
       invalidateWorkspace();
       // invalidateWorkspace() already clears it, but make the sign-out path
       // explicit here so a future change to that helper cannot regress it.
       setClerkUserId(null);
+      if (hadUser) {
+        setSessionGeneration((g) => g + 1);
+      }
+      return;
     }
-  }, [isLoaded, isSignedIn]);
 
-  return <>{children}</>;
+    const tracked = getClerkUserId();
+    const switchedUser =
+      (prevUserIdRef.current !== null && prevUserIdRef.current !== userId) ||
+      (tracked !== null && tracked !== userId);
+    prevUserIdRef.current = userId;
+    if (switchedUser) {
+      invalidateWorkspace();
+      setClerkUserId(userId);
+      setSessionGeneration((g) => g + 1);
+    } else {
+      setClerkUserId(userId);
+    }
+  }, [isLoaded, isSignedIn, userId]);
+
+  return <Fragment key={sessionGeneration}>{children}</Fragment>;
 }
 
 export function Providers({ children }: { children: ReactNode }) {

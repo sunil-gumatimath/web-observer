@@ -54,27 +54,30 @@ export function ActivityCard({
 	monitors: Monitor[];
 }) {
 	const [range, setRange] = useState<Range>(14);
-	const initialEntry = workspaceId
-		? readCache<ChangeActivity>(cacheKeys.activity(workspaceId, range))
-		: undefined;
-	const [resp, setResp] = useState<ChangeActivity | null>(initialEntry?.data ?? null);
+	const activeKey = workspaceId ? cacheKeys.activity(workspaceId, range) : "";
+	const initialEntry = activeKey ? readCache<ChangeActivity>(activeKey) : undefined;
+	const [respState, setRespState] = useState<{ key: string; data: ChangeActivity } | null>(
+		initialEntry ? { key: activeKey, data: initialEntry.data } : null,
+	);
 	const [loading, setLoading] = useState(!initialEntry);
 
 	useEffect(() => {
-		if (!workspaceId) return;
+		if (!workspaceId || !activeKey) return;
 		let cancelled = false;
-		const cached = readCache<ChangeActivity>(cacheKeys.activity(workspaceId, range));
+		const cached = readCache<ChangeActivity>(activeKey);
 		// Fetch a double window so the card can trend against the prior period.
 		fetchCached(
-			cacheKeys.activity(workspaceId, range),
+			activeKey,
 			() => api.getChangeActivity(workspaceId, { days: range * 2 }),
 			{ maxAgeMs: 4_000 },
 		)
 			.then((r) => {
-				if (!cancelled) setResp(r);
+				if (!cancelled) setRespState({ key: activeKey, data: r });
 			})
 			.catch(() => {
-				if (!cancelled && !cached) setResp(null);
+				if (!cancelled && !cached) {
+					setRespState((prev) => (prev?.key === activeKey ? null : prev));
+				}
 			})
 			.finally(() => {
 				if (!cancelled) setLoading(false);
@@ -82,7 +85,10 @@ export function ActivityCard({
 		return () => {
 			cancelled = true;
 		};
-	}, [workspaceId, range]);
+	}, [workspaceId, range, activeKey]);
+
+	const cachedForActive = activeKey ? readCache<ChangeActivity>(activeKey)?.data ?? null : null;
+	const resp = respState?.key === activeKey ? respState.data : cachedForActive;
 
 	const view = resp ? activityFromServer(resp, range) : fallbackView(monitors, new Date(), range);
 	const prev = resp ? previousWindowTotal(resp, range) : null;
