@@ -89,11 +89,15 @@ def capture_brand_preview(monitor_id: str) -> None:
     """Capture a live screenshot of the monitored page for the dashboard banner.
 
     Best-effort: bot-walled, slow or blocked pages log and return, leaving the
-    existing hero/logo preview in place.
+    existing hero/logo preview in place. Also backfills title/description/logo/hero
+    from the rendered DOM when plain-HTTP discovery missed them (e.g. SPAs or
+    sites that block plain HTTP requests).
     """
     from datetime import UTC, datetime
 
-    from app.services.branding import store_live_preview
+    from sqlalchemy import select
+
+    from app.services.branding import store_brand_assets, store_live_preview_with_meta
 
     try:
         monitor_uuid = uuid.UUID(monitor_id)
@@ -112,7 +116,7 @@ def capture_brand_preview(monitor_id: str) -> None:
         mode = monitor.mode
 
     try:
-        key = store_live_preview(monitor_uuid, url, mode=mode)
+        key, rendered_meta = store_live_preview_with_meta(monitor_uuid, url, mode=mode)
     except Exception as exc:  # noqa: BLE001 - optional enrichment
         logger.warning("brand_preview_capture_failed monitor_id=%s error=%s", monitor_id_str, exc)
         return
@@ -120,12 +124,38 @@ def capture_brand_preview(monitor_id: str) -> None:
         return
 
     with SessionLocal() as db:
-        monitor = db.get(Monitor, monitor_uuid)
-        if monitor is None:
+        monitor = db.scalar(select(Monitor).where(Monitor.id == monitor_uuid).with_for_update())
+        if monitor is None or monitor.url != url:
             return
+        current_brand = dict(monitor.brand or {})
+        needs_meta_backfill = rendered_meta is not None and (
+            not current_brand.get("title")
+            or (not current_brand.get("description") and bool(rendered_meta.description))
+            or not current_brand.get("logo_path")
+            or (not current_brand.get("hero_path") and bool(rendered_meta.hero_candidates))
+        )
+        if needs_meta_backfill and rendered_meta is not None:
+            try:
+                updated_brand = store_brand_assets(monitor, rendered_meta)
+                merged_brand = {**current_brand}
+                if not merged_brand.get("title") and updated_brand.get("title"):
+                    merged_brand["title"] = updated_brand["title"]
+                if not merged_brand.get("description") and updated_brand.get("description"):
+                    merged_brand["description"] = updated_brand["description"]
+                if not merged_brand.get("logo_path") and updated_brand.get("logo_path"):
+                    merged_brand["logo_path"] = updated_brand["logo_path"]
+                    merged_brand["logo_url"] = updated_brand.get("logo_url")
+                if not merged_brand.get("hero_path") and updated_brand.get("hero_path"):
+                    merged_brand["hero_path"] = updated_brand["hero_path"]
+                    merged_brand["hero_url"] = updated_brand.get("hero_url")
+                current_brand = merged_brand
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "brand_preview_meta_backfill_failed monitor_id=%s error=%s", monitor_id_str, exc
+                )
         # Assign a new dict so SQLAlchemy detects the JSONB change.
         monitor.brand = {
-            **(monitor.brand or {}),
+            **current_brand,
             "preview_path": key,
             "preview_at": datetime.now(UTC).isoformat(),
         }

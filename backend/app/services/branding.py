@@ -53,6 +53,9 @@ def _abs(base_url: str, candidate: str) -> str | None:
     return resolved
 
 
+_SUBDOMAIN_STRIP_PREFIXES = ("api.", "feeds.", "feed.", "rss.", "data.", "cdn.", "static.", "xml.")
+
+
 def _logo_fallback_candidates(url: str) -> list[str]:
     """Provider logos/favicons for a domain, used when page HTML is unavailable."""
     from urllib.parse import urlparse
@@ -61,17 +64,31 @@ def _logo_fallback_candidates(url: str) -> list[str]:
     domain = (parsed.netloc or "").split(":")[0]
     if not domain:
         return []
-    return [
+    candidates = [
         f"https://www.google.com/s2/favicons?domain={domain}&sz=256",
         f"https://www.google.com/s2/favicons?domain={domain}&sz=128",
         f"https://icons.duckduckgo.com/ip3/{domain}.ico",
         f"https://unavatar.io/{domain}",
         f"https://{domain}/favicon.ico",
     ]
+    low = domain.lower()
+    for prefix in _SUBDOMAIN_STRIP_PREFIXES:
+        if low.startswith(prefix):
+            parent = domain[len(prefix) :]
+            if "." in parent:
+                candidates.extend(
+                    [
+                        f"https://www.google.com/s2/favicons?domain={parent}&sz=256",
+                        f"https://icons.duckduckgo.com/ip3/{parent}.ico",
+                        f"https://{parent}/favicon.ico",
+                    ]
+                )
+            break
+    return candidates
 
 
 def _merge_logo_fallbacks(candidates: list[str], url: str) -> list[str]:
-    """Append provider fallbacks without duplicates, capped at 8."""
+    """Append provider fallbacks without duplicates, capped at 10."""
     merged = list(candidates)
     for candidate in _logo_fallback_candidates(url):
         if candidate not in merged:
@@ -82,7 +99,7 @@ def _merge_logo_fallbacks(candidates: list[str], url: str) -> list[str]:
         if candidate not in seen:
             seen.add(candidate)
             deduped.append(candidate)
-        if len(deduped) >= 8:
+        if len(deduped) >= 10:
             break
     return deduped
 
@@ -113,6 +130,8 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
     if not title:
         node = scope.css_first("title")
         title = node.text() if node else None
+    if not title:
+        title = _content_for("og:site_name") or _content_for("application-name")
     meta.title = (title or "").strip()[:255] or None
 
     desc = _content_for("og:description") or _content_for("twitter:description")
@@ -225,17 +244,45 @@ def parse_brand_meta(html: str, final_url: str) -> BrandMeta:
             u = _abs(final_url, val)
             if u and u not in logo_candidates:
                 logo_candidates.append(u)
+    icon_scored: list[tuple[int, int, str]] = []
+    seen_icons: set[str] = set(logo_candidates)
+    idx = 0
     for sel in (
+        'link[rel="apple-touch-icon"]',
+        'link[rel="apple-touch-icon-precomposed"]',
         'link[rel~="icon"]',
         'link[rel="icon"]',
         'link[rel="shortcut icon"]',
-        'link[rel="apple-touch-icon"]',
     ):
         for node in scope.css(sel):
             href = node.attributes.get("href")
             u = _abs(final_url, href) if href else None
-            if u and u not in logo_candidates:
-                logo_candidates.append(u)
+            if not u or u in seen_icons:
+                continue
+            seen_icons.add(u)
+            rel = (node.attributes.get("rel") or "").lower()
+            mime = (node.attributes.get("type") or "").lower()
+            sizes_attr = (node.attributes.get("sizes") or "").lower()
+            # Prefer crisp SVG or high-res touch/PNG icons over tiny 16x16 .ico favicons.
+            score = 0
+            if "svg" in mime or u.lower().split("?", 1)[0].endswith(".svg"):
+                score = 300
+            elif "apple-touch-icon" in rel:
+                score = 200
+            elif sizes_attr and sizes_attr != "any":
+                for token in sizes_attr.split():
+                    if "x" in token:
+                        try:
+                            w = int(token.split("x", 1)[0])
+                            score = max(score, min(w, 256))
+                        except ValueError:
+                            pass
+            elif u.lower().split("?", 1)[0].endswith(".png"):
+                score = 64
+            icon_scored.append((-score, idx, u))
+            idx += 1
+    icon_scored.sort(key=lambda item: (item[0], item[1]))
+    logo_candidates.extend(u for _neg_score, _i, u in icon_scored)
     if not logo_candidates and meta.hero_candidates:
         logo_candidates = list(meta.hero_candidates)
     meta.logo_candidates = logo_candidates
@@ -466,22 +513,84 @@ def is_unsafe_svg(data: bytes) -> bool:
     return bool(_UNSAFE_SVG_RE.search(text))
 
 
+_IMAGE_ACCEPT_HEADER = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+_MIN_HERO_WIDTH = 300
+_MIN_HERO_HEIGHT = 150
+
+
+def _looks_like_image(data: bytes) -> bool:
+    """True when ``data`` matches a supported raster image or SVG header."""
+    if not data:
+        return False
+    head = data[:512].lstrip().lower()
+    if head.startswith(b"\x89png\r\n\x1a\n"):
+        return True
+    if head.startswith(b"\xff\xd8\xff"):
+        return True
+    if head.startswith(b"gif8"):
+        return True
+    if head.startswith(b"riff") and b"webp" in head[:16]:
+        return True
+    if b"ftypavif" in head[:32] or b"ftypavis" in head[:32]:
+        return True
+    if len(data) > 4 and data[:4] == b"\x00\x00\x01\x00":
+        return True
+    if b"<svg" in data[:4096].lower() and not (
+        head.startswith(b"<!doctype html") or head.startswith(b"<html")
+    ):
+        return True
+    return False
+
+
+def _is_unavatar_placeholder(data: bytes) -> bool:
+    """True when unavatar.io returned its own generic placeholder SVG."""
+    low = data[:1024].lower()
+    return b"<title>unavatar</title>" in low or b"logo for unavatar" in low
+
+
+def _is_usable_hero_image(data: bytes) -> bool:
+    """Reject tiny/icon-sized images (e.g. 200x200 favicons) as wide banner heroes."""
+    ext, _ = sniff_image_type(data)
+    if ext == "ico":
+        return False
+    if ext == "svg":
+        return True
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(data)) as im:
+            w, h = im.size
+        return w >= _MIN_HERO_WIDTH and h >= _MIN_HERO_HEIGHT
+    except Exception:  # noqa: BLE001
+        # If Pillow cannot inspect dimensions (or synthetic bytes in tests), allow.
+        return True
+
+
 def _download_image(url: str, *, max_bytes: int = MAX_IMAGE_BYTES) -> bytes | None:
     try:
         result = fetch_binary(
             url,
             timeout_seconds=8,
             max_response_bytes=max_bytes,
+            extra_headers={"Accept": _IMAGE_ACCEPT_HEADER},
         )
         if result.status_code >= 400 or not result.content:
             return None
-        # HTML guard: mislabelled URLs may return HTML error pages; skip them.
-        # Allow SVG (image/svg+xml) which starts with <svg or <?xml.
+        # Reject non-image error/text payloads (mislabelled URLs, JSON/text errors).
         ct = (result.content_type or "").lower()
-        if "text/html" in ct:
+        if any(
+            bad in ct
+            for bad in ("text/html", "text/plain", "application/json", "application/javascript")
+        ):
             return None
         head = result.content[:512].lstrip().lower()
         if head.startswith(b"<!doctype") or head.startswith(b"<html"):
+            return None
+        if not _looks_like_image(result.content):
+            return None
+        if _is_unavatar_placeholder(result.content):
             return None
         if is_unsafe_svg(result.content):
             logger.debug("brand_asset_unsafe_svg_rejected")
@@ -548,7 +657,7 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
         "logo_path": None,
         "hero_path": None,
         "logo_url": None,
-        "hero_url": next(iter(meta.hero_candidates), None),
+        "hero_url": None,
     }
     # Re-scraping logo/hero must not discard the live page preview.
     for preview_key in ("preview_path", "preview_at"):
@@ -557,6 +666,7 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
 
     # Do not overwrite a previously re-hosted logo with a guessed provider
     # fallback when the page fetch failed transiently.
+    stored_logo_bytes: bytes | None = None
     if meta.from_fallback and previous.get("logo_path"):
         brand["logo_path"] = previous["logo_path"]
         brand["logo_url"] = previous.get("logo_url")
@@ -574,6 +684,7 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
                     put_bytes(key=key, data=data, content_type=content_type)
                     brand["logo_path"] = key
                     brand["logo_url"] = logo_src
+                    stored_logo_bytes = data
                     logger.info(
                         "brand_logo_chosen monitor_id=%s provider=%s url=%s size=%d ext=%s",
                         monitor.id,
@@ -590,13 +701,19 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
             brand["logo_path"] = previous["logo_path"]
             brand["logo_url"] = previous.get("logo_url")
     for hero_src in meta.hero_candidates:
-        if hero_src == brand.get("logo_url"):
-            # Avoid duplicate download if same URL already stored as logo
-            if brand["logo_path"]:
+        if (
+            hero_src == brand.get("logo_url")
+            and brand["logo_path"]
+            and stored_logo_bytes is not None
+        ):
+            # Reuse freshly downloaded logo as hero only if it is large enough for a banner.
+            if _is_usable_hero_image(stored_logo_bytes):
                 brand["hero_path"] = brand["logo_path"]
+                brand["hero_url"] = hero_src
                 break
+            continue
         data = _download_image(hero_src)
-        if data and len(data) <= MAX_ASSET_OBJECT_SIZE:
+        if data and len(data) <= MAX_ASSET_OBJECT_SIZE and _is_usable_hero_image(data):
             ext, content_type = sniff_image_type(data)
             key = _brand_object_key(monitor.id, "hero", ext)
             try:
@@ -608,7 +725,7 @@ def store_brand_assets(monitor, meta: BrandMeta) -> dict:
                 logger.debug("brand_hero_store_failed error=%s", exc)
     # A degraded re-discovery (e.g. only fallback logos) can clear a
     # previously stored hero; keep the old hero when nothing new was found.
-    if not meta.hero_candidates and previous.get("hero_path"):
+    if (meta.from_fallback or not meta.hero_candidates) and previous.get("hero_path"):
         brand["hero_path"] = previous["hero_path"]
         brand["hero_url"] = previous.get("hero_url")
     return brand
@@ -668,7 +785,9 @@ def resolve_brand_preview_target(
             if homepage:
                 return _probe_html_preview_candidate(homepage, timeout_seconds=timeout_seconds)
             return None
-        if exc.code == "bot_challenge" or exc.http_status in (401, 403, 429):
+        if exc.code in ("bot_challenge", "read_timeout", "connection_timeout") or (
+            exc.http_status in (401, 403, 429, 503)
+        ):
             return url
         if exc.code == "response_too_large" and (exc.http_status is None or exc.http_status < 400):
             return url
@@ -681,7 +800,7 @@ def resolve_brand_preview_target(
     final_url = result.final_url or url
     if result.status_code < 400 and _is_html_response(result.content_type, result.text):
         return final_url
-    if not is_non_html_mode and result.status_code in (401, 403, 429):
+    if not is_non_html_mode and result.status_code in (401, 403, 429, 503):
         return final_url
 
     site_url: str | None = None
@@ -691,6 +810,43 @@ def resolve_brand_preview_target(
     if not candidate or candidate.rstrip("/") == final_url.rstrip("/"):
         return None
     return _probe_html_preview_candidate(candidate, timeout_seconds=timeout_seconds)
+
+
+def store_live_preview_with_meta(
+    monitor_id: uuid.UUID,
+    url: str,
+    *,
+    mode: str | None = None,
+) -> tuple[str | None, BrandMeta | None]:
+    """Capture a viewport screenshot and return ``(key, rendered_brand_meta)``."""
+    from app.services.visual import capture_with_provider_fallback
+
+    target = resolve_brand_preview_target(url, mode=mode)
+    if target is None:
+        logger.info("brand_preview_skipped_non_html monitor_id=%s url=%s", monitor_id, url)
+        return None, None
+    capture = capture_with_provider_fallback(
+        target,
+        timeout_seconds=30,
+        full_page=False,
+        allow_public_assets=True,
+        extract_html=True,
+    )
+    key = _brand_object_key(monitor_id, "preview", "png")
+    put_bytes(key=key, data=capture.png_bytes, content_type="image/png")
+
+    rendered_meta: BrandMeta | None = None
+    html = getattr(capture, "html", None)
+    if isinstance(html, str) and html:
+        try:
+            final_url = getattr(capture, "final_url", None) or target
+            rendered_meta = parse_brand_meta(html, final_url)
+            rendered_meta.logo_candidates = _merge_logo_fallbacks(
+                rendered_meta.logo_candidates, final_url
+            )
+        except Exception:  # noqa: BLE001
+            rendered_meta = None
+    return key, rendered_meta
 
 
 def store_live_preview(
@@ -707,15 +863,7 @@ def store_live_preview(
     homepage. Raises ``FetchError`` (SSRF-blocked, bot challenge, timeout, ...)
     — callers decide how to degrade; the UI keeps showing the hero/logo.
     """
-    from app.services.visual import capture_with_provider_fallback
-
-    target = resolve_brand_preview_target(url, mode=mode)
-    if target is None:
-        logger.info("brand_preview_skipped_non_html monitor_id=%s url=%s", monitor_id, url)
-        return None
-    capture = capture_with_provider_fallback(target, timeout_seconds=30, full_page=False)
-    key = _brand_object_key(monitor_id, "preview", "png")
-    put_bytes(key=key, data=capture.png_bytes, content_type="image/png")
+    key, _meta = store_live_preview_with_meta(monitor_id, url, mode=mode)
     return key
 
 

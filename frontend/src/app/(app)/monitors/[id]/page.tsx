@@ -20,7 +20,7 @@ import { ConfirmButton } from "@/components/confirm-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { SkeletonHero } from "@/components/skeleton";
 import { VisualDiff } from "@/components/visual-diff";
-import { brandHeroUrl, hasBrandData, isLivePreviewStale, livePreviewUrl } from "@/lib/brand";
+import { brandHeroUrl, hasBrandData, isLivePreviewStale, livePreviewUrl, needsBrandRefresh } from "@/lib/brand";
 import { api, ApiError, screenshotUrl } from "@/lib/api";
 import { VALUE_HISTORY_MODES } from "@/lib/modes";
 import {
@@ -58,8 +58,8 @@ const SSE_RETRY_MAX_MS = 30_000;
 const SSE_STALL_MS = 45_000;
 // Live preview capture runs on the browser worker (Chromium launch + page
 // load, up to ~30s), so poll the monitor for the new screenshot.
-const PREVIEW_POLL_MS = 4_000;
-const PREVIEW_POLL_MAX_TRIES = 20;
+const PREVIEW_POLL_MS = 3_000;
+const PREVIEW_POLL_MAX_TRIES = 12;
 // A just-created monitor has brand enrichment in flight on a worker; wait for
 // it (instead of racing it) before discovering the brand ourselves.
 const BRAND_ENRICH_GRACE_MS = 2 * 60 * 1000;
@@ -193,26 +193,29 @@ function MonitorDetailInner() {
 		};
 	}, []);
 
-	const waitForLivePreview = useCallback(async (ws: string, baselineAt: string | null) => {
-		setPreviewCapturing(true);
-		try {
-			for (let i = 0; i < PREVIEW_POLL_MAX_TRIES; i++) {
-				await new Promise((resolve) => setTimeout(resolve, PREVIEW_POLL_MS));
-				if (!mountedRef.current) return;
-				const latest = await api.getMonitor(ws, monitorIdRef.current);
-				if (!mountedRef.current) return;
-				if ((latest.brand?.preview_at ?? null) !== baselineAt) {
-					setScreenshotFailed(false);
-					setMonitor(latest);
-					return;
+	const waitForLivePreview = useCallback(
+		async (ws: string, baselineAt: string | null, opts?: { silent?: boolean }) => {
+			if (!opts?.silent) setPreviewCapturing(true);
+			try {
+				for (let i = 0; i < PREVIEW_POLL_MAX_TRIES; i++) {
+					await new Promise((resolve) => setTimeout(resolve, PREVIEW_POLL_MS));
+					if (!mountedRef.current) return;
+					const latest = await api.getMonitor(ws, monitorIdRef.current);
+					if (!mountedRef.current) return;
+					if ((latest.brand?.preview_at ?? null) !== baselineAt) {
+						setScreenshotFailed(false);
+						setMonitor(latest);
+						return;
+					}
 				}
+			} catch {
+				// Preview is cosmetic: stop quietly on network errors.
+			} finally {
+				if (mountedRef.current && !opts?.silent) setPreviewCapturing(false);
 			}
-		} catch {
-			// Preview is cosmetic: stop quietly on network errors.
-		} finally {
-			if (mountedRef.current) setPreviewCapturing(false);
-		}
-	}, []);
+		},
+		[],
+	);
 
 	// Brand discovery must work for every monitor, not just ones whose
 	// enrichment happened to succeed at creation time. Each effect runs at most
@@ -220,17 +223,20 @@ function MonitorDetailInner() {
 	const autoBrandFor = useRef<string | null>(null);
 	const autoPreviewFor = useRef<string | null>(null);
 
-	// 1) No brand data yet. A just-created monitor has enrichment in flight on
-	// a worker, so wait for it; an older monitor (created before brand support,
-	// or whose enrichment failed) is discovered immediately.
+	// 1) No brand data yet, or stale/broken legacy brand fields. A just-created
+	// monitor has enrichment in flight on a worker, so wait for it; an older
+	// monitor (created before brand support, or with broken/stale brand fields)
+	// is discovered/refreshed immediately.
 	useEffect(() => {
 		if (loading || !workspaceId || !monitor) return;
-		if (hasBrandData(monitor.brand)) return;
+		if (!needsBrandRefresh(monitor.brand, monitor.mode)) return;
 		if (autoBrandFor.current === monitor.id) return;
 		autoBrandFor.current = monitor.id;
 		const ws = workspaceId;
 		const id = monitor.id;
-		const justCreated = Date.now() - Date.parse(monitor.created_at) < BRAND_ENRICH_GRACE_MS;
+		const hasAnyBrand = hasBrandData(monitor.brand);
+		const justCreated =
+			!hasAnyBrand && Date.now() - Date.parse(monitor.created_at) < BRAND_ENRICH_GRACE_MS;
 		void (async () => {
 			try {
 				let latest: Monitor | null = null;
@@ -246,24 +252,32 @@ function MonitorDetailInner() {
 						}
 					}
 				}
-				if (latest) {
+				if (latest && !needsBrandRefresh(latest.brand, latest.mode)) {
 					setMonitor(latest);
-					// Only wait if the screenshot hasn't landed yet and there is no
-					// hero image. Leave autoPreviewFor unset when a hero exists so
-					// Effect 2 can still recover if that hero fails to render.
-					if (!brandHeroUrl(latest.brand) && isLivePreviewStale(latest.brand)) {
-						autoPreviewFor.current = id;
-						await waitForLivePreview(ws, latest.brand?.preview_at ?? null);
+					// Only show spinner if there is no hero image yet.
+					if (latest.mode !== "json_field" && isLivePreviewStale(latest.brand)) {
+						const missingHero = !brandHeroUrl(latest.brand);
+						if (missingHero || !latest.brand?.preview_path) {
+							autoPreviewFor.current = id;
+							await waitForLivePreview(ws, latest.brand?.preview_at ?? null, {
+								silent: !missingHero,
+							});
+						}
 					}
 					return;
 				}
-				// Nothing arrived (or the monitor is old): discover it now.
+				// Nothing arrived (or the monitor has stale/broken brand data): discover it now.
 				const updated = await api.enrichBrand(ws, id);
 				if (!mountedRef.current || monitorIdRef.current !== id) return;
 				setMonitor(updated);
-				if (!brandHeroUrl(updated.brand) && isLivePreviewStale(updated.brand)) {
-					autoPreviewFor.current = id;
-					await waitForLivePreview(ws, updated.brand?.preview_at ?? null);
+				if (updated.mode !== "json_field" && isLivePreviewStale(updated.brand)) {
+					const missingHero = !brandHeroUrl(updated.brand);
+					if (missingHero || !updated.brand?.preview_path) {
+						autoPreviewFor.current = id;
+						await waitForLivePreview(ws, updated.brand?.preview_at ?? null, {
+							silent: !missingHero,
+						});
+					}
 				}
 			} catch {
 				// Brand is cosmetic; the brand card / favicon fallback stays.
@@ -271,17 +285,19 @@ function MonitorDetailInner() {
 		})();
 	}, [loading, workspaceId, monitor, waitForLivePreview]);
 
-	// 2) Brand known but no usable hero image (no og:image, or it failed to
-	// render): the page screenshot is the brand preview, so make sure one exists.
+	// 2) Ensure every non-API monitor has a live page screenshot (either as the
+	// fallback banner when there is no usable og:image, or for the Page toggle).
 	useEffect(() => {
 		if (loading || !workspaceId || !monitor) return;
+		if (monitor.mode === "json_field") return;
 		if (autoPreviewFor.current === monitor.id) return;
 		if (!hasBrandData(monitor.brand)) return;
 		const upstream = monitor.brand?.hero_url || null;
 		const noHero =
 			!brandHeroUrl(monitor.brand) ||
 			(heroFailed && (!upstream || upstream === heroErrorUrl));
-		if (!noHero || !isLivePreviewStale(monitor.brand)) return;
+		const needsCapture = noHero ? isLivePreviewStale(monitor.brand) : !monitor.brand?.preview_path;
+		if (!needsCapture) return;
 		autoPreviewFor.current = monitor.id;
 		const ws = workspaceId;
 		const id = monitor.id;
@@ -290,7 +306,7 @@ function MonitorDetailInner() {
 			try {
 				const res = await api.refreshLivePreview(ws, id);
 				if (res.queued && mountedRef.current && monitorIdRef.current === id) {
-					await waitForLivePreview(ws, baseline);
+					await waitForLivePreview(ws, baseline, { silent: !noHero });
 				}
 			} catch {
 				// Optional enrichment; the brand card stays.
@@ -583,7 +599,9 @@ function MonitorDetailInner() {
 			setHeroErrorUrl(null);
 			setScreenshotFailed(false);
 			setMonitor(updated);
-			void waitForLivePreview(workspaceId, baseline);
+			if (updated.mode !== "json_field") {
+				void waitForLivePreview(workspaceId, baseline);
+			}
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Failed to refresh website thumbnail");
 		} finally {

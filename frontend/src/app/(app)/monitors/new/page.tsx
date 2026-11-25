@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { ThresholdEditor } from "@/components/threshold-editor";
 import { SelectorPicker } from "@/components/selector-picker";
+import { BrandLogo } from "@/components/brand-logo";
 import { api } from "@/lib/api";
 import { normalizeBrandLookupUrl } from "@/lib/brand";
 import type {
@@ -119,8 +120,7 @@ export default function NewMonitorPage() {
 	const [runNow, setRunNow] = useState(true);
 	const [brand, setBrand] = useState<BrandInfo | null>(null);
 	const [brandLoading, setBrandLoading] = useState(false);
-	const [brandHeroFailed, setBrandHeroFailed] = useState(false);
-	const [brandLogoFailed, setBrandLogoFailed] = useState(false);
+	const [brandHeroIdx, setBrandHeroIdx] = useState(0);
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const nameRef = useRef(name);
@@ -142,8 +142,7 @@ export default function NewMonitorPage() {
 			const ws = await ensureWorkspace();
 			const info = await api.brandInfo(ws, candidate, { signal: ac.signal });
 			if (lookupSeqRef.current !== seq) return;
-			setBrandHeroFailed(false);
-			setBrandLogoFailed(false);
+			setBrandHeroIdx(0);
 			setBrand(info);
 			if (info.title && !nameRef.current.trim()) setName(info.title);
 		} catch (err) {
@@ -312,52 +311,82 @@ export default function NewMonitorPage() {
 								</svg>
 								<span>Detecting website title, logo, and metadata…</span>
 							</div>
-						) : brand ? (
-							<div className="overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)]">
-								{brand.hero_url && !brandHeroFailed ? (
-									<div className="relative h-20 w-full overflow-hidden bg-[var(--surface-2)]">
-										<img
-											src={brand.hero_url}
-											alt=""
-											referrerPolicy="no-referrer"
-											className="size-full object-cover object-top"
-											onError={() => setBrandHeroFailed(true)}
-										/>
-										<div className="absolute inset-0 bg-[#010102]/20" />
-									</div>
-								) : null}
-								<div className="flex items-start gap-3 p-3.5">
-									{brand.logo_url && !brandLogoFailed ? (
-										<img
-											src={brand.logo_url}
-											alt=""
-											referrerPolicy="no-referrer"
-											className="h-10 w-10 shrink-0 rounded-[8px] border border-[var(--hairline)] bg-[var(--surface-1)] object-contain p-1"
-											onError={() => setBrandLogoFailed(true)}
-										/>
-									) : null}
-									<div className="min-w-0 flex-1">
-										<div className="flex items-center gap-2">
-											<p className="truncate text-sm font-semibold text-[var(--fg)]">
-												{brand.title || "Discovered Brand"}
-											</p>
-											<span className="rounded-full bg-[var(--semantic-success)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--semantic-success)]">
-												Brand Preview
-											</span>
+						) : brand ? (() => {
+							const lookupTarget = normalizeBrandLookupUrl(url, mode) || url;
+							const heroCandidates = brand.hero_candidates?.length
+								? brand.hero_candidates
+								: brand.hero_url
+									? [brand.hero_url]
+									: [];
+							const heroSrc = brandHeroIdx < heroCandidates.length ? heroCandidates[brandHeroIdx]! : null;
+							const previewHost = (() => {
+								try {
+									return new URL(lookupTarget).hostname.replace(/^www\./, "");
+								} catch {
+									return "";
+								}
+							})();
+							return (
+								<div className="overflow-hidden rounded-[12px] border border-[var(--hairline)] bg-[var(--surface-1)]">
+									{heroSrc ? (
+										<div className="relative h-24 w-full overflow-hidden bg-[var(--surface-2)]">
+											<img
+												src={heroSrc}
+												alt=""
+												referrerPolicy="no-referrer"
+												className="size-full object-cover object-top"
+												onError={() => setBrandHeroIdx((i) => i + 1)}
+											/>
+											<div className="absolute inset-0 bg-[#010102]/20" />
 										</div>
-										{brand.description ? (
-											<p className="mt-0.5 line-clamp-2 text-xs text-[var(--ink-muted)] leading-relaxed">
-												{brand.description}
-											</p>
-										) : brand.title ? (
-											<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">Title and site icon detected.</p>
-										) : (
-											<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">Site icon preview (no metadata detected).</p>
-										)}
+									) : (
+										<div className="relative flex h-16 w-full items-center justify-between bg-[linear-gradient(135deg,#0f172a,#1d4ed8)] px-4 text-white">
+											<div className="min-w-0">
+												<p className="truncate text-sm font-semibold">
+													{brand.title || previewHost || "Website"}
+												</p>
+												{previewHost ? (
+													<p className="truncate font-mono text-[11px] text-white/70">{previewHost}</p>
+												) : null}
+											</div>
+											{mode !== "json_field" ? (
+												<span className="shrink-0 rounded-full border border-white/20 bg-black/30 px-2 py-0.5 text-[10px] text-white/85">
+													Screenshot on create
+												</span>
+											) : null}
+										</div>
+									)}
+									<div className="flex items-start gap-3 p-3.5">
+										<BrandLogo
+											brand={{ logo_url: brand.logo_url }}
+											extraFallbacks={brand.logo_candidates}
+											name={brand.title || name || previewHost || "Site"}
+											domain={lookupTarget}
+											size={40}
+										/>
+										<div className="min-w-0 flex-1">
+											<div className="flex items-center gap-2">
+												<p className="truncate text-sm font-semibold text-[var(--fg)]">
+													{brand.title || previewHost || "Discovered Brand"}
+												</p>
+												<span className="rounded-full bg-[var(--semantic-success)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--semantic-success)]">
+													Brand Preview
+												</span>
+											</div>
+											{brand.description ? (
+												<p className="mt-0.5 line-clamp-2 text-xs text-[var(--ink-muted)] leading-relaxed">
+													{brand.description}
+												</p>
+											) : brand.title ? (
+												<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">Title and site icon detected.</p>
+											) : (
+												<p className="mt-0.5 text-xs text-[var(--ink-subtle)]">Site icon preview (full preview captured on create).</p>
+											)}
+										</div>
 									</div>
 								</div>
-							</div>
-						) : null}
+							);
+						})() : null}
 						<details className="rounded-lg border border-[var(--hairline)] px-3">
 							<summary className="cursor-pointer py-2 text-sm font-medium text-[var(--ink)] marker:text-[var(--ink-muted)]">
 								Use a starter template

@@ -807,6 +807,8 @@ class BrandInfoOut(BaseModel):
     description: str | None = None
     logo_url: str | None = None
     hero_url: str | None = None
+    logo_candidates: list[str] = []
+    hero_candidates: list[str] = []
     # Whether brand asset re-hosting is available for this monitor (always true;
     # the field is a forward-compat hint for the UI).
     assets_available: bool = True
