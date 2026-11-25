@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Card, Input, Label, SectionTitle, Select } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import type { CatalogProvider, ModelCatalog, WorkspaceSettings } from "@/lib/types";
 
 // The selectable models come from the server catalog
@@ -16,13 +18,18 @@ function normalizeBase(base: string | null | undefined): string {
 }
 
 export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
-  const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
-  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
+  const initialSettings = workspaceId
+    ? readCache<WorkspaceSettings>(cacheKeys.workspaceSettings(workspaceId))?.data ?? null
+    : null;
+  const initialCatalog = readCache<ModelCatalog>(cacheKeys.modelCatalog())?.data ?? null;
+
+  const [settings, setSettings] = useState<WorkspaceSettings | null>(initialSettings);
+  const [catalog, setCatalog] = useState<ModelCatalog | null>(initialCatalog);
   const [llmKey, setLlmKey] = useState("");
-  const [llmBase, setLlmBase] = useState("");
-  const [llmModel, setLlmModel] = useState("");
+  const [llmBase, setLlmBase] = useState(initialSettings?.llm_api_base ?? "");
+  const [llmModel, setLlmModel] = useState(initialSettings?.llm_model ?? "");
   const [resendKey, setResendKey] = useState("");
-  const [emailFrom, setEmailFrom] = useState("");
+  const [emailFrom, setEmailFrom] = useState(initialSettings?.email_from ?? "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -63,8 +70,11 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
 
   useEffect(() => {
     if (!workspaceId) return;
-    api
-      .getWorkspaceSettings(workspaceId)
+    fetchCached(
+      cacheKeys.workspaceSettings(workspaceId),
+      () => api.getWorkspaceSettings(workspaceId),
+      { maxAgeMs: 5_000 },
+    )
       .then((s) => {
         setSettings(s);
         setLlmBase(s.llm_api_base ?? "");
@@ -75,8 +85,11 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
   }, [workspaceId]);
 
   useEffect(() => {
-    api
-      .getModelCatalog()
+    fetchCached(
+      cacheKeys.modelCatalog(),
+      () => api.getModelCatalog(),
+      { maxAgeMs: 60_000 },
+    )
       .then(setCatalog)
       .catch(() => setErr("Could not load the model catalog."));
   }, []);
@@ -122,6 +135,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
       setLlmKey("");
       setResendKey("");
       const fresh = await api.getWorkspaceSettings(workspaceId);
+      writeCache(cacheKeys.workspaceSettings(workspaceId), fresh);
       setSettings(fresh);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to save keys");

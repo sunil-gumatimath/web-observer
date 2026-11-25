@@ -10,7 +10,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { NavClock } from "@/components/nav-clock";
 import { api } from "@/lib/api";
 import { config } from "@/lib/config";
+import { fetchCached } from "@/lib/query-cache";
+import { cacheKeys, prefetchRouteData } from "@/lib/route-prefetch";
 import {
+	getCachedMe,
 	getStoredWorkspaceId,
 	invalidateWorkspace,
 	setStoredWorkspaceId,
@@ -132,8 +135,7 @@ function ClerkWorkspaceSwitcher() {
 
 	useEffect(() => {
 		if (!isLoaded || !isSignedIn) return;
-		api
-			.me()
+		getCachedMe()
 			.then((me) => {
 				setWorkspaces(me.workspaces);
 				const preferred =
@@ -182,14 +184,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 		let cancelled = false;
 		async function checkActivityAccess() {
 			try {
-				const me = await api.me();
+				const me = await getCachedMe();
 				if (me.is_internal) {
 					if (!cancelled) setCanViewActivity(true);
 					return;
 				}
 				const workspaceId = getStoredWorkspaceId() ?? me.workspaces[0]?.id;
 				if (!workspaceId || !me.id) return;
-				const members = await api.listMembers(workspaceId);
+				const members = await fetchCached(
+					cacheKeys.members(workspaceId),
+					() => api.listMembers(workspaceId),
+					{ maxAgeMs: 30_000 },
+				);
 				const role = members.find((member) => member.user_id === me.id)?.role;
 				if (!cancelled) setCanViewActivity(role === "owner" || role === "admin");
 			} catch {
@@ -235,6 +241,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 									<Link
 										key={item.href}
 										href={item.href}
+										onMouseEnter={() => prefetchRouteData(item.href)}
+										onFocus={() => prefetchRouteData(item.href)}
 										className={cn("nav-link", active && "nav-link-active")}
 									>
 										{item.label}
@@ -324,7 +332,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 			</header>
 
 			<main
-				key={pathname}
 				className="mx-auto max-w-6xl px-4 py-8"
 				suppressHydrationWarning
 			>

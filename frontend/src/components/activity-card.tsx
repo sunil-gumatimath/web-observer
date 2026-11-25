@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fetchCached, readCache } from "@/lib/query-cache";
+import { cacheKeys } from "@/lib/route-prefetch";
 import {
 	activityFromServer,
 	categoryTotals,
@@ -52,20 +54,27 @@ export function ActivityCard({
 	monitors: Monitor[];
 }) {
 	const [range, setRange] = useState<Range>(14);
-	const [resp, setResp] = useState<ChangeActivity | null>(null);
-	const [loading, setLoading] = useState(true);
+	const initialEntry = workspaceId
+		? readCache<ChangeActivity>(cacheKeys.activity(workspaceId, range))
+		: undefined;
+	const [resp, setResp] = useState<ChangeActivity | null>(initialEntry?.data ?? null);
+	const [loading, setLoading] = useState(!initialEntry);
 
 	useEffect(() => {
 		if (!workspaceId) return;
 		let cancelled = false;
+		const cached = readCache<ChangeActivity>(cacheKeys.activity(workspaceId, range));
 		// Fetch a double window so the card can trend against the prior period.
-		api
-			.getChangeActivity(workspaceId, { days: range * 2 })
+		fetchCached(
+			cacheKeys.activity(workspaceId, range),
+			() => api.getChangeActivity(workspaceId, { days: range * 2 }),
+			{ maxAgeMs: 4_000 },
+		)
 			.then((r) => {
 				if (!cancelled) setResp(r);
 			})
 			.catch(() => {
-				if (!cancelled) setResp(null);
+				if (!cancelled && !cached) setResp(null);
 			})
 			.finally(() => {
 				if (!cancelled) setLoading(false);
