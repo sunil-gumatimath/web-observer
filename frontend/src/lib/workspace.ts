@@ -48,15 +48,31 @@ let workspacePromise: Promise<string> | null = null;
 let workspacePromiseUid: string | null = null;
 let resolutionGeneration = 0;
 
-export function invalidateWorkspace(): void {
-  // Drop the tracked identity and query cache too: a stale Clerk user id or
-  // cached workspace data would make the next ensureWorkspace() or page load
-  // treat a fresh sign-in / workspace switch as a cache hit for the old user.
+function _resetInMemoryWorkspace(): void {
   resolutionGeneration += 1;
   setClerkUserId(null);
   clearQueryCache();
   workspacePromise = null;
   workspacePromiseUid = null;
+}
+
+/**
+ * Atomically switch the active workspace in-memory and in localStorage so
+ * subsequent client-side navigations resolve the new workspace immediately
+ * without triggering cross-tab removal events.
+ */
+export function switchWorkspace(id: string): void {
+  _resetInMemoryWorkspace();
+  setStoredWorkspaceId(id);
+  writeCache("activeWorkspaceId", id);
+  workspacePromise = Promise.resolve(id);
+}
+
+export function invalidateWorkspace(): void {
+  // Drop the tracked identity and query cache too: a stale Clerk user id or
+  // cached workspace data would make the next ensureWorkspace() or page load
+  // treat a fresh sign-in / workspace switch as a cache hit for the old user.
+  _resetInMemoryWorkspace();
   if (typeof window !== "undefined") {
     try {
       localStorage.removeItem(STORAGE_KEY);

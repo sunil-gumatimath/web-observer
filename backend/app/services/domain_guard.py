@@ -52,22 +52,24 @@ def assert_domain_allowed(url: str) -> str:
     """Raise DomainBlocked if rate-limited or circuit is open. Returns domain."""
     settings = get_settings()
     domain = domain_from_url(url)
-    r = _redis()
     now = round(time.time())
+    try:
+        r = _redis()
+        # Circuit open?
+        open_until = r.get(f"circuit:open:{domain}")
+        if open_until and _to_int(open_until) > now:
+            raise DomainBlocked(domain, f"circuit open until {open_until}")
 
-    # Circuit open?
-    open_until = r.get(f"circuit:open:{domain}")
-    if open_until and _to_int(open_until) > now:
-        raise DomainBlocked(domain, f"circuit open until {open_until}")
-
-    # Fixed-window rate limit per minute (reset each minute bucket; a burst
-    # of up to 2x the limit is possible across a bucket boundary)
-    minute_key = f"rate:{domain}:{now // 60}"
-    count = _to_int(r.incr(minute_key))
-    if count == 1:
-        r.expire(minute_key, 120)
-    if count > settings.per_domain_rate_per_minute:
-        raise DomainBlocked(domain, "rate limit exceeded")
+        # Fixed-window rate limit per minute (reset each minute bucket; a burst
+        # of up to 2x the limit is possible across a bucket boundary)
+        minute_key = f"rate:{domain}:{now // 60}"
+        count = _to_int(r.incr(minute_key))
+        if count == 1:
+            r.expire(minute_key, 120)
+        if count > settings.per_domain_rate_per_minute:
+            raise DomainBlocked(domain, "rate limit exceeded")
+    except redis.RedisError as exc:
+        logger.warning("domain_guard_check_failed domain=%s error=%s", domain, exc)
 
     return domain
 
@@ -123,17 +125,23 @@ def release_domain_slot(domain: str) -> None:
 
 def record_domain_failure(domain: str) -> None:
     settings = get_settings()
-    r = _redis()
-    key = f"circuit:fail:{domain}"
-    fails = r.incr(key)
-    r.expire(key, settings.circuit_window_seconds)
-    if _to_int(fails) >= settings.circuit_failure_threshold:
-        open_until = round(time.time()) + settings.circuit_open_seconds
-        r.setex(f"circuit:open:{domain}", settings.circuit_open_seconds, str(open_until))
-        r.delete(key)
-        logger.warning("circuit_opened domain=%s until=%s", domain, open_until)
+    try:
+        r = _redis()
+        key = f"circuit:fail:{domain}"
+        fails = r.incr(key)
+        r.expire(key, settings.circuit_window_seconds)
+        if _to_int(fails) >= settings.circuit_failure_threshold:
+            open_until = round(time.time()) + settings.circuit_open_seconds
+            r.setex(f"circuit:open:{domain}", settings.circuit_open_seconds, str(open_until))
+            r.delete(key)
+            logger.warning("circuit_opened domain=%s until=%s", domain, open_until)
+    except redis.RedisError as exc:
+        logger.warning("domain_failure_record_failed domain=%s error=%s", domain, exc)
 
 
 def record_domain_success(domain: str) -> None:
-    r = _redis()
-    r.delete(f"circuit:fail:{domain}")
+    try:
+        r = _redis()
+        r.delete(f"circuit:fail:{domain}")
+    except redis.RedisError as exc:
+        logger.warning("domain_success_record_failed domain=%s error=%s", domain, exc)

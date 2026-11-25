@@ -16,6 +16,39 @@ interface CapturedContentPreviewProps {
   onEnableJs?: () => void;
 }
 
+function ScreenshotViewportImage({
+  src,
+  alt,
+}: {
+  src: string;
+  alt: string;
+}) {
+  const [imgError, setImgError] = useState(false);
+  if (imgError) {
+    return (
+      <div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-6 text-center max-w-md">
+        <p className="text-sm font-medium text-[var(--fg)]">
+          Screenshot captured &amp; hashed
+        </p>
+        <p className="mt-1 text-xs text-[var(--ink-muted)]">
+          Perceptual hash computed successfully. In local development without object storage, raw PNG bytes are preserved on the check worker.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="relative max-h-[580px] w-full max-w-4xl overflow-auto rounded-lg border border-[var(--hairline)] bg-[var(--canvas)] shadow-xs">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className="w-full h-auto object-contain mx-auto block"
+        onError={() => setImgError(true)}
+      />
+    </div>
+  );
+}
+
 export function CapturedContentPreview({
   monitor,
   snapshot,
@@ -25,7 +58,6 @@ export function CapturedContentPreview({
 }: CapturedContentPreviewProps) {
   const [copied, setCopied] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState("");
-  const [imgError, setImgError] = useState(false);
   const [readmeView, setReadmeView] = useState<"rendered" | "raw">("rendered");
 
   const rawText = snapshot?.normalized_text || "";
@@ -146,16 +178,12 @@ export function CapturedContentPreview({
 
         {/* Screenshot Viewport */}
         <div className="bg-[var(--surface-2)] p-4 sm:p-6 flex flex-col items-center justify-center min-h-[280px]">
-          {resolvedUrl && !imgError ? (
-            <div className="relative max-h-[580px] w-full max-w-4xl overflow-auto rounded-lg border border-[var(--hairline)] bg-[var(--canvas)] shadow-xs">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={resolvedUrl}
-                alt={`Captured screenshot for ${monitor.name}`}
-                className="w-full h-auto object-contain mx-auto block"
-                onError={() => setImgError(true)}
-              />
-            </div>
+          {resolvedUrl ? (
+            <ScreenshotViewportImage
+              key={resolvedUrl}
+              src={resolvedUrl}
+              alt={`Captured screenshot for ${monitor.name}`}
+            />
           ) : (
             <div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] p-6 text-center max-w-md">
               <p className="text-sm font-medium text-[var(--fg)]">

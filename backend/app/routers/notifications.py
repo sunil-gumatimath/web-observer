@@ -205,7 +205,17 @@ def test_notification_channel(
     delivery failure, so the UI can show the exact error.
     """
     from app.services.email import send_email
+    from app.services.usage import (
+        QuotaExceeded,
+        assert_can_use_notifications,
+        increment_notifications,
+    )
     from app.workers.notifications import _send_discord, _send_slack
+
+    try:
+        assert_can_use_notifications(db, _workspace)
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
 
     channel = db.scalar(
         select(NotificationChannel).where(
@@ -230,6 +240,12 @@ def test_notification_channel(
             _send_discord(channel.address, title, body)
         else:
             send_email(to=channel.address, subject=title, text=body)
-        return {"ok": True, "detail": f"Test {ctype} message sent to {channel.address}"}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "detail": str(exc)[:500]}
+
+    try:
+        increment_notifications(db, workspace_id)
+        db.commit()
+    except Exception:  # noqa: BLE001 - message already sent; don't report delivery failure
+        db.rollback()
+    return {"ok": True, "detail": f"Test {ctype} message sent to {channel.address}"}

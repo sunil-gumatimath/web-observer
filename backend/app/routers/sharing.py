@@ -273,6 +273,13 @@ def create_invite(
             status_code=400,
             detail="Invalid role: invites may grant admin, member, or viewer",
         )
+    from app.services.plans import assert_can_add_member
+    from app.services.usage import QuotaExceeded
+
+    try:
+        assert_can_add_member(db, workspace)
+    except QuotaExceeded as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     token, token_hash, prefix = new_token()
     row = WorkspaceInvite(
         workspace_id=workspace_id,
@@ -395,10 +402,35 @@ def redeem_invite(
     if principal.user is None:
         raise HTTPException(status_code=401, detail="Sign in to accept this invite")
 
+    now = datetime.now(UTC)
+    row = db.scalar(
+        select(WorkspaceInvite).where(WorkspaceInvite.token_hash.in_(candidate_hashes(token)))
+    )
+    if row is None or (row.expires_at and row.expires_at < now):
+        raise HTTPException(status_code=404, detail="Invite link not found")
+    if row.role == "owner":
+        # Defense-in-depth: legacy owner-role invites (pre-fix) are inert at
+        # redemption time even if one is still outstanding in the database.
+        raise HTTPException(status_code=410, detail="Invite link is no longer valid")
+
+    existing = db.scalar(
+        select(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == row.workspace_id,
+            WorkspaceMember.user_id == principal.user.id,
+        )
+    )
+    if existing is not None:
+        workspace = db.get(Workspace, row.workspace_id)
+        return WorkspaceInviteRedeemOut(
+            workspace_id=row.workspace_id,
+            workspace_name=workspace.name if workspace else "the workspace",
+            role=row.role,
+            message="You've joined the workspace.",
+        )
+
     # Claim a use atomically so concurrent redeems cannot overshoot max_uses.
     # The conditional UPDATE re-evaluates `use_count < max_uses` against the
     # latest committed row version, so the count can never exceed the cap.
-    now = datetime.now(UTC)
     claim_stmt = (
         sa_update(WorkspaceInvite)
         .where(
@@ -415,34 +447,46 @@ def redeem_invite(
         db.rollback()
         raise HTTPException(status_code=410, detail="Invite link has expired")
 
-    row = db.scalar(
-        select(WorkspaceInvite).where(WorkspaceInvite.token_hash.in_(candidate_hashes(token)))
-    )
-    if row is None or (row.expires_at and row.expires_at < now):
-        db.rollback()
-        raise HTTPException(status_code=404, detail="Invite link not found")
-    if row.role == "owner":
-        # Defense-in-depth: legacy owner-role invites (pre-fix) are inert at
-        # redemption time even if one is still outstanding in the database.
-        db.rollback()
-        raise HTTPException(status_code=410, detail="Invite link is no longer valid")
-
+    # A concurrent redeem by this user can commit a membership while this
+    # request waits on the invite row lock. Check again after the claim.
     existing = db.scalar(
         select(WorkspaceMember).where(
             WorkspaceMember.workspace_id == row.workspace_id,
             WorkspaceMember.user_id == principal.user.id,
         )
     )
-    if existing is None:
-        db.add(
-            WorkspaceMember(
-                workspace_id=row.workspace_id,
-                user_id=principal.user.id,
-                role=row.role,
-            )
+    if existing is not None:
+        db.rollback()
+        workspace = db.get(Workspace, row.workspace_id)
+        return WorkspaceInviteRedeemOut(
+            workspace_id=row.workspace_id,
+            workspace_name=workspace.name if workspace else "the workspace",
+            role=row.role,
+            message="You've joined the workspace.",
         )
+
+    # Lock the workspace row so concurrent redemptions serialize the seat count.
+    workspace = db.scalar(
+        select(Workspace).where(Workspace.id == row.workspace_id).with_for_update()
+    )
+    if workspace is not None:
+        from app.services.plans import assert_can_add_member
+        from app.services.usage import QuotaExceeded
+
+        try:
+            assert_can_add_member(db, workspace)
+        except QuotaExceeded as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    db.add(
+        WorkspaceMember(
+            workspace_id=row.workspace_id,
+            user_id=principal.user.id,
+            role=row.role,
+        )
+    )
     db.commit()
-    workspace = db.get(Workspace, row.workspace_id)
     return WorkspaceInviteRedeemOut(
         workspace_id=row.workspace_id,
         workspace_name=workspace.name if workspace else "the workspace",

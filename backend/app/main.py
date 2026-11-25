@@ -58,6 +58,20 @@ app.add_exception_handler(
 app.add_middleware(SlowAPIMiddleware)
 
 
+@app.middleware("http")
+async def _rate_limit_principal_middleware(request: Request, call_next):
+    """Populate verified request.state.auth_principal before SlowAPIMiddleware."""
+    if getattr(request.state, "auth_principal", None) is None:
+        from starlette.concurrency import run_in_threadpool
+
+        from app.auth import resolve_principal_for_rate_limit
+
+        principal = await run_in_threadpool(resolve_principal_for_rate_limit, request)
+        if principal is not None:
+            request.state.auth_principal = principal
+    return await call_next(request)
+
+
 def _cors_origins() -> list[str]:
     """Explicit CORS allow-list from config: CORS_ORIGINS + FRONTEND_URL.
 

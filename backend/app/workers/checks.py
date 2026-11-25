@@ -29,6 +29,34 @@ _PROVIDER_FAILOVER_CODES = frozenset({"bot_challenge", "http_error", "read_timeo
 _PROVIDER_HTTP_STATUSES = frozenset({401, 403, 429})
 
 
+def _try_provider_fallback(
+    url: str, *, timeout_seconds: int, max_response_bytes: int
+) -> FetchResult | None:
+    """Attempt Context.dev markdown scrape; return None on provider error."""
+    started = time.perf_counter()
+    try:
+        markdown = context_dev.scrape_markdown(url, timeout_seconds=timeout_seconds)
+    except Exception as provider_exc:  # noqa: BLE001 - never mask the original
+        logger.warning("page_provider_fallback_failed url=%s error=%s", url, provider_exc)
+        return None
+    encoded = markdown.encode("utf-8")
+    if len(encoded) > max_response_bytes:
+        raise FetchError(
+            "response_too_large",
+            f"Provider response size exceeds limit {max_response_bytes}",
+        )
+    logger.info("page_provider_fallback_used url=%s chars=%s", url, len(markdown))
+    return FetchResult(
+        final_url=url,
+        status_code=200,
+        content=encoded,
+        text=markdown,
+        content_type="text/markdown; charset=utf-8",
+        latency_ms=round((time.perf_counter() - started) * 1000),
+        provider_markdown=markdown,
+    )
+
+
 def fetch_page_with_provider_fallback(
     url: str,
     *,
@@ -54,7 +82,7 @@ def fetch_page_with_provider_fallback(
     if primary_kwargs:
         kwargs.update(primary_kwargs)
     try:
-        return fetch(url, **kwargs)
+        result = fetch(url, **kwargs)
     except FetchError as exc:
         if monitor_mode != "page_content" or not context_dev.is_configured():
             raise
@@ -62,24 +90,24 @@ def fetch_page_with_provider_fallback(
             raise
         if exc.code == "http_error" and exc.http_status not in _PROVIDER_HTTP_STATUSES:
             raise
-        # Clock the provider call itself: starting after it made latency_ms
-        # measure only logging / response construction.
-        started = time.perf_counter()
-        try:
-            markdown = context_dev.scrape_markdown(url, timeout_seconds=timeout_seconds)
-        except Exception as provider_exc:  # noqa: BLE001 - never mask the original
-            logger.warning("page_provider_fallback_failed url=%s error=%s", url, provider_exc)
-            raise exc from provider_exc
-        logger.info("page_provider_fallback_used url=%s chars=%s", url, len(markdown))
-        return FetchResult(
-            final_url=url,
-            status_code=200,
-            content=markdown.encode("utf-8"),
-            text=markdown,
-            content_type="text/markdown; charset=utf-8",
-            latency_ms=round((time.perf_counter() - started) * 1000),
-            provider_markdown=markdown,
+        fallback = _try_provider_fallback(
+            url, timeout_seconds=timeout_seconds, max_response_bytes=max_response_bytes
         )
+        if fallback is None:
+            raise
+        return fallback
+
+    if (
+        monitor_mode == "page_content"
+        and result.status_code in _PROVIDER_HTTP_STATUSES
+        and context_dev.is_configured()
+    ):
+        fallback = _try_provider_fallback(
+            url, timeout_seconds=timeout_seconds, max_response_bytes=max_response_bytes
+        )
+        if fallback is not None:
+            return fallback
+    return result
 
 
 @dramatiq.actor(queue_name="http_checks", max_retries=3, time_limit=120_000)

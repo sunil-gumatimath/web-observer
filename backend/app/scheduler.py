@@ -190,6 +190,15 @@ def release_expired_logic() -> None:
         db.commit()
 
 
+def _enqueue_batch(jobs: list[tuple[uuid.UUID, bool]]) -> None:
+    """Best-effort enqueue per job so one broker failure does not strand the batch."""
+    for run_id, needs_browser in jobs:
+        try:
+            enqueue_check(str(run_id), needs_browser=needs_browser)
+        except Exception as exc:  # noqa: BLE001 - isolate broker failures per job
+            logger.warning("scheduler_enqueue_failed run_id=%s error=%s", run_id, exc)
+
+
 def run_once() -> int:
     """Single pass: release leases, reap stuck, claim due, enqueue. Returns jobs claimed."""
     release_expired_logic()
@@ -204,8 +213,7 @@ def run_once() -> int:
         if reaped_webhooks:
             logger.warning("reaped_stuck_webhooks count=%d", reaped_webhooks)
     jobs = claim_due_monitors(settings.scheduler_batch_size)
-    for run_id, needs_browser in jobs:
-        enqueue_check(str(run_id), needs_browser=needs_browser)
+    _enqueue_batch(jobs)
     return len(jobs)
 
 
@@ -242,8 +250,7 @@ def main() -> None:
                     logger.warning("reaped_stuck_webhooks count=%d", reaped_webhooks)
 
             jobs = claim_due_monitors(settings.scheduler_batch_size)
-            for run_id, needs_browser in jobs:
-                enqueue_check(str(run_id), needs_browser=needs_browser)
+            _enqueue_batch(jobs)
         except Exception:  # noqa: BLE001
             logger.exception("scheduler_loop_error")
         time.sleep(settings.scheduler_poll_seconds)

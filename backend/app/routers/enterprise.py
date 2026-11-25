@@ -220,14 +220,14 @@ def export_monitors(
         for m in monitors:
             w.writerow(
                 [
-                    m.id,
-                    m.name,
-                    m.url,
-                    m.mode,
-                    m.css_selector or "",
-                    m.schedule_interval_minutes,
-                    m.enabled,
-                    m.js_required,
+                    _csv_cell(m.id),
+                    _csv_cell(m.name),
+                    _csv_cell(m.url),
+                    _csv_cell(m.mode),
+                    _csv_cell(m.css_selector or ""),
+                    _csv_cell(m.schedule_interval_minutes),
+                    _csv_cell(m.enabled),
+                    _csv_cell(m.js_required),
                 ]
             )
         return Response(content=buf.getvalue(), media_type="text/csv")
@@ -290,6 +290,15 @@ def export_changes(
 # Cap the in-memory export: a very busy workspace can have hundreds of
 # thousands of runs; exporting them all would balloon the response.
 MAX_RUNS_EXPORT = 20_000
+
+
+def _csv_cell(value: object) -> object:
+    """Neutralize spreadsheet formula-injection prefixes in CSV string cells."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and value and value[0] in ("=", "+", "-", "@", "\t", "\r", "\n"):
+        return "'" + value
+    return value
 
 
 @router.get("/workspaces/{workspace_id}/export/runs")
@@ -375,7 +384,7 @@ def export_runs(
         )
         for run, monitor in rows:
             d = _row_dict(run, monitor, change_map.get(run.id))
-            w.writerow(["" if v is None else v for v in d.values()])
+            w.writerow([_csv_cell(v) for v in d.values()])
         return Response(content=buf.getvalue(), media_type="text/csv")
 
     return Response(
@@ -599,10 +608,33 @@ def retry_webhook_delivery(
             "retried": False,
             "message": "Already sent",
         }
+    if delivery.status not in ("failed", "pending"):
+        return {
+            "id": str(delivery.id),
+            "status": delivery.status,
+            "retried": False,
+            "message": f"Delivery is already {delivery.status}",
+        }
 
-    delivery.status = "pending"
-    delivery.attempts = 0
-    delivery.last_error = None
+    from sqlalchemy import update as sa_update
+
+    claimed = db.execute(
+        sa_update(WebhookDelivery)
+        .where(
+            WebhookDelivery.id == delivery_id,
+            WebhookDelivery.workspace_id == workspace_id,
+            WebhookDelivery.status.in_(("failed", "pending")),
+        )
+        .values(status="pending", last_error=None, next_attempt_at=None, attempts=0)
+    )
+    if claimed.rowcount != 1:  # type: ignore[attr-defined]
+        db.rollback()
+        return {
+            "id": str(delivery.id),
+            "status": delivery.status,
+            "retried": False,
+            "message": "Delivery is no longer retryable",
+        }
     db.commit()
     write_audit(
         db,

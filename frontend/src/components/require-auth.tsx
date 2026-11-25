@@ -16,7 +16,34 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (config.devModeEnabled && !config.clerkEnabled) {
     return <>{children}</>;
   }
+  // Production build without NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ClerkProvider
+  // is not mounted in layout.tsx, so fail closed without calling useAuth().
+  if (!config.clerkEnabled) {
+    return <SignInRequiredCard />;
+  }
   return <ClerkRequireAuth>{children}</ClerkRequireAuth>;
+}
+
+function SignInRequiredCard() {
+  return (
+    <Card className="mx-auto max-w-lg p-6">
+      <h1 className="text-lg font-semibold text-[var(--fg)]">Sign in required</h1>
+      <p className="mt-2 text-sm text-[var(--ink-muted)]">
+        You need a Clerk session to load workspaces and monitors. API calls cannot use the
+        internal token while Clerk is enabled.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link href="/sign-in">
+          <Button type="button">Sign in</Button>
+        </Link>
+        <Link href="/sign-up">
+          <Button type="button" variant="secondary">
+            Create account
+          </Button>
+        </Link>
+      </div>
+    </Card>
+  );
 }
 
 function ClerkRequireAuth({ children }: { children: ReactNode }) {
@@ -55,25 +82,7 @@ function ClerkRequireAuth({ children }: { children: ReactNode }) {
   }
 
   if (!isSignedIn) {
-    return (
-      <Card className="mx-auto max-w-lg p-6">
-        <h1 className="text-lg font-semibold text-[var(--fg)]">Sign in required</h1>
-        <p className="mt-2 text-sm text-[var(--ink-muted)]">
-          You need a Clerk session to load workspaces and monitors. API calls cannot use the
-          internal token while Clerk is enabled.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link href="/sign-in">
-            <Button type="button">Sign in</Button>
-          </Link>
-          <Link href="/sign-up">
-            <Button type="button" variant="secondary">
-              Create account
-            </Button>
-          </Link>
-        </div>
-      </Card>
-    );
+    return <SignInRequiredCard />;
   }
 
   return <>{children}</>;

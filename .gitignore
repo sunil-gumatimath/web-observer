@@ -18,6 +18,10 @@ htmlcov/
 # Env / secrets — both root and backend/.env must be ignored (backend/.env is the runtime source)
 .env
 .env.local
+.env.*
+!.env.example
+backend/.env.*
+!backend/.env.example
 backend/.env
 *.pem
 

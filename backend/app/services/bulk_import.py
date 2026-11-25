@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Monitor, MonitorConfigVersion, Workspace
 from app.models.entities import MONITOR_MODES, PLAIN_HTTP_MODES
-from app.schemas import MAX_SELECTOR_LEN, MAX_URL_LEN
+from app.schemas import (
+    MAX_SELECTOR_LEN,
+    MAX_URL_LEN,
+    _validate_alert_config,
+    _validate_regex_patterns,
+    _validate_selector_list,
+)
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.plans import assert_can_create_monitor, get_plan
 
@@ -96,6 +102,24 @@ def import_monitors(
             result.errors.append(
                 {"row": str(idx), "error": f"css_selector longer than {MAX_SELECTOR_LEN}"}
             )
+            continue
+        try:
+            raw_sel = row.get("ignore_selectors")
+            if raw_sel is not None and not isinstance(raw_sel, list):
+                raise ValueError("ignore_selectors must be a list of strings")
+            raw_rx = row.get("ignore_regexes")
+            if raw_rx is not None and not isinstance(raw_rx, list):
+                raise ValueError("ignore_regexes must be a list of strings")
+            raw_alert = row.get("alert_config")
+            if isinstance(raw_alert, str) and not raw_alert.strip():
+                raw_alert = None
+            if raw_alert is not None and not isinstance(raw_alert, dict):
+                raise ValueError("alert_config must be an object")
+            row["ignore_selectors"] = _validate_selector_list(raw_sel)
+            row["ignore_regexes"] = _validate_regex_patterns(raw_rx)
+            row["alert_config"] = _validate_alert_config(raw_alert)
+        except (ValueError, TypeError) as exc:
+            result.errors.append({"row": str(idx), "error": str(exc)})
             continue
         if row["schedule_interval_minutes"] < plan.min_interval_minutes:
             result.errors.append(
