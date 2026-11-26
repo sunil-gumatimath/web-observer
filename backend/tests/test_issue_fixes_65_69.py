@@ -243,8 +243,8 @@ def test_populated_database_upgrade_and_downgrade_round_trip() -> None:
             )
             conn.execute(
                 sa.text(
-                    "INSERT INTO snapshots (id, workspace_id, monitor_id, content_hash) "
-                    "VALUES (:id, :ws_id, :mon_id, 'hash1')"
+                    "INSERT INTO snapshots (id, workspace_id, monitor_id, content_hash, normalized_text) "
+                    "VALUES (:id, :ws_id, :mon_id, 'hash1', 'hello')"
                 ),
                 {"id": snap_id, "ws_id": ws_id, "mon_id": mon_id},
             )
@@ -280,8 +280,8 @@ def test_populated_database_upgrade_and_downgrade_round_trip() -> None:
             )
             conn.execute(
                 sa.text(
-                    "INSERT INTO webhook_endpoints (id, workspace_id, url, secret) "
-                    "VALUES (:id, :ws_id, 'https://hooks.example.com', 'plain-short-secret')"
+                    "INSERT INTO webhook_endpoints (id, workspace_id, url, secret, enabled) "
+                    "VALUES (:id, :ws_id, 'https://hooks.example.com', 'plain-short-secret', TRUE)"
                 ),
                 {"id": ep_id, "ws_id": ws_id},
             )
