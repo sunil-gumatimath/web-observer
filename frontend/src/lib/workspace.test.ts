@@ -36,7 +36,7 @@ vi.mock("@/lib/config", () => ({
   config: { clerkEnabled: true, devWorkspaceId: "" },
 }));
 
-import { ensureWorkspace, invalidateWorkspace } from "@/lib/workspace";
+import { ensureWorkspace, invalidateWorkspace, switchWorkspace } from "@/lib/workspace";
 import { readCache } from "@/lib/query-cache";
 
 describe("workspace cache invalidation", () => {
@@ -126,5 +126,36 @@ describe("workspace cache invalidation", () => {
     });
     await expect(Promise.all([newPromise, concurrentPromise])).resolves.toEqual(["ws-b", "ws-b"]);
     expect(readCache<string>("activeWorkspaceId")?.data).toBe("ws-b");
+  });
+
+  it("preserves the Clerk identity marker across switchWorkspace so user switches are still detected (#71)", async () => {
+    getClerkUserIdMock.mockReturnValue("user-a");
+    meMock.mockResolvedValueOnce({
+      clerk_user_id: "user-a",
+      workspaces: [
+        { id: "ws-a1", name: "A1", created_at: "" },
+        { id: "ws-a2", name: "A2", created_at: "" },
+      ],
+    });
+    await expect(ensureWorkspace()).resolves.toBe("ws-a1");
+
+    // Switching workspaces must keep the tracked Clerk identity as "user-a".
+    setClerkUserIdMock.mockClear();
+    switchWorkspace("ws-a2");
+    expect(setClerkUserIdMock).toHaveBeenLastCalledWith("user-a");
+    expect(readCache<string>("activeWorkspaceUid")?.data).toBe("user-a");
+
+    // Same user re-uses the switched workspace without re-calling /me.
+    await expect(ensureWorkspace()).resolves.toBe("ws-a2");
+    expect(meMock).toHaveBeenCalledTimes(1);
+
+    // If Clerk later changes to "user-b", ensureWorkspace detects the mismatch and invalidates ws-a2.
+    getClerkUserIdMock.mockReturnValue("user-b");
+    meMock.mockResolvedValueOnce({
+      clerk_user_id: "user-b",
+      workspaces: [{ id: "ws-b1", name: "B1", created_at: "" }],
+    });
+    await expect(ensureWorkspace()).resolves.toBe("ws-b1");
+    expect(meMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,7 @@ from app.schemas import (
     NotificationChannelCreate,
     NotificationChannelOut,
     NotificationChannelUpdate,
+    validate_email_address,
 )
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.audit import write_audit
@@ -54,6 +56,12 @@ def list_notification_channels(
 
 
 def _validate_channel_address(channel_type: str, address: str) -> None:
+    if channel_type == "email":
+        try:
+            validate_email_address(address)
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail="valid email address required") from exc
+        return
     if channel_type not in ("slack", "discord"):
         return
     if not address.startswith("https://"):

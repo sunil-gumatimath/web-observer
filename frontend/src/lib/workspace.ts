@@ -62,9 +62,15 @@ function _resetInMemoryWorkspace(): void {
  * without triggering cross-tab removal events.
  */
 export function switchWorkspace(id: string): void {
+  const uid = config.clerkEnabled ? getClerkUserId() : null;
   _resetInMemoryWorkspace();
+  if (uid) {
+    setClerkUserId(uid);
+    workspacePromiseUid = uid;
+  }
   setStoredWorkspaceId(id);
   writeCache("activeWorkspaceId", id);
+  writeCache("activeWorkspaceUid", uid);
   workspacePromise = Promise.resolve(id);
 }
 
