@@ -32,7 +32,7 @@ from app.models import (
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.api_keys import create_api_key, revoke_api_key
 from app.services.audit import write_audit
-from app.services.bulk_import import import_monitors, parse_csv
+from app.services.bulk_import import MAX_IMPORT_ROWS, import_monitors, parse_csv
 from app.services.plans import PLANS, get_plan, plans_public
 from app.services.run_logs import change_ids_for_runs, fetch_run_log_rows
 from app.services.webhooks import new_webhook_secret
@@ -156,9 +156,18 @@ def bulk_import_monitors(
 ) -> dict:
     rows = list(body.items)
     if body.csv_text:
-        rows.extend(parse_csv(body.csv_text))
+        remaining = max(0, MAX_IMPORT_ROWS - len(rows))
+        try:
+            rows.extend(parse_csv(body.csv_text, max_rows=remaining))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not rows:
         raise HTTPException(status_code=400, detail="No items or csv_text provided")
+    if len(rows) > MAX_IMPORT_ROWS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Bulk import exceeds maximum of {MAX_IMPORT_ROWS} rows",
+        )
     result = import_monitors(db, workspace, rows)
     write_audit(
         db,

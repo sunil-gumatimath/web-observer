@@ -7,7 +7,7 @@ import { fetchCached, readCache, writeCache } from "@/lib/query-cache";
 import { cacheKeys } from "@/lib/route-prefetch";
 import type { InviteRow } from "@/lib/types";
 
-const ROLES = ["member", "admin", "viewer", "owner"] as const;
+const ROLES = ["member", "admin", "viewer"] as const;
 
 export function TeamInvites({ workspaceId }: { workspaceId: string }) {
   const initialInvites = workspaceId

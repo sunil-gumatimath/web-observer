@@ -104,6 +104,45 @@ _ALLOWED_HEADERS = [
     "Accept",
 ]
 
+
+class _UnhandledExceptionMiddleware:
+    """Catch unhandled HTTP exceptions *inside* CORSMiddleware.
+
+    ``@app.exception_handler(Exception)`` attaches to Starlette's outermost
+    ``ServerErrorMiddleware`` (outside ``CORSMiddleware``), so a JSON 500
+    emitted there lacks ``access-control-allow-origin`` and looks like a CORS
+    block in browsers. Intercepting unhandled exceptions inside the user
+    middleware stack lets ``CORSMiddleware`` attach CORS headers to the 500.
+    """
+
+    def __init__(self, asgi_app) -> None:
+        self.app = asgi_app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        response_started = False
+
+        async def _send(message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send)
+        except Exception as exc:
+            if response_started:
+                raise
+            request = Request(scope, receive=receive)
+            response = await unhandled_exception_handler(request, exc)
+            await response(scope, receive, send)
+
+
+# Registered before CORSMiddleware so CORSMiddleware wraps it (last added = outermost).
+app.add_middleware(_UnhandledExceptionMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),

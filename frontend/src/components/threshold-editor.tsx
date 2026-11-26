@@ -140,7 +140,7 @@ const FIELD_META: Record<ThresholdKey, FieldMeta> = {
 		placeholder: "e.g. 3",
 		help: "Bundle notifications when this many alerts fire inside the flap window (page flipping between states).",
 		kind: "int",
-		min: "0",
+		min: "1",
 		step: "1",
 	},
 };
@@ -186,7 +186,9 @@ export function ThresholdEditor({
 
 	function setNumeric(key: ThresholdKey, raw: string, integer: boolean) {
 		setDrafts((d) => (d[key] === raw ? d : { ...d, [key]: raw }));
-		const next = applyNumericDraft(key, raw, integer, value);
+		const minStr = FIELD_META[key].min;
+		const minVal = minStr !== undefined ? Number(minStr) : undefined;
+		const next = applyNumericDraft(key, raw, integer, value, minVal);
 		if (next) commit(next);
 	}
 
@@ -199,9 +201,12 @@ export function ThresholdEditor({
 	function numericError(key: ThresholdKey, integer: boolean): string | null {
 		const raw = drafts[key];
 		if (raw.trim() === "") return null;
-		return parseNumericDraft(raw, integer) === null
-			? "Enter a valid number."
-			: null;
+		const minStr = FIELD_META[key].min;
+		const minVal = minStr !== undefined ? Number(minStr) : undefined;
+		if (parseNumericDraft(raw, integer, minVal) !== null) return null;
+		return minVal !== undefined
+			? `Enter a valid number (at least ${minVal}).`
+			: "Enter a valid number.";
 	}
 
 	function patternError(key: ThresholdKey): string | null {
