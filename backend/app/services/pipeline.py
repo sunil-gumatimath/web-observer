@@ -953,10 +953,15 @@ def _queue_notifications(
     # Quota gate: fail closed *before* any NotificationOutbox row is created.
     # assert_can_use_notifications is added to usage.py by the same review-fix
     # batch, so import it lazily instead of binding it at module import time.
-    from app.services.usage import QuotaExceeded, assert_can_use_notifications
+    from app.services.usage import (
+        QuotaExceeded,
+        assert_can_use_notifications,
+        try_reserve_notification_slot,
+    )
 
+    workspace = db.get(Workspace, monitor.workspace_id)
     try:
-        assert_can_use_notifications(db, db.get(Workspace, monitor.workspace_id))
+        assert_can_use_notifications(db, workspace)
     except QuotaExceeded as exc:
         logger.warning(
             "notification_quota_exceeded monitor_id=%s change_id=%s error=%s "
@@ -1002,6 +1007,10 @@ def _queue_notifications(
     ).all()
 
     from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    dialect_name = getattr(getattr(db.get_bind(), "dialect", None), "name", None)
+    dialect_insert = sqlite_insert if dialect_name == "sqlite" else pg_insert
 
     outbox_ids: list[uuid.UUID] = []
     for channel in channels:
@@ -1014,7 +1023,7 @@ def _queue_notifications(
         # pill. Swallowing the conflict keeps the run green and the outbox
         # single-shot per (run, channel).
         stmt = (
-            pg_insert(NotificationOutbox)
+            dialect_insert(NotificationOutbox)
             .values(
                 id=uuid.uuid4(),
                 workspace_id=monitor.workspace_id,
@@ -1037,6 +1046,7 @@ def _queue_notifications(
                     "change_event_id": str(change.id),
                     "channel_type": channel.type,
                     "to": channel.address,
+                    "_quota_reserved": True,
                 },
                 status=OutboxStatus.PENDING.value,
                 # Key on the run id (stable across Dramatiq retries of the same
@@ -1049,11 +1059,28 @@ def _queue_notifications(
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
             .returning(NotificationOutbox.id)
         )
-        # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
-        inserted_id = db.execute(stmt).scalar_one_or_none()
-        if inserted_id is None:
-            logger.info("outbox_already_queued run_id=%s channel_id=%s", change.run_id, channel.id)
-            continue
+        try:
+            with db.begin_nested():
+                # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+                inserted_id = db.execute(stmt).scalar_one_or_none()
+                if inserted_id is None:
+                    logger.info(
+                        "outbox_already_queued run_id=%s channel_id=%s",
+                        change.run_id,
+                        channel.id,
+                    )
+                    continue
+                if not try_reserve_notification_slot(db, workspace or monitor.workspace_id):
+                    raise QuotaExceeded("Daily notification quota exceeded")
+        except QuotaExceeded as exc:
+            logger.warning(
+                "notification_quota_exceeded monitor_id=%s change_id=%s channel_id=%s error=%s",
+                monitor.id,
+                change.id,
+                channel.id,
+                exc,
+            )
+            break
         outbox_ids.append(inserted_id)
 
     # Outbound product webhooks (signed)
@@ -1267,7 +1294,11 @@ def apply_fetch_result(
             error_code="run_reaped",
             error_message="Run was reaped or superseded before results could commit.",
         )
+    # Commit the check attempt independently so an in-pipeline failure
+    # (HTTP >= 400, extraction error, empty extraction) whose fail_run() starts
+    # with db.rollback() cannot wipe out the daily quota charge.
     increment_checks(db, monitor.workspace_id)
+    db.commit()
 
     # Step 1 – extract & store snapshot
     snapshot, normalized, digest, items, error = _extract_and_store_snapshot(

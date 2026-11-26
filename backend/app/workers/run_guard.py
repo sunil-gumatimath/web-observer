@@ -129,6 +129,30 @@ def enqueue_outbox(outbox_ids) -> None:
             )
 
 
+def _charge_failed_check(db: Session, monitor: Monitor) -> None:
+    """Charge daily check quota for a run that failed before pipeline accounting.
+
+    Committed independently after ``fail_run`` so the rollback inside
+    ``fail_run`` never discards it, and skipped on minimal fake-session test
+    doubles without ``get_bind``.
+    """
+    workspace_id = getattr(monitor, "workspace_id", None)
+    if workspace_id is None or getattr(db, "get_bind", None) is None:
+        return
+    try:
+        from app.services.usage import increment_checks
+
+        increment_checks(db, workspace_id)
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - accounting must not mask run outcome
+        logger.warning(
+            "failed_check_quota_charge_error workspace_id=%s error=%s",
+            workspace_id,
+            exc,
+        )
+        db.rollback()
+
+
 def _reaper_claimed(db: Session, run: MonitorRun) -> bool:
     """Fresh-read whether the reaper already claimed this run as FAILED.
 
@@ -274,6 +298,7 @@ def execute_monitored_run(
             return
 
         slot_acquired = False
+        pipeline_entered = False
         try:
             domain = assert_domain_allowed(monitor.url)
             acquire_domain_slot(domain)
@@ -281,6 +306,7 @@ def execute_monitored_run(
 
             result = fetch_fn(monitor, db)
 
+            pipeline_entered = True
             pipeline = apply_fetch_result(
                 db, monitor=monitor, run=run, result=result, store_raw=True
             )
@@ -311,12 +337,16 @@ def execute_monitored_run(
 
         except DomainBlocked as exc:
             fail_run(db, run, "blocked_address", str(exc))
+            if not pipeline_entered:
+                _charge_failed_check(db, monitor)
             outbox_extra = _record_failure_outcome(
                 db, monitor, run, code="blocked_address", message=str(exc)
             )
             enqueue_outbox(outbox_extra)
         except SSRFError as exc:
             fail_run(db, run, exc.code, str(exc))
+            if not pipeline_entered:
+                _charge_failed_check(db, monitor)
             outbox_extra = _record_failure_outcome(
                 db, monitor, run, code=exc.code, message=str(exc)
             )
@@ -325,6 +355,8 @@ def execute_monitored_run(
             if domain:
                 record_domain_failure(domain)
             fail_run(db, run, exc.code, str(exc), http_status=exc.http_status)
+            if not pipeline_entered:
+                _charge_failed_check(db, monitor)
             outbox_extra = _record_failure_outcome(
                 db, monitor, run, code=exc.code, message=str(exc)
             )
@@ -334,6 +366,8 @@ def execute_monitored_run(
             if domain:
                 record_domain_failure(domain)
             fail_run(db, run, "internal_error", str(exc)[:2000])
+            if not pipeline_entered:
+                _charge_failed_check(db, monitor)
             outbox_extra = _record_failure_outcome(
                 db, monitor, run, code="internal_error", message=str(exc)[:2000]
             )

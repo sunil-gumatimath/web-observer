@@ -15,20 +15,22 @@ from app.db import SessionLocal
 from app.models import NotificationChannel, NotificationDelivery, NotificationOutbox, Workspace
 from app.models.entities import LIST_DIFF_MODES, OutboxStatus
 from app.services.email import send_email
-from app.services.usage import increment_notifications
+from app.services.usage import try_reserve_notification_slot
 from app.workers.broker import redis_broker  # noqa: F401
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Hard ceiling on outbox delivery attempts. Without a cap the reaper would
-# re-enqueue a permanently failing row (wrong email, revoked Slack webhook)
-# every ~10 minutes forever. Matches the webhook delivery budget.
-OUTBOX_MAX_ATTEMPTS = 8
+# Hard ceiling on outbox delivery attempts. Must match Dramatiq's execution
+# budget (1 initial run + max_retries=5 = 6 attempts) so an exhausted row
+# transitions to terminal FAILED instead of sitting PENDING forever.
+OUTBOX_MAX_ATTEMPTS = 6
 
 
 @dramatiq.actor(queue_name="notifications", max_retries=5, time_limit=60_000)
 def deliver_outbox_message(outbox_id: str) -> None:
+    from sqlalchemy.orm.attributes import flag_modified
+
     with SessionLocal() as db:
         outbox = db.get(NotificationOutbox, UUID(outbox_id))
         if outbox is None:
@@ -37,6 +39,20 @@ def deliver_outbox_message(outbox_id: str) -> None:
             OutboxStatus.SENT.value,
             OutboxStatus.FAILED.value,
         ):
+            return
+        if outbox.attempts >= OUTBOX_MAX_ATTEMPTS:
+            outbox.status = OutboxStatus.FAILED.value
+            if not outbox.last_error:
+                outbox.last_error = (
+                    f"retries exhausted ({outbox.attempts} attempts); marking permanently failed"
+                )
+            outbox.updated_at = datetime.now(UTC)
+            db.commit()
+            logger.error(
+                "outbox_attempts_exhausted outbox_id=%s attempts=%d",
+                outbox_id,
+                outbox.attempts,
+            )
             return
 
         # Claim the row atomically: only a PENDING row may transition to
@@ -129,6 +145,27 @@ def deliver_outbox_message(outbox_id: str) -> None:
         # Plain-text variant for email (strip simple markdown markers)
         plain_body = body.replace("*", "").replace("```", "")
         to_addr = payload.get("to") or channel.address
+        workspace = db.get(Workspace, outbox.workspace_id)
+
+        # Defense-in-depth: rows created without enqueue-time reservation (e.g.
+        # legacy outbox rows) must claim a quota slot atomically before sending.
+        if not payload.get("_quota_reserved"):
+            if not try_reserve_notification_slot(db, workspace or outbox.workspace_id):
+                outbox.status = OutboxStatus.FAILED.value
+                outbox.last_error = "Daily notification quota exceeded"
+                outbox.updated_at = datetime.now(UTC)
+                db.commit()
+                logger.warning(
+                    "notification_delivery_quota_exceeded outbox_id=%s workspace_id=%s",
+                    outbox_id,
+                    outbox.workspace_id,
+                )
+                return
+            updated_payload = dict(payload)
+            updated_payload["_quota_reserved"] = True
+            outbox.payload = updated_payload
+            flag_modified(outbox, "payload")
+            db.commit()
 
         try:
             if channel_type == "slack":
@@ -138,7 +175,6 @@ def deliver_outbox_message(outbox_id: str) -> None:
             else:
                 # Per-account (bring-your-own) Resend credentials override the
                 # server-managed defaults when present.
-                workspace = db.get(Workspace, outbox.workspace_id)
                 from app.services.crypto import decrypt_secret as _decrypt
 
                 ws_api_key = _decrypt(workspace.resend_api_key) if workspace else None
@@ -162,7 +198,6 @@ def deliver_outbox_message(outbox_id: str) -> None:
                     status="sent",
                 )
             )
-            increment_notifications(db, outbox.workspace_id)
             db.commit()
             logger.info(
                 "notification_sent outbox_id=%s type=%s to=%s",
@@ -224,9 +259,12 @@ def reap_stuck_outbox_messages(db, *, older_than_seconds: int = 600) -> int:
     ).all()
 
     reaped = 0
+    exhausted_marked = 0
     enqueued: list[str] = []
     for outbox in stuck:
         stamp = outbox.updated_at or outbox.created_at or cutoff
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=UTC)
         if stamp > cutoff:
             continue
         old_status = outbox.status
@@ -236,6 +274,7 @@ def reap_stuck_outbox_messages(db, *, older_than_seconds: int = 600) -> int:
             if not outbox.last_error:
                 outbox.last_error = f"retries exhausted ({outbox.attempts} attempts)"
             db.flush()
+            exhausted_marked += 1
             logger.warning(
                 "outbox_attempts_exhausted_at_reap outbox_id=%s attempts=%d",
                 outbox.id,
@@ -259,7 +298,7 @@ def reap_stuck_outbox_messages(db, *, older_than_seconds: int = 600) -> int:
             outbox.attempts,
         )
 
-    if reaped:
+    if reaped or exhausted_marked:
         # Commit BEFORE enqueueing: the worker's PENDING -> PROCESSING claim
         # must be able to see the durable row, otherwise a fast pick-up sees
         # the stale pre-commit status, drops the message, and the row sits

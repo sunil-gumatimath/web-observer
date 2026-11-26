@@ -37,6 +37,7 @@ fi
 if [[ -f frontend/.env.local ]]; then
     while IFS='=' read -r key value || [[ -n $key ]]; do
         [[ $key =~ ^NEXT_PUBLIC_[A-Za-z0-9_]+$ ]] || continue
+        [[ $key == "NEXT_PUBLIC_INTERNAL_API_TOKEN" ]] && continue
         value=${value%$'\r'}
         value=${value#\"}
         value=${value%\"}

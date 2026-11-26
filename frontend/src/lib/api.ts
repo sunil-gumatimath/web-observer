@@ -318,7 +318,7 @@ export const api = {
   discoverSitemap: (workspaceId: string, url: string, maxUrls?: number) =>
     request<SitemapDiscovery>(`/api/v1/workspaces/${workspaceId}/monitors/discover-sitemap`, {
       method: "POST",
-      body: JSON.stringify({ url, max_urls: maxUrls ?? 500 }),
+      body: JSON.stringify({ url, max_urls: maxUrls ?? 200 }),
     }),
 
   createMonitorsFromSitemap: (
