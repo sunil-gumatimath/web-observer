@@ -4,53 +4,61 @@
 
 # Web Observer
 
-Web change-detection and alerting platform.
+> Tell me when the web pages I care about change — and clearly explain what changed.
 
-> Tell me when the web pages I care about change and clearly explain what changed.
+Web Observer is a web change-detection and alerting platform. You create a monitor; workers check it on a schedule, hash what they see, and notify you only when a change matters.
 
-- **10 monitoring modes** — page text, sitemaps, RSS/Atom, GitHub READMEs, prices, CSS-selector lists, JSON values, visual screenshots, Cloudflare security scans, and HTML/meta/code facts.
-- **Intelligence, not spam** — content-hashing diffs, conditional thresholds, watch-note AI triage, and noise marking mean you only get told when something matters.
-- **Reliable delivery** — email (Resend), Slack, Discord, HMAC-signed webhooks, and an in-app alerts inbox, all driven by an outbox with bounded retries.
-- **Runs anywhere** — local processes (Windows/Linux/macOS) against a hosted Neon Postgres + local Redis, with optional, opt-in `$0` Cloudflare edge workers for failover fetching and scan verdicts; share-page caching needs a configured public hostname.
-- **Built for teams** — workspaces, RBAC, audit log, API keys, invited links, public share pages, and per-workspace BYO keys.
+[Architecture](#architecture) · [Quick start](#quick-start) · [Documentation](docs/) · [Roadmap](docs/roadmap.md)
 
-## Status
+## Highlights
 
-**Phases 0–7 complete** — the original roadmap has been exceeded. Post-roadmap work added the alerts inbox, per-monitor conditional thresholds and semantic triggers, first-class AI impact/confidence triage, distributed Redis dedup caching, monitor tags, workspace run logs with CSV/JSON export, brand/enrichment columns, encrypted webhook secrets, and per-principal rate limits. DB schema is at Alembic migration `015_change_run_set_null`. Billing is optional (solo use: skip Stripe).
+- **10 monitoring modes** — page content (including `js_required` SPAs), sitemaps, RSS/Atom, GitHub READMEs, prices, CSS-selector lists, JSON values, visual screenshots, Cloudflare security scans, and HTML/meta facts.
+- **Signal, not spam** — content-hash and perceptual-image diffs, conditional thresholds, watch-note AI triage, noise marking, adaptive intervals, and an alerts inbox.
+- **Reliable delivery** — email (Resend), Slack, Discord, HMAC-signed webhooks, and in-app alerts, driven by an outbox with bounded retries.
+- **Runs anywhere** — local processes against hosted Neon Postgres and local Redis, with opt-in $0 Cloudflare edge workers for failover fetching, share-page caching, and security verdicts.
+- **Built for teams** — workspaces, RBAC, audit log, API keys, invite links, public share pages, and per-workspace BYO keys.
 
-Cloudflare free-tier integrations are wired up but **opt-in, not active by default**: raw snapshots in R2 (needs `STORAGE_BACKEND=s3`), a Browser Rendering **failover** Worker for `js_required` fetches (needs `CLOUDFLARE_BROWSER_URL` + token; local Playwright stays primary so the ~10 min/day edge-browser quota is preserved), a `security_scan` monitor mode backed by the URL Scanner (needs its API token), screenshots served from a public R2 bucket over a custom domain (needs `NEXT_PUBLIC_SCREENSHOT_CDN_URL`), and a cookie-less Web Analytics beacon (needs `NEXT_PUBLIC_CF_BEACON_TOKEN`). The `share-cache` Worker is now active on the app hostname and caches `/share/` pages there: `workers/share-cache/wrangler.toml` routes `app.sunilted.qzz.io/share/*` and `app.sunilted.qzz.io/_next/static/*` to the Worker and sets `CACHE_HOST` (requests for other hosts pass through) — and the browser-failover Worker is dormant by design on networks that block `*.workers.dev`. Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
-
-Verified end-to-end: backend unit tests (`pytest -q -m "not integration"`) and the Postgres-backed integration suite are green, `ruff check` and `ruff format --check` clean; frontend `tsc` + ESLint clean (0 errors) and vitest green; `next build` compiles all routes; the FastAPI app exposes `api/v1` endpoints that match the frontend client. Test counts change as fixes land and are deliberately not quoted here — [CI](.github/workflows/ci.yml) is the source of truth.
-
-## Documentation
-
-| Doc | Topic |
-| ----- | -------- |
-| [docs/](docs/) | Documentation index |
-| [docs/local-dev.md](docs/local-dev.md) | Run locally + operations reference (processes, secrets, retention) |
-| [docs/architecture.md](docs/architecture.md) | Deep architecture: module/package diagram, full ERD, manual-run + pipeline-decision sequences, service notes |
-| [docs/auth-modes.md](docs/auth-modes.md) | Auth modes (dev token / Clerk) |
-| [docs/guides/clerk.md](docs/guides/clerk.md) | Clerk auth (dev setup + production hardening) |
-| [docs/guides/resend-setup.md](docs/guides/resend-setup.md) | Email alerts |
-| [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md) | Cloudflare free tier end-to-end (R2 snapshots, R2 screenshot CDN, Web Analytics, Tunnel, Browser Rendering failover, URL Scanner, Workers) |
-| [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) | The 10 monitoring modes, their options and limits |
-| [docs/roadmap.md](docs/roadmap.md) | Feature roadmap (Phases 8–10) |
-| [docs/security/threat-model.md](docs/security/threat-model.md) | Security policy: SSRF, tenant isolation, out-of-scope rules |
-| [docs/adrs/](docs/adrs/) | Architecture decision records |
-| [docs/integrations/n8n-zapier.md](docs/integrations/n8n-zapier.md) | n8n / Zapier automation |
-
-## How it works (short)
-
-1. You create a monitor (URL + mode).
-2. Workers fetch the page (HTTP or Playwright in a real browser) and build a content hash.
-3. First success = **baseline** (no alert).
-4. A later hash differs → save the diff → notify via email / Slack / Discord, or an outbound signed webhook.
+> **Status:** Phases 0–7 complete. Post-roadmap work added the alerts inbox, conditional thresholds, AI triage, Redis dedup caching, tags, run-log exports, brand enrichment, encrypted webhook secrets, and per-principal rate limits. Schema head: Alembic `015_change_run_set_null`. Test counts change as fixes land, so [CI](.github/workflows/ci.yml) is the source of truth.
 
 ## Architecture
 
-The whole system is one idea: **you watch pages, workers do the checking, and you get told only when something matters.**
+One idea: **you watch pages, workers do the checking, and you get told only when something matters.**
 
-Stack: **Next.js** (App Router, React 19, Clerk, Tailwind) → **FastAPI** → **Neon Postgres** + **Redis** (Dramatiq broker) → **Dramatiq workers** (HTTP / Playwright / notifications) → alert channels. Snapshots persist to local disk (`./data/snapshots`) or S3-compatible object storage; Alembic owns the schema.
+Stack: **Next.js** (App Router, React 19, Clerk, Tailwind) → **FastAPI** → **Neon Postgres** + **Redis** (Dramatiq broker) → **Dramatiq workers** (HTTP / Playwright / notifications) → alert channels. Snapshots go to local disk or S3-compatible storage; Alembic owns the schema.
+
+### At a glance
+
+```mermaid
+flowchart LR
+    YOU["You / team"]
+    UI["Next.js UI<br/>:3000 · Clerk"]
+    API["FastAPI<br/>:8002 · REST + SSE"]
+    PG[("Neon Postgres")]
+    RD[("Redis queues")]
+    SCHED["Scheduler"]
+    W["Dramatiq workers<br/>HTTP · Playwright · AI · notify"]
+    SRC["Monitored pages"]
+    ST["Snapshots<br/>disk or S3/R2"]
+    OUT["Resend · Slack · Discord<br/>signed webhooks · inbox"]
+    AUTH["Clerk · JWT + JWKS"]
+    EDGE["Cloudflare edge<br/>share cache · failover · URL Scanner"]
+
+    YOU --> UI
+    UI -->|REST + SSE| API
+    API <--> AUTH
+    API <--> PG
+    API --> RD
+    SCHED -->|claim due monitors| PG
+    SCHED -->|enqueue checks| RD
+    RD --> W
+    W <--> PG
+    W --> ST
+    W --> SRC
+    W --> OUT
+    UI -.->|/share/| EDGE
+    W -.->|opt-in| EDGE
+    EDGE -.-> SRC
+```
 
 ### Component map
 
@@ -110,6 +118,8 @@ flowchart TB
     UI -.->|"/share/ pages"| SCS
 ```
 
+The full module diagram, ERD, and manual-run sequences live in [docs/architecture.md](docs/architecture.md).
+
 ### A check from start to finish
 
 ```mermaid
@@ -165,158 +175,117 @@ flowchart LR
     CHANGE --> G["Notify channels ·<br/>signed webhooks · inbox"]
 ```
 
-<details>
-<summary><strong>Under the hood (for contributors)</strong></summary>
+## Documentation
 
-- Workers are Python `dramatiq` (`backend/app/workers/checks.py`, `browser_checks.py`) on four queues — `http_checks`, `browser_checks`, `notifications`, `ai_enrichment` — via `RedisBroker` (`backend/app/workers/broker.py`). Alerts fan out from `NotificationOutbox` / `WebhookDelivery` rows, so detection is decoupled from delivery with at-least-once sends (`max_retries=5`).
-- Due-monitor claiming is Postgres-driven (`SELECT ... FOR UPDATE SKIP LOCKED`, 60s lease + jitter: `backend/app/config.py`, `backend/app/scheduler.py`), so multiple schedulers never double-claim. `run_reaper` recovers stuck runs with a fenced conditional update, and the worker-side terminal writes are fenced too: the pipeline's SUCCEEDED commit and `fail_run` are both conditional `UPDATE ... WHERE status = 'running'`, so a reaper (or a late exception) can never overwrite a run's committed terminal state — no zombie SUCCEEDED-over-FAILED (or FAILED-over-SUCCEEDED) downgrade race.
-- Snapshots store raw HTML + normalized text with a SHA256 `content_hash`; visual mode compares SHA512-based pHash (256 bits, threshold 8). Change rows carry `is_noise` / `is_read`; webhooks are HMAC-signed (`X-MTW-Signature`) with secrets encrypted at rest.
-- Rate limiting is enforced per verified principal (or IP) via Redis counters; when Redis is down the limiter fails open to in-memory counters, so an outage can't turn unrelated requests into 500s.
-- Outbound notifications are capped per plan (`max_notifications_per_day`) with a 60-minute cooldown between failure notices for the same monitor. User-supplied regex rules run under a 50 ms timeout, so a pathological pattern cannot stall a check worker.
-- An external LLM is only called when `LLM_API_KEY` is set; otherwise summaries/triage use fast local heuristics. Optional SubQ Decisions API (`SUBQ_ENABLED`) acts as a fast System 1 triage gate for probabilistic noise rejection and category/impact scoring before generative LLM summarization. `GET /api/v1/model-catalog` serves selectable models per provider.
-- Browser runs automatically queue advisory hero preview screenshot captures (`screenshots/{monitor_id}/{run_id}.png`) via Dramatiq off the critical path, populating monitor card headers without manual intervention.
-- The API also exposes Prometheus-compatible metrics at `GET /metrics` (rate limited to 30/min).
-- SSRF guard (`backend/app/security/ssrf.py`): private/loopback/link-local/metadata IPs and credentialed URLs are blocked before fetch; redirects are re-validated; the pinned fetcher tries every validated IP in turn so a dead CDN PoP can't fail a check. SSRF exceptions convert gracefully to fetch errors, ensuring external provider DNS hiccups (e.g. during brand asset extraction) never trigger unhandled 500s.
-- Full diagrams (components, ERD, manual-run + decision sequences): [docs/architecture.md](docs/architecture.md).
+| Doc | Topic |
+| --- | --- |
+| [docs/](docs/) | Documentation index |
+| [docs/local-dev.md](docs/local-dev.md) | Run locally + operations reference (processes, secrets, retention) |
+| [docs/architecture.md](docs/architecture.md) | Deep architecture: modules, ERD, manual-run + pipeline sequences |
+| [docs/auth-modes.md](docs/auth-modes.md) | Auth modes (dev token / Clerk) |
+| [docs/guides/clerk.md](docs/guides/clerk.md) | Clerk auth (dev setup + production hardening) |
+| [docs/guides/resend-setup.md](docs/guides/resend-setup.md) | Email alerts |
+| [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md) | Cloudflare free tier end-to-end |
+| [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) | The 10 monitoring modes, options, and limits |
+| [docs/roadmap.md](docs/roadmap.md) | Feature roadmap (Phases 8–10) |
+| [docs/security/threat-model.md](docs/security/threat-model.md) | Security policy: SSRF, tenant isolation, out of scope |
+| [docs/adrs/](docs/adrs/) | Architecture decision records |
+| [docs/integrations/n8n-zapier.md](docs/integrations/n8n-zapier.md) | n8n / Zapier automation |
 
-</details>
+## Quick start
 
-### Project layout
-
-```text
-├── backend/             # FastAPI app + Dramatiq workers + Alembic migrations (head: 015)
-│   ├── app/             #   routers · services · workers · models · security
-│   ├── alembic/         #   schema migrations — single source of truth
-│   └── tests/           #   unit + Postgres-backed integration tests
-├── frontend/            # Next.js (App Router) · React 19 · Clerk · Tailwind · vitest
-├── workers/             # Cloudflare Workers: browser-failover, share-cache
-├── docs/                # guides · architecture · ADRs · threat model
-├── scripts/             # restart/stop stack helpers (Windows + Linux/WSL)
-├── assets/              # brand SVGs (source of truth for logo/favicon/OG image)
-└── data/                # runtime artifacts: snapshots + logs (local only)
-```
-
-## What you need
+### Prerequisites
 
 | Piece | This project |
-| -------- | ---------------- |
+| --- | --- |
 | Database | **Neon** Postgres (or local Postgres) — `DATABASE_URL` in `backend/.env` |
 | Queue | **Redis** on `localhost:6379` |
-| Auth | **Clerk** — keys in `frontend/.env.local` + JWKS in `backend/.env` |
+| Auth | **Clerk** — keys in `frontend/.env.local`, JWKS in `backend/.env` |
 | Email | **Resend** — optional for alerts |
-| Snapshots | Local disk (`STORAGE_BACKEND=local`) or S3-compatible object storage |
-| Toolchain | Python 3.12+, Node.js 20+, a Playwright Chromium install for JS rendering / screenshots |
+| Snapshots | Local disk (`STORAGE_BACKEND=local`) or S3-compatible storage |
+| Toolchain | Python 3.12+, Node.js 20+, Playwright Chromium for JS rendering / screenshots |
 
-## Env files (do not commit secrets)
+### 1. Configure environment
 
-**`backend/.env`:**
+Secrets live in gitignored env files — never commit them.
+
+`backend/.env` (minimum):
 
 ```env
-# development | test | production
-# Not optional: development mode is opt-in. An unset APP_ENV is treated as a
-# non-development environment so the production guards stay active.
 APP_ENV=development
-
 DATABASE_URL=postgresql+psycopg://USER:PASS@HOST/neondb?sslmode=require
 REDIS_URL=redis://localhost:6379/0
 STORAGE_BACKEND=local
 INTERNAL_API_TOKEN=dev-internal-token
-
-# Derives both the encryption key for workspace BYO secrets and the API-key
-# HMAC. Pin a stable value in production — restart with a random value makes
-# stored workspace keys unreadable and invalidates every mtw_ API key.
 SECRET_KEY=change-me-in-production
-
 CLERK_JWKS_URL=https://YOUR-INSTANCE.clerk.accounts.dev/.well-known/jwks.json
 CLERK_ISSUER=https://YOUR-INSTANCE.clerk.accounts.dev
 CLERK_SECRET_KEY=sk_test_...
 ```
 
-Use `postgresql+psycopg://` (not plain `postgresql://`).
+- `APP_ENV` is not optional: an unset value is treated as non-development, so the production guards stay active.
+- Use `postgresql+psycopg://`, not plain `postgresql://`.
+- Pin `SECRET_KEY` / `INTERNAL_API_TOKEN` in production. A random restart value makes stored workspace keys unreadable and invalidates every `mtw_` API key.
+- In production (`APP_ENV=production`) the API refuses placeholder secrets and skips `create_all`; schema comes only from Alembic: `cd backend && alembic upgrade head`.
 
-**Production:** set `APP_ENV=production` and pin `SECRET_KEY` / `INTERNAL_API_TOKEN` to real values. Outside development the API refuses to start if either is missing or still holds a placeholder — and `Base.metadata.create_all()` is skipped, so schema changes come only from Alembic.
+Full backend variable list: [.env.example](.env.example).
 
-Apply schema changes with Alembic (the single source of truth):
-
-```powershell
-cd backend
-alembic upgrade head
-```
-
-Backend variables are listed with their defaults in [`.env.example`](.env.example); frontend build/runtime variables are in [`frontend/.env.example`](frontend/.env.example).
-
-**`frontend/.env.local`:**
+`frontend/.env.local`:
 
 ```env
-# MUST match the API port you start (8000 or 8002)
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8002
 NEXT_PUBLIC_INTERNAL_API_TOKEN=dev-internal-token
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
-# Optional: preselect a dev/seed workspace in the UI (internal-token mode only)
-# NEXT_PUBLIC_DEV_WORKSPACE_ID=
-# Optional Cloudflare Web Analytics beacon (empty = beacon never loads)
-# NEXT_PUBLIC_CF_BEACON_TOKEN=
-# Optional: serve screenshots from a public R2 bucket CDN instead of the API proxy
-# NEXT_PUBLIC_SCREENSHOT_CDN_URL=https://screenshots.example.com
+# Optional: NEXT_PUBLIC_DEV_WORKSPACE_ID=
+# Optional: NEXT_PUBLIC_CF_BEACON_TOKEN=
+# Optional: NEXT_PUBLIC_SCREENSHOT_CDN_URL=https://screenshots.example.com
 ```
 
-## Run locally
+`NEXT_PUBLIC_API_BASE_URL` must match the API port you start. Full frontend list: [frontend/.env.example](frontend/.env.example).
 
-### One-time
+### 2. Install (one time)
 
-**Windows (PowerShell):**
-
-```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-# required for JS rendering / screenshots:
-python -m playwright install chromium
-cd ..\frontend
-npm ci # CI-canonical (also works: bun install)
-```
-
-**Linux / macOS (bash or zsh):**
+Linux / macOS:
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-# required for JS rendering / screenshots:
-python -m playwright install chromium
-cd ../frontend
-npm ci # CI-canonical (also works: bun install)
+python -m playwright install chromium   # JS rendering / screenshots
+cd ../frontend && npm ci
 ```
 
-### Every time (5 processes)
+Windows (PowerShell):
 
-Redis must already be running. Prefer loading env from `backend/.env` (Neon).
+```powershell
+cd backend
+python -m venv .venv; .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m playwright install chromium
+cd ..\frontend; npm ci
+```
+
+`npm ci` is CI-canonical (`bun install` also works). Python 3.12+ and Node.js 20+.
+
+### 3. Run the stack
+
+Redis must be running. Start these processes from `backend/` (the frontend one from `frontend/`):
 
 | # | Process | Command |
-| --- | --------- | --------- |
-| 1 | **API** | `uvicorn app.main:app --host 127.0.0.1 --port 8002` |
-| 2 | **HTTP worker** | `dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2` |
-| 2b | **AI enrichment worker** | `dramatiq app.workers --queues ai_enrichment --processes 1 --threads 1` |
-| 3 | **Browser worker** | `dramatiq app.workers --queues browser_checks --processes 1 --threads 1` |
-| 4 | **Scheduler** | `python -m app.scheduler` |
-| 5 | **Frontend** | `npm run dev` (port 3000) |
+| --- | --- | --- |
+| 1 | API | `uvicorn app.main:app --host 127.0.0.1 --port 8002` |
+| 2 | HTTP + notification worker | `dramatiq app.workers --queues http_checks notifications --processes 1 --threads 2` |
+| 2b | AI enrichment worker | `dramatiq app.workers --queues ai_enrichment --processes 1 --threads 1` |
+| 3 | Browser worker | `dramatiq app.workers --queues browser_checks --processes 1 --threads 1` |
+| 4 | Scheduler | `python -m app.scheduler` |
+| 5 | Frontend | `npm run dev` (port 3000) |
 
-**Browser worker is required** for `js_required` monitors and opt-in `screenshots_enabled`.
-Use **`--threads 1`** on Windows. Playwright runs in a **subprocess** (`playwright_job`) to avoid `[Errno 9] Bad file descriptor`.
+The browser worker is required for `js_required` monitors and opt-in screenshots. Use `--threads 1` on Windows; Playwright runs in a subprocess to avoid `[Errno 9] Bad file descriptor`.
 
-**Optional background jobs** (not required for manual checks or alerts):
+Optional jobs, on a schedule/cron: `python -m app.digest_job --loop` (daily/weekly digests) and `python -m app.retention_job` (purge old snapshots/runs).
 
-| Job | Command | Purpose |
-|-----|---------|---------|
-| Digest | `python -m app.digest_job --loop` | Sends daily/weekly workspace digests |
-| Retention | `python -m app.retention_job` | Purges snapshots (default 30 days) and runs (default 90 days) |
-
-These are separate processes. Run them on a schedule/cron.
-
-**Helpers — Docker (one container, everything inside):**
+Docker alternative — one container with everything inside:
 
 ```bash
 ./scripts/docker-up.sh              # build + start (API :8002, frontend :3000, workers, scheduler, redis)
@@ -326,159 +295,137 @@ These are separate processes. Run them on a schedule/cron.
 ```
 
 | URL | What |
-| ----- | ------ |
+| --- | --- |
 | <http://127.0.0.1:3000> | UI |
 | <http://127.0.0.1:8002/docs> | API docs |
 | <http://127.0.0.1:8002/health> | API up? |
 | <http://127.0.0.1:8002/ready> | DB reachable? |
 | <http://127.0.0.1:8002/metrics> | Prometheus metrics |
 
-If the UI shows **Failed to fetch**, the API is down or `NEXT_PUBLIC_API_BASE_URL` does not match the API port.
+"Failed to fetch" in the UI means the API is down or `NEXT_PUBLIC_API_BASE_URL` does not match its port.
 
-## First test flow
+### 4. First check
 
 1. Open <http://127.0.0.1:3000> → **Sign up / Sign in** (Clerk).
 2. **Settings → Alert channels** → add your email (optional).
 3. **New monitor** → e.g. `https://example.com/` (enable screenshots for image history).
-4. Open monitor → **Run now** (first success = baseline, no alert).
+4. Open the monitor → **Run now**. The first success is the baseline, so no alert fires.
 
 ## Features
 
-### Monitoring modes (10)
+### Monitoring modes
 
 | Mode | What it watches |
-| ------ | ----------------- |
+| --- | --- |
 | `page_content` | Detected main content (falls back to whole-page text); `js_required` for SPAs |
 | `site_links` | Sitemap URL-set changes (plain HTTP only) |
 | `rss_feed` | RSS/Atom feed entries (plain HTTP only) |
-| `readme` | GitHub repository README changes via `owner/repo` or full URL — GitHub-style markdown diffs; hits the GitHub API first (1 request, `ref`-pinned to the `/tree/<branch>` branch when one is parsed, else the repo's default branch), then a bounded raw fallbacks fan-out capped by a wall-clock budget |
-| `product_price` | Price + currency (defaults to a daily schedule) |
+| `readme` | GitHub README changes via `owner/repo` or URL; GitHub API first, then bounded raw fallbacks |
+| `product_price` | Price + currency (daily schedule by default) |
 | `list_items` | Link list under a CSS selector |
-| `json_field` | A single value via a JSONPath-style query, e.g. `$.data.price` |
-| `visual` | Perceptual screenshot comparison — DCT pHash, `VISUAL_PHASH_THRESHOLD=8` bits of 256 (legacy aHash path keeps `VISUAL_AHASH_THRESHOLD=5`); the change detail renders the two compared runs as a before/after slider plus a collapsible pHash summary |
-| `security_scan` | Cloudflare URL Scanner verdict + technology inventory, diffed item-by-item; needs `CLOUDFLARE_URLSCANNER_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`; plain HTTP only — big reference: [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) |
-| `html_meta` | Code-level facts `page_content` ignores — title, meta tags, canonical/alternate URLs, JSON-LD types, script srcs — diffed as a `key: value` item set; preview-image queries (`og:image`, `twitter:image`) are kept because CDN params change the served image, navigation URLs have theirs stripped; plain HTTP only (`js_required` rejected) |
+| `json_field` | A single JSONPath-style value, e.g. `$.data.price` |
+| `visual` | Perceptual screenshot comparison — 256-bit pHash, threshold 8; before/after slider |
+| `security_scan` | Cloudflare URL Scanner verdict + tech inventory; needs API token (plain HTTP only) |
+| `html_meta` | Title, meta tags, canonical/alternate URLs, JSON-LD types, script srcs (plain HTTP only) |
 
-Also on the monitoring side: a **visual element picker** (point-and-click CSS-selector synthesis with sanitized proxied preview + brand/info auto-fill — `frontend/src/components/selector-picker.tsx`), opt-in **screenshots** captured only on signal changes (`visual` monitors are the exception: each run keeps its own capture under `screenshots/<monitor_id>/<run_id>.png` so the before/after pair matches the run that fired), **watch notes** and **monitor tags** (up to 10, API + bulk import only), **bulk CSV/JSON import/export** with sitemap-driven batch creation, **adaptive scheduling** that stretches intervals after quiet runs, and a public **status badge** (`GET .../badge.svg`, no auth — the monitor UUID in the URL is the capability token; the workspace id is verified but does not scope the lookup).
+Also: a visual element picker (point-and-click CSS-selector synthesis), opt-in screenshots on signal changes (every run for `visual` monitors), watch notes, up to 10 tags per monitor, bulk CSV/JSON import/export with sitemap batch creation, adaptive scheduling after quiet runs, and a public status badge (`GET .../badge.svg`, no auth — the monitor UUID in the URL is the capability token). Details and limits: [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md).
 
 ### Change intelligence
 
 | Area | What's included |
-| ------ | ----------------- |
-| Diffs | GitHub-style added/removed line views for every content change (unified + split), plus readable markdown views for list/price/value modes |
-| AI summaries | Optional plain-language summaries per change — heuristic by default; any OpenAI-compatible gateway via `LLM_API_BASE` (default `api.kilo.ai`), toggled per workspace via `ai_summaries_enabled` |
-| SubQ System 1 triage | Optional fast decision model via SubQ Decisions API (`SUBQ_ENABLED=true`, `subq-snap-preview`) — acts as a fast Stage 1 decision gate when a monitor has a watch note or semantic trigger: probabilistic noise rejection, calibrated category classification, and impact scoring before LLM summarization |
-| LLM providers & catalog | One OpenAI-compatible provider: Kilo Gateway (free models, default) — any other OpenAI-compatible gateway can be used via `LLM_API_BASE`; `GET /api/v1/model-catalog` feeds the settings UI and drives server-side failover with per-model probe status. The shipped Kilo list is a **probe ranking**, not a copy of the provider's marketing list: each model was run against the app's real prompt at the 200- and 800-token caps and ranked by whether it returns complete JSON, so the notes carry the evidence (and the cap it needs). Default `reflection/beam-free` is the recommended model, clean at the default cap alongside several verified fallbacks; see docs/local-dev.md for current probe results and caveats |
-| AI relevance filter | Optional per-monitor `watch_note` triage: the LLM scores each diff vs. the note; routine noise is marked `is_noise=true`, held (not deleted), and excluded from notifications/digests; fails open on LLM error |
+| --- | --- |
+| Diffs | GitHub-style added/removed line views (unified + split), plus readable views for list/price/value modes |
+| AI summaries | Optional plain-language summaries; heuristic by default, any OpenAI-compatible gateway via `LLM_API_BASE`; catalog at `GET /api/v1/model-catalog` |
+| Fast triage | Optional SubQ Decisions gate (`SUBQ_ENABLED`) for noise rejection, category, and impact scoring before LLM summarization |
+| Relevance filter | Per-monitor `watch_note` triage; routine noise is marked `is_noise=true`, held in the inbox, and excluded from notifications/digests; fails open on LLM error |
 | Semantic triggers | Plain-English per-monitor trigger rules evaluated alongside thresholds |
-| Conditional alerting | Optional per-monitor `alert_config` JSONB — `price_below`/`price_above` + `percent_change`, `list_min_added`/`list_min_removed`, `min_diff_chars`, `regex_must_match`/`regex_must_not_match`; unmet thresholds mark the change `is_noise=true` with a stored reason; empty config = alert on any hash difference. Regex rules that are oversized, unparseable, or exceed the 50 ms evaluation timeout are treated as un-evaluable and suppress with an explicit reason (`regex_must_match` non-match, `regex_must_not_match` could not be evaluated) rather than failing open silently |
-| Notification controls | Per-plan daily notification quotas plus a 60-minute cooldown between consecutive failure notices; monitor lists are paginated and bulk actions are rate-limited |
-| Change Q&A | Ask a question about any change from the detail page (`POST /changes/{id}/ask-ai`, 5/minute) |
-| Alerts inbox | Every change stored in-app with `is_read` / `is_noise` state, independent of external notifications — Signal / Unread / Noise filters |
+| Conditional alerting | Per-monitor `alert_config` JSONB: `price_below`/`price_above` + `percent_change`, `list_min_added`/`list_min_removed`, `min_diff_chars`, regex must/must-not-match. Oversized, unparseable, or >50 ms regexes suppress with an explicit reason |
+| Controls | Daily notification quotas per plan plus a 60-minute cooldown between failure notices |
+| Change Q&A | Ask a question about any change (`POST /changes/{id}/ask-ai`, 5/minute) |
+| Alerts inbox | Every change stored in-app with `is_read` / `is_noise` state — Signal / Unread / Noise filters |
 
 ### Alerting & delivery
 
 | Area | What's included |
-| ------ | ----------------- |
-| Alert channels | Email (Resend), Slack webhook, Discord webhook — with per-channel Send-test buttons |
-| Outbound webhooks | HMAC-signed (`X-MTW-Signature`) deliveries with delivery log + exponential backoff; secrets encrypted at rest |
-| Outbox reliability | Atomic outbox/webhook claiming with attempt caps; a reaper re-enqueues abandoned rows — no double-sends after retries |
-| Digests | Daily / weekly workspace digest emails (background `digest_job`) — noise excluded |
-| Failure alerts | Notifications fire after N consecutive check failures (`CONSECUTIVE_FAILURE_NOTIFY_THRESHOLD`) |
+| --- | --- |
+| Channels | Email (Resend), Slack webhook, Discord webhook, each with a Send-test button |
+| Webhooks | HMAC-signed (`X-MTW-Signature`) deliveries with log and exponential backoff; secrets encrypted at rest |
+| Outbox | Atomic outbox/webhook claiming with attempt caps and an abandoned-row reaper — no double-sends after retries |
+| Digests | Daily / weekly workspace digest emails, noise excluded |
+| Failure alerts | Notification after N consecutive check failures (`CONSECUTIVE_FAILURE_NOTIFY_THRESHOLD`) |
 
-### Data, exports & observability
-
-| Area | What's included |
-| ------ | ----------------- |
-| Workspace run logs | The **Logs** page lists every check run with outcome (`all`/`success`/`failed`/`changed`) and monitor/date filters (`GET /api/v1/workspaces/{id}/runs`), refreshed on a 15s cadence |
-| Check-history export | `GET /api/v1/workspaces/{id}/export/runs?format=csv\|json` honours the same filters (20k-run cap) and writes an audit entry |
-| Live monitor detail | SSE stream per monitor: 1-hour lifetime, 15s heartbeats, Redis ORM-wakeup hints so worker/scheduler/reaper transitions surface instantly; degrades to a 1.5s poll tick without Redis, with frontend reconnect backoff + stall detection |
-| Dashboard activity | Change-activity card (7/14/30-day ranges, trend vs. prior period, stacked bars): `GET /changes/activity?days=14&include_noise=false` |
-| Metrics | Prometheus-compatible counters at `GET /metrics` — monitor totals, runs/changes in 24h, outbox/webhook backlog |
-
-### Platform
+### Data & observability
 
 | Area | What's included |
-| ------ | ----------------- |
-| RBAC & audit | Owner / admin / member / viewer roles, member management, audit log |
-| Teams | Expiring multi-use invite links (`/invite/{token}`) + workspace switching |
-| API keys | `mtw_...` bearer tokens for programmatic access |
-| Plans / billing | Free / pro / business / enterprise tiers, per-workspace usage quotas; Stripe checkout or simulated (solo: skip Stripe) |
-| Keys: managed or BYO | Server defaults (`LLM_API_*`, `RESEND_API_KEY`) — or each workspace brings its own per-service keys and overrides the global |
-| Public share pages | Opaque-token read-only page per monitor (`/share/{token}` — unguessable, hashed at rest, expiring, no login); edge-cached by the `share-cache` Worker on the app hostname (`app.sunilted.qzz.io/share/*` routes, `CACHE_HOST` set) |
-| Brand-aware dashboard | Adding a website auto-fills logo/title/description/hero from page meta and re-hosts via `brand-assets/`; inbox items carry `monitor_brand` with favicon fallback |
-| Retention | Background `retention_job` purges snapshots (default 30 days) and runs (default 90 days); change events survive run cleanup (migration `015`) — `docs/local-dev.md` §13 is the source of truth |
-| Security | SSRF-pinned fetcher with redirect re-validation and domain guard, ReDoS/size-capped regexes, CSS selectors (300 chars) and URLs (2048 chars) at the schema + bulk-import layer, HKDF-purposed crypto (share tokens / API keys / Fernet keys), Gitleaks + a full threat model in [docs/security/threat-model.md](docs/security/threat-model.md) |
+| --- | --- |
+| Run logs | Workspace-wide Logs page with outcome and monitor/date filters (`GET /api/v1/workspaces/{id}/runs`), 15s refresh |
+| Export | `GET /api/v1/workspaces/{id}/export/runs?format=csv\|json` with the same filters (20k cap, audited) |
+| Live detail | Per-monitor SSE: 1-hour lifetime, 15s heartbeats, Redis wakeup hints; degrades to a 1.5s poll without Redis |
+| Activity | Change-activity card (7/14/30-day ranges, trend vs prior period) via `GET /changes/activity` |
+| Metrics | Prometheus counters at `GET /metrics` — monitor totals, 24h runs/changes, outbox/webhook backlog |
 
-### Cloudflare free tier (optional, all $0; edge caching for share pages active on the app hostname)
+### Platform & security
 
-See [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md). Pieces below are opt-in and inactive until configured, **except edge caching for share pages** — now active on the app hostname via the `share-cache` Worker (`workers/share-cache/` routes `app.sunilted.qzz.io/share/*` and `app.sunilted.qzz.io/_next/static/*` and sets `CACHE_HOST`): raw snapshots in R2 (`STORAGE_BACKEND=s3`); Browser Rendering **failover** Worker for `js_required` fetches (`workers/browser-failover/`, covered by `backend/tests/test_browser_failover.py` — local Playwright stays primary to preserve the ~10 min/day edge-browser quota; the Worker is dormant by design on networks that block `*.workers.dev`); `security_scan` backed by the URL Scanner (needs its API token); screenshots servable from a public R2 bucket over a custom domain (`NEXT_PUBLIC_SCREENSHOT_CDN_URL`); optional cookie-less Web Analytics beacon on the UI (`NEXT_PUBLIC_CF_BEACON_TOKEN`).
+| Area | What's included |
+| --- | --- |
+| Teams | Owner / admin / member / viewer roles, member management, audit log, expiring invite links, workspace switching |
+| API access | `mtw_...` bearer tokens for programmatic use |
+| Plans | Free / pro / business / enterprise tiers with per-workspace quotas; Stripe checkout or simulated (solo: skip Stripe) |
+| Keys | Server defaults (`LLM_API_*`, `RESEND_API_KEY`) or per-workspace BYO overrides |
+| Share pages | Opaque-token read-only `/share/{token}` pages (unguessable, hashed at rest, expiring, no login) |
+| Brand-aware UI | Auto-fills logo/title/description/hero from page meta and re-hosts assets; inbox items carry favicon fallback |
+| Retention | Snapshots purged after 30 days, runs after 90 days; change events survive run cleanup (migration `015`) |
+| Security | SSRF-pinned fetcher with redirect re-validation, ReDoS/size-capped regexes, input length limits, HKDF-purposed crypto, [threat model](docs/security/threat-model.md) |
 
-### User interface
+### Cloudflare free tier (optional)
 
-The web UI (Next.js) exposes: **Dashboard** (with change-activity card), **Monitors** (list / new / edit / detail with search, mode-filter, status tabs, sorting, bulk pause/resume, mode-specific snapshot previews including rich Cloudflare URL Scanner verdicts, non-blocking preview loading, and live brand asset re-scraping), **Logs** (workspace-wide run history + CSV export), **Changes** (per-change diff — text diffs for content modes, a run-keyed before/after screenshot slider plus collapsible pHash details for `visual` monitors), **Alerts** (inbox with toast notifications), **Import** (bulk CSV/JSON), **Settings** (channels, workspace keys, API keys/webhooks, digest preferences — with one-click copy for one-time secrets and developer workspace tooling tucked behind an Advanced card), and an in-app **Docs** page — plus a live header clock and an onboarding checklist (first monitor → baseline → channel). Results surface as toasts, and status/error boxes carry `role="status"`/`role="alert"` with `aria-describedby` hints. Styled with a Cohere-inspired design system (`frontend/src/app/globals.css`): 22px cards, pill buttons, `#1863dc` interaction blue, Space Grotesk display + Inter body, charcoal dark mode, sliding nav indicator.
+Everything below is opt-in and inactive until configured: R2 snapshots (`STORAGE_BACKEND=s3`), Browser Rendering **failover** for `js_required` fetches (local Playwright stays primary), URL Scanner for `security_scan`, R2 screenshot CDN (`NEXT_PUBLIC_SCREENSHOT_CDN_URL`), and cookie-less Web Analytics (`NEXT_PUBLIC_CF_BEACON_TOKEN`). The `share-cache` Worker is active on the app hostname (`app.sunilted.qzz.io/share/*`, with `CACHE_HOST`). Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
 
-Monitor previews are snapshots from the last successful check, not live page views. With
-`STORAGE_BACKEND=local` the snapshot files live on the machine that ran the check; a database moved
-to another machine needs fresh runs (or S3-backed storage) before previews appear. Bot-protected,
-login-only, and private-network URLs can fail the check even though the monitor was accepted — see
-[docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md#fetch-reliability-and-previews).
+Monitor previews are snapshots from the last successful check, not live views. With `STORAGE_BACKEND=local` the files live on the machine that ran the check; moving the database needs fresh runs (or S3 storage). Bot-protected, login-only, and private-network URLs can fail even if the monitor was accepted — see [fetch reliability](docs/guides/monitoring-modes.md#fetch-reliability-and-previews).
 
 ## Tests & linting
 
-**Windows (PowerShell):**
-
-```powershell
-# Backend (repo-local venv)
-cd backend
-.\.venv\Scripts\ruff check app tests
-.\.venv\Scripts\ruff format --check app tests
-.\.venv\Scripts\python -m pytest tests -q -m "not integration"
-
-# Frontend (Bun or Node / npm)
-cd ..\frontend
-bun run lint      # or: npm run lint (tsc --noEmit && eslint .)
-bun run test      # or: npm test (vitest run)
-bun run build     # or: npm run build
-```
-
-**Linux / macOS (bash or zsh):**
+Linux / macOS:
 
 ```bash
-# Backend (repo-local venv)
-cd backend
-source .venv/bin/activate
-.venv/bin/ruff check app tests
-.venv/bin/ruff format --check app tests
+cd backend && source .venv/bin/activate
+.venv/bin/ruff check app tests && .venv/bin/ruff format --check app tests
 .venv/bin/python -m pytest tests -q -m "not integration"
 # Integration tests need TEST_DATABASE_URL pointing at a real Postgres:
 # .venv/bin/python -m pytest tests -q -m "integration"
 
-# Frontend (Node / npm — CI-canonical)
 cd ../frontend
 npm run lint      # tsc --noEmit && eslint .
 npm test          # vitest run
 npm run build
 ```
 
-CI (`.github/workflows/ci.yml`) runs the backend unit tests and the Postgres-backed integration tests in separate jobs, plus a Gitleaks secret scan on the backend and frontend jobs, and the frontend type-check / lint / test / build. It is the source of truth for which checks must pass and their current counts.
+Windows (PowerShell):
+
+```powershell
+cd backend
+.\.venv\Scripts\ruff check app tests
+.\.venv\Scripts\ruff format --check app tests
+.\.venv\Scripts\python -m pytest tests -q -m "not integration"
+cd ..\frontend
+npm run lint; npm test; npm run build
+```
+
+[CI](.github/workflows/ci.yml) runs backend unit + Postgres-backed integration tests, Gitleaks, and frontend type-check / lint / test / build in separate jobs. It is the source of truth for required checks and current counts.
 
 ## Contributing
 
-`main` is protected by a repository ruleset (`.github/rulesets/main.json`): no force-push or branch
-deletion, and every change lands through a pull request whose five CI jobs are green against the
-latest `main`. There is no approving-review requirement, so a solo maintainer can merge their own PR.
-Pull requests are also reviewed by CodeRabbit; its comments need no approval or status check, but the ruleset requires review threads to be resolved before merging — so address or resolve its inline comments first.
+`main` is protected by a repository ruleset (`.github/rulesets/main.json`): no force-push or branch deletion, and every change lands through a PR with all five CI jobs green. No approving review is required, but CodeRabbit comments must be addressed or resolved before merging.
 
 ```bash
 git switch -c my-change
 # ... commit ...
 git push -u origin my-change
-gh pr create --fill        # or open the PR in the browser
-gh pr checks --watch       # then merge once green
+gh pr create --fill
+gh pr checks --watch
 ```
 
-Re-apply the ruleset after editing the JSON:
+After editing the ruleset JSON, re-apply it:
 
 ```bash
 gh api --method PUT repos/sunil-gumatimath/web-observer/rulesets/27852901 \
