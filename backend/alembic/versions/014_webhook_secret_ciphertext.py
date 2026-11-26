@@ -25,4 +25,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    too_long = bind.execute(
+        sa.text("SELECT COUNT(*) FROM webhook_endpoints WHERE length(secret) > 128")
+    ).scalar_one()
+    if too_long:
+        raise RuntimeError(
+            f"Cannot downgrade 014_webhook_secret_ciphertext: {too_long} webhook_endpoints "
+            "row(s) have secret values exceeding 128 characters (encrypted secrets). "
+            "Decrypt or rotate those webhook secrets before downgrading."
+        )
     op.execute(sa.text("ALTER TABLE webhook_endpoints ALTER COLUMN secret TYPE VARCHAR(128)"))

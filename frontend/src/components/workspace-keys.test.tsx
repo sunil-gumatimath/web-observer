@@ -80,6 +80,26 @@ describe("WorkspaceKeys", () => {
     await waitFor(() => expect(screen.getByText(/422 base required/)).toBeTruthy());
   });
 
+  it("blocks custom base or model overrides client-side when no LLM API key is set (#65)", async () => {
+    stubApis();
+    render(<WorkspaceKeys workspaceId="ws-1" />);
+    await screen.findByPlaceholderText("sk-…");
+
+    const selects = screen.getAllByRole("combobox");
+    fireEvent.change(selects[0], { target: { value: "__custom__" } });
+    const customBaseInput = screen.getByPlaceholderText("https://your-gateway.example.com/v1");
+    fireEvent.change(customBaseInput, { target: { value: "https://api.openai.com/v1" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Save keys/ }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Enter a workspace LLM API key to save a custom LLM base URL or model/i),
+      ).toBeTruthy(),
+    );
+    expect(mocks.updateWorkspaceKeys).not.toHaveBeenCalled();
+  });
+
   it("preserves user edits made while mount revalidation is pending", async () => {
     stubApis();
     const nowSpy = vi.spyOn(Date, "now");

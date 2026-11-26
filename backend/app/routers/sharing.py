@@ -102,6 +102,7 @@ def create_share_link(
         expires_at=(
             datetime.now(UTC) + timedelta(days=body.expires_days) if body.expires_days else None
         ),
+        note=body.note,
     )
     db.add(row)
     write_audit(
@@ -122,7 +123,7 @@ def create_share_link(
         enabled=row.enabled,
         expires_at=row.expires_at,
         created_at=row.created_at,
-        note=body.note,
+        note=row.note,
     )
 
 
@@ -149,6 +150,7 @@ def list_share_links(
             "enabled": r.enabled,
             "expires_at": r.expires_at.isoformat() if r.expires_at else None,
             "created_at": r.created_at.isoformat() if r.created_at else None,
+            "note": r.note,
         }
         for r in rows
     ]
