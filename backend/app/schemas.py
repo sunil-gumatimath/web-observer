@@ -10,12 +10,21 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    TypeAdapter,
+    ValidationError,
     field_validator,
     model_validator,
 )
 
 from app.config import get_settings
 from app.models.entities import MONITOR_MODES
+
+_EMAIL_ADAPTER: TypeAdapter[EmailStr] = TypeAdapter(EmailStr)
+
+
+def validate_email_address(value: str) -> str:
+    """Validate and normalize an email address using Pydantic's EmailStr."""
+    return str(_EMAIL_ADAPTER.validate_python(value.strip()))
 
 
 class HealthResponse(BaseModel):
@@ -699,8 +708,10 @@ class NotificationChannelCreate(BaseModel):
         t = info.data.get("type") or "email"
         v = v.strip()
         if t == "email":
-            if "@" not in v:
-                raise ValueError("email address required")
+            try:
+                return validate_email_address(v)
+            except ValidationError as exc:
+                raise ValueError("valid email address required") from exc
         elif t in ("slack", "discord"):
             if not v.startswith("https://"):
                 raise ValueError(f"{t} channel requires an https webhook URL")
