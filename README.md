@@ -26,7 +26,9 @@ One idea: **you watch pages, workers do the checking, and you get told only when
 
 Stack: **Next.js** (App Router, React 19, Clerk, Tailwind) → **FastAPI** → **Neon Postgres** + **Redis** (Dramatiq broker) → **Dramatiq workers** (HTTP / Playwright / notifications) → alert channels. Snapshots go to local disk or S3-compatible storage; Alembic owns the schema.
 
-### At a glance
+### At a glance (10-second view)
+
+The quick picture: who talks to what. The component map below expands it.
 
 ```mermaid
 flowchart LR
@@ -175,6 +177,20 @@ flowchart LR
     CHANGE --> G["Notify channels ·<br/>signed webhooks · inbox"]
 ```
 
+<details>
+<summary><strong>Under the hood (for contributors)</strong></summary>
+
+- Workers are Python `dramatiq` on four queues — `http_checks`, `browser_checks`, `notifications`, `ai_enrichment` — via `RedisBroker`; alerts fan out from `NotificationOutbox` / `WebhookDelivery` rows with at-least-once sends (`max_retries=5`).
+- Due-monitor claiming is Postgres-driven (`FOR UPDATE SKIP LOCKED`, 60s lease + jitter), so schedulers never double-claim. `run_reaper` recovers stuck runs, and terminal writes are fenced (`UPDATE ... WHERE status = 'running'`) so no reaper or late exception can overwrite a committed run state.
+- Snapshots store raw HTML + normalized text with a SHA256 `content_hash`; visual mode uses SHA512-based pHash (256 bits, threshold 8). Change rows carry `is_noise` / `is_read`; webhooks are HMAC-signed with encrypted secrets.
+- Rate limits use Redis counters per verified principal (or IP), failing open to in-memory counters when Redis is down. Regex rules run under a 50 ms timeout; CSS selectors (300 chars) and URLs (2048 chars) are capped at the schema and bulk-import layers.
+- An external LLM is called only when `LLM_API_KEY` is set; otherwise summaries/triage use local heuristics. Browser runs queue advisory screenshot captures (`screenshots/{monitor_id}/{run_id}.png`) off the critical path, and `/metrics` is rate limited to 30/min.
+- The SSRF guard (`backend/app/security/ssrf.py`) blocks private/loopback/link-local/metadata IPs and credentialed URLs, re-validates redirects, and tries every validated IP so one dead CDN PoP can't fail a check.
+
+Full diagrams: [docs/architecture.md](docs/architecture.md).
+
+</details>
+
 ## Documentation
 
 | Doc | Topic |
@@ -313,75 +329,38 @@ Docker alternative — one container with everything inside:
 
 ## Features
 
+A quick tour of what the platform does. Expand the reference for the full detail.
+
+<details>
+<summary><strong>Full feature reference</strong></summary>
+
 ### Monitoring modes
 
-| Mode | What it watches |
-| --- | --- |
-| `page_content` | Detected main content (falls back to whole-page text); `js_required` for SPAs |
-| `site_links` | Sitemap URL-set changes (plain HTTP only) |
-| `rss_feed` | RSS/Atom feed entries (plain HTTP only) |
-| `readme` | GitHub README changes via `owner/repo` or URL; GitHub API first, then bounded raw fallbacks |
-| `product_price` | Price + currency (daily schedule by default) |
-| `list_items` | Link list under a CSS selector |
-| `json_field` | A single JSONPath-style value, e.g. `$.data.price` |
-| `visual` | Perceptual screenshot comparison — 256-bit pHash, threshold 8; before/after slider |
-| `security_scan` | Cloudflare URL Scanner verdict + tech inventory; needs API token (plain HTTP only) |
-| `html_meta` | Title, meta tags, canonical/alternate URLs, JSON-LD types, script srcs (plain HTTP only) |
-
-Also: a visual element picker (point-and-click CSS-selector synthesis), opt-in screenshots on signal changes (every run for `visual` monitors), watch notes, up to 10 tags per monitor, bulk CSV/JSON import/export with sitemap batch creation, adaptive scheduling after quiet runs, and a public status badge (`GET .../badge.svg`, no auth — the monitor UUID in the URL is the capability token). Details and limits: [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md).
+`page_content` (main content; `js_required` for SPAs) · `site_links` (sitemap URL set) · `rss_feed` (RSS/Atom entries) · `readme` (GitHub README via `owner/repo` or URL — GitHub API first, then bounded raw fallbacks) · `product_price` (price + currency, daily schedule by default) · `list_items` (links under a CSS selector) · `json_field` (one JSONPath-style value, e.g. `$.data.price`) · `visual` (perceptual screenshot comparison: 256-bit pHash, threshold 8, before/after slider) · `security_scan` (Cloudflare URL Scanner verdict + technology inventory; needs API token, plain HTTP only) · `html_meta` (title, meta tags, canonical/alternate URLs, JSON-LD types, script srcs; plain HTTP only). Also: point-and-click CSS-selector picker, opt-in screenshots on signal changes (every run for `visual`), watch notes, up to 10 tags, bulk CSV/JSON import/export with sitemap batch creation, adaptive scheduling, and a public status badge (`GET .../badge.svg`, no auth — the monitor UUID in the URL is the capability token). Details and limits: [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md).
 
 ### Change intelligence
 
-| Area | What's included |
-| --- | --- |
-| Diffs | GitHub-style added/removed line views (unified + split), plus readable views for list/price/value modes |
-| AI summaries | Optional plain-language summaries; heuristic by default, any OpenAI-compatible gateway via `LLM_API_BASE`; catalog at `GET /api/v1/model-catalog` |
-| Fast triage | Optional SubQ Decisions gate (`SUBQ_ENABLED`) for noise rejection, category, and impact scoring before LLM summarization |
-| Relevance filter | Per-monitor `watch_note` triage; routine noise is marked `is_noise=true`, held in the inbox, and excluded from notifications/digests; fails open on LLM error |
-| Semantic triggers | Plain-English per-monitor trigger rules evaluated alongside thresholds |
-| Conditional alerting | Per-monitor `alert_config` JSONB: `price_below`/`price_above` + `percent_change`, `list_min_added`/`list_min_removed`, `min_diff_chars`, regex must/must-not-match. Oversized, unparseable, or >50 ms regexes suppress with an explicit reason |
-| Controls | Daily notification quotas per plan plus a 60-minute cooldown between failure notices |
-| Change Q&A | Ask a question about any change (`POST /changes/{id}/ask-ai`, 5/minute) |
-| Alerts inbox | Every change stored in-app with `is_read` / `is_noise` state — Signal / Unread / Noise filters |
+GitHub-style unified/split diffs plus readable views for list/price/value modes · optional AI summaries (heuristic default, any OpenAI-compatible gateway via `LLM_API_BASE`, catalog at `GET /api/v1/model-catalog`) · optional SubQ Decisions triage gate (`SUBQ_ENABLED`) for noise rejection, category and impact scoring before summarization · per-monitor `watch_note` relevance filter marking routine noise `is_noise=true` (held in inbox, excluded from notifications/digests, fails open on LLM error) · plain-English semantic triggers · per-monitor `alert_config` JSONB: `price_below`/`price_above` + `percent_change`, `list_min_added`/`list_min_removed`, `min_diff_chars`, regex must/must-not-match (oversized, unparseable or >50 ms regexes suppress with an explicit reason) · per-plan daily notification quotas and a 60-minute failure-notice cooldown · change Q&A (`POST /changes/{id}/ask-ai`, 5/minute) · alerts inbox with `is_read`/`is_noise` and Signal/Unread/Noise filters.
 
 ### Alerting & delivery
 
-| Area | What's included |
-| --- | --- |
-| Channels | Email (Resend), Slack webhook, Discord webhook, each with a Send-test button |
-| Webhooks | HMAC-signed (`X-MTW-Signature`) deliveries with log and exponential backoff; secrets encrypted at rest |
-| Outbox | Atomic outbox/webhook claiming with attempt caps and an abandoned-row reaper — no double-sends after retries |
-| Digests | Daily / weekly workspace digest emails, noise excluded |
-| Failure alerts | Notification after N consecutive check failures (`CONSECUTIVE_FAILURE_NOTIFY_THRESHOLD`) |
+Email (Resend), Slack and Discord webhooks with Send-test buttons · HMAC-signed (`X-MTW-Signature`) webhook deliveries with log and exponential backoff, secrets encrypted at rest · atomic outbox/webhook claiming with attempt caps and an abandoned-row reaper (no double-sends after retries) · daily/weekly workspace digests with noise excluded · failure alerts after N consecutive failures (`CONSECUTIVE_FAILURE_NOTIFY_THRESHOLD`).
 
 ### Data & observability
 
-| Area | What's included |
-| --- | --- |
-| Run logs | Workspace-wide Logs page with outcome and monitor/date filters (`GET /api/v1/workspaces/{id}/runs`), 15s refresh |
-| Export | `GET /api/v1/workspaces/{id}/export/runs?format=csv\|json` with the same filters (20k cap, audited) |
-| Live detail | Per-monitor SSE: 1-hour lifetime, 15s heartbeats, Redis wakeup hints; degrades to a 1.5s poll without Redis |
-| Activity | Change-activity card (7/14/30-day ranges, trend vs prior period) via `GET /changes/activity` |
-| Metrics | Prometheus counters at `GET /metrics` — monitor totals, 24h runs/changes, outbox/webhook backlog |
+Logs page with outcome and monitor/date filters (`GET /api/v1/workspaces/{id}/runs`, 15s refresh) · CSV/JSON export (`GET /api/v1/workspaces/{id}/export/runs?format=csv\|json`, 20k cap, audited) · per-monitor SSE (1-hour lifetime, 15s heartbeats, Redis wakeup hints, 1.5s poll fallback without Redis) · change-activity card (7/14/30-day ranges, trend vs prior period) · Prometheus counters at `GET /metrics` for monitor totals, 24h runs/changes, and outbox/webhook backlog.
 
 ### Platform & security
 
-| Area | What's included |
-| --- | --- |
-| Teams | Owner / admin / member / viewer roles, member management, audit log, expiring invite links, workspace switching |
-| API access | `mtw_...` bearer tokens for programmatic use |
-| Plans | Free / pro / business / enterprise tiers with per-workspace quotas; Stripe checkout or simulated (solo: skip Stripe) |
-| Keys | Server defaults (`LLM_API_*`, `RESEND_API_KEY`) or per-workspace BYO overrides |
-| Share pages | Opaque-token read-only `/share/{token}` pages (unguessable, hashed at rest, expiring, no login) |
-| Brand-aware UI | Auto-fills logo/title/description/hero from page meta and re-hosts assets; inbox items carry favicon fallback |
-| Retention | Snapshots purged after 30 days, runs after 90 days; change events survive run cleanup (migration `015`) |
-| Security | SSRF-pinned fetcher with redirect re-validation, ReDoS/size-capped regexes, input length limits, HKDF-purposed crypto, [threat model](docs/security/threat-model.md) |
+RBAC (owner/admin/member/viewer), audit log, expiring invite links, workspace switching · `mtw_...` API keys · free/pro/business/enterprise tiers with per-workspace quotas, Stripe checkout or simulated (solo: skip Stripe) · managed or per-workspace BYO keys (`LLM_API_*`, `RESEND_API_KEY`) · opaque-token `/share/{token}` pages (unguessable, hashed at rest, expiring, no login) · brand-aware dashboard (logo/title/description/hero re-hosted, favicon fallback in inbox) · retention: snapshots 30 days, runs 90 days, change events survive run cleanup (migration `015`) · SSRF-pinned fetcher with redirect re-validation, ReDoS/size-capped regexes, input length caps, HKDF-purposed crypto, [threat model](docs/security/threat-model.md).
 
 ### Cloudflare free tier (optional)
 
-Everything below is opt-in and inactive until configured: R2 snapshots (`STORAGE_BACKEND=s3`), Browser Rendering **failover** for `js_required` fetches (local Playwright stays primary), URL Scanner for `security_scan`, R2 screenshot CDN (`NEXT_PUBLIC_SCREENSHOT_CDN_URL`), and cookie-less Web Analytics (`NEXT_PUBLIC_CF_BEACON_TOKEN`). The `share-cache` Worker is active on the app hostname (`app.sunilted.qzz.io/share/*`, with `CACHE_HOST`). Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
+Opt-in and inactive until configured: R2 snapshots (`STORAGE_BACKEND=s3`), Browser Rendering **failover** for `js_required` fetches (local Playwright stays primary), URL Scanner for `security_scan`, R2 screenshot CDN (`NEXT_PUBLIC_SCREENSHOT_CDN_URL`), cookie-less Web Analytics (`NEXT_PUBLIC_CF_BEACON_TOKEN`). The `share-cache` Worker is active on the app hostname (`app.sunilted.qzz.io/share/*`, with `CACHE_HOST`). Full setup: [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md).
 
-Monitor previews are snapshots from the last successful check, not live views. With `STORAGE_BACKEND=local` the files live on the machine that ran the check; moving the database needs fresh runs (or S3 storage). Bot-protected, login-only, and private-network URLs can fail even if the monitor was accepted — see [fetch reliability](docs/guides/monitoring-modes.md#fetch-reliability-and-previews).
+Monitor previews are snapshots from the last successful check, not live views. With `STORAGE_BACKEND=local` they live on the machine that ran the check; moving the database needs fresh runs (or S3 storage). Bot-protected, login-only, and private-network URLs can fail even if accepted — see [fetch reliability](docs/guides/monitoring-modes.md#fetch-reliability-and-previews).
+
+</details>
 
 ## Tests & linting
 
