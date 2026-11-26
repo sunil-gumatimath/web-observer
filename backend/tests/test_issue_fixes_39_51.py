@@ -196,6 +196,88 @@ def test_webhook_retry_rejects_processing_and_preserves_attempts() -> None:
     assert res["status"] == "processing"
 
 
+def test_webhook_retry_failed_compiles_and_preserves_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.orm import Session
+
+    from app.models.entities import WebhookDelivery
+    from app.routers import enterprise
+    from app.workers import webhooks as webhook_workers
+
+    ws_id = uuid.uuid4()
+    ep_id = uuid.uuid4()
+    del_id = uuid.uuid4()
+    failed = SimpleNamespace(id=del_id, workspace_id=ws_id, status="failed", attempts=5)
+    executed_stmts = []
+    sent_ids: list[str] = []
+
+    class _DB:
+        def scalar(self, stmt):
+            return failed
+
+        def execute(self, stmt):
+            # Compile against Postgres dialect to catch nonexistent columns (e.g. next_attempt_at).
+            compiled = stmt.compile(dialect=postgresql.dialect())
+            executed_stmts.append((stmt, str(compiled), compiled.params))
+            return SimpleNamespace(rowcount=1)
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(enterprise, "write_audit", lambda *a, **k: None)
+    monkeypatch.setattr(webhook_workers.deliver_webhook_message, "send", sent_ids.append)
+
+    res = enterprise.retry_webhook_delivery(
+        ws_id,
+        del_id,
+        _DB(),
+        SimpleNamespace(user_id=uuid.uuid4(), email="admin@example.com"),
+        SimpleNamespace(id=ws_id),
+    )
+    assert res["retried"] is True
+    assert res["status"] == "pending"
+    assert sent_ids == [str(del_id)]
+    assert len(executed_stmts) == 1
+    _stmt, sql_text, _params = executed_stmts[0]
+    assert "attempts" not in sql_text.split("SET")[1].split("WHERE")[0]
+
+    # Also verify end-to-end against an in-memory SQLite table for WebhookDelivery
+    eng = create_engine("sqlite:///:memory:")
+    WebhookDelivery.__table__.create(bind=eng)
+    with Session(eng) as s:
+        row = WebhookDelivery(
+            id=del_id,
+            endpoint_id=ep_id,
+            workspace_id=ws_id,
+            event_type="change.detected",
+            payload={"a": 1},
+            status="failed",
+            attempts=5,
+            last_error="HTTP 500",
+            idempotency_key=f"idem-{del_id}",
+        )
+        s.add(row)
+        s.commit()
+
+        res2 = enterprise.retry_webhook_delivery(
+            ws_id,
+            del_id,
+            s,
+            SimpleNamespace(user_id=uuid.uuid4(), email="admin@example.com"),
+            SimpleNamespace(id=ws_id),
+        )
+        assert res2["retried"] is True
+        refreshed = s.scalar(select(WebhookDelivery).where(WebhookDelivery.id == del_id))
+        assert refreshed is not None
+        assert refreshed.status == "pending"
+        assert refreshed.attempts == 5
+        assert refreshed.last_error is None
+    eng.dispose()
+
+
 # ---------------------------------------------------------------------------
 # #47: CSV cells neutralize spreadsheet formula injection
 # ---------------------------------------------------------------------------
