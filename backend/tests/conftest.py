@@ -10,6 +10,7 @@ import pytest
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -27,8 +28,11 @@ def _pg_url() -> str:
 def _url_is_safe_for_drop(url: str) -> bool:
     if os.environ.get("FORCE_TEST_DB") == "1":
         return True
-    lower = url.lower()
-    return "test" in lower or "_test" in lower or "/test" in lower
+    try:
+        database = make_url(url).database or ""
+    except Exception:
+        return False
+    return "test" in database.lower()
 
 
 def postgres_available() -> bool:
@@ -77,7 +81,7 @@ def _migrated_pg_engine() -> Generator[Engine, None, None]:
     if not postgres_available():
         pytest.skip(
             "PostgreSQL test DB not available. "
-            "Create DB web_observer_test or set TEST_DATABASE_URL (must contain 'test')."
+            "Create DB web_observer_test or set TEST_DATABASE_URL (database name must contain 'test')."
         )
     engine = create_engine(_pg_url(), pool_pre_ping=True)
     _upgrade_schema_via_alembic(engine)
