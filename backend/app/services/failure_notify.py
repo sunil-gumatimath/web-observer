@@ -62,7 +62,11 @@ def record_run_outcome(
         )
         return outbox_ids
 
-    from app.services.usage import QuotaExceeded, assert_can_use_notifications
+    from app.services.usage import (
+        QuotaExceeded,
+        assert_can_use_notifications,
+        try_reserve_notification_slot,
+    )
 
     try:
         workspace = db.get(Workspace, monitor.workspace_id)
@@ -87,6 +91,13 @@ def record_run_outcome(
         )
         if existing is not None:
             continue
+        if not try_reserve_notification_slot(db, workspace or monitor.workspace_id):
+            logger.warning(
+                "failure_notification_quota_exceeded monitor_id=%s channel_id=%s",
+                monitor.id,
+                channel.id,
+            )
+            break
         outbox = NotificationOutbox(
             workspace_id=monitor.workspace_id,
             change_event_id=None,
@@ -102,6 +113,7 @@ def record_run_outcome(
                 ),
                 "diff": error_message or "",
                 "to": channel.address,
+                "_quota_reserved": True,
             },
             status=OutboxStatus.PENDING.value,
             idempotency_key=idem,

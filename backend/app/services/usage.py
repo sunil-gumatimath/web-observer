@@ -142,6 +142,31 @@ def assert_can_use_notifications(db: Session, workspace) -> None:
         raise QuotaExceeded(f"Daily notification quota exceeded ({limit}/day)")
 
 
+def try_reserve_notification_slot(db: Session, workspace) -> bool:
+    """Atomically claim one daily notification slot if under the workspace's limit.
+
+    Returns True when a slot was reserved (or the plan has no daily cap),
+    False when the daily quota is already spent.
+    """
+    limit = notification_limit(workspace)
+    if limit <= 0:
+        return True
+    workspace_id = getattr(workspace, "id", workspace)
+    counter = get_or_create_counter(db, workspace_id)
+    # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+    res = db.execute(
+        sa_update(UsageCounter)
+        .where(
+            UsageCounter.id == counter.id,
+            UsageCounter.notifications_count < limit,
+        )
+        .values(notifications_count=UsageCounter.notifications_count + 1)
+    )
+    db.expire(counter)
+    # rowcount exists on CursorResult; the Result stub omits it.
+    return res.rowcount == 1  # type: ignore[attr-defined]
+
+
 class QuotaExceeded(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)

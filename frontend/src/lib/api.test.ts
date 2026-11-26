@@ -158,3 +158,47 @@ describe("api.listAlerts filters", () => {
     );
   });
 });
+
+describe("api.discoverSitemap", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("defaults max_urls to 200 within the backend SitemapDiscoverIn cap", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ urls: [], sitemap_url: null, total: 0 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await api.discoverSitemap("workspace-1", "https://example.com");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.test/api/v1/workspaces/workspace-1/monitors/discover-sitemap",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ url: "https://example.com", max_urls: 200 }),
+      }),
+    );
+  });
+
+  it("forwards an explicit maxUrls override", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ urls: [], sitemap_url: null, total: 0 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await api.discoverSitemap("workspace-1", "https://example.com", 50);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.test/api/v1/workspaces/workspace-1/monitors/discover-sitemap",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ url: "https://example.com", max_urls: 50 }),
+      }),
+    );
+  });
+});

@@ -125,7 +125,11 @@ def enqueue_workspace_digest(
     if count == 0:
         return []
 
-    from app.services.usage import QuotaExceeded, assert_can_use_notifications
+    from app.services.usage import (
+        QuotaExceeded,
+        assert_can_use_notifications,
+        try_reserve_notification_slot,
+    )
 
     try:
         assert_can_use_notifications(db, workspace)
@@ -149,6 +153,13 @@ def enqueue_workspace_digest(
         )
         if existing is not None:
             continue
+        if not try_reserve_notification_slot(db, workspace):
+            logger.warning(
+                "digest_notification_quota_exceeded workspace_id=%s channel_id=%s",
+                workspace.id,
+                channel.id,
+            )
+            break
         outbox = NotificationOutbox(
             workspace_id=workspace.id,
             change_event_id=None,
@@ -161,6 +172,7 @@ def enqueue_workspace_digest(
                 "body": body,
                 "channel_type": channel.type,
                 "to": channel.address,
+                "_quota_reserved": True,
             },
             status=OutboxStatus.PENDING.value,
             idempotency_key=idem,
