@@ -204,7 +204,7 @@ def test_populated_database_upgrade_and_downgrade_round_trip() -> None:
     with admin_engine.connect() as conn:
         conn.execute(text(f'CREATE DATABASE "{mig_db_name}"'))
 
-    mig_url = str(parsed.set(database=mig_db_name))
+    mig_url = parsed.set(database=mig_db_name).render_as_string(hide_password=False)
     mig_engine = create_engine(mig_url, pool_pre_ping=True)
     backend_dir = Path(__file__).resolve().parent.parent
     cfg = Config(str(backend_dir / "alembic.ini"))
