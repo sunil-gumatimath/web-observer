@@ -90,15 +90,28 @@ export function isValidRegex(pattern: string): boolean {
 	}
 }
 
+/** Minimum accepted numeric values — mirrors backend/app/schemas.py. */
+export const NUMERIC_FIELD_MIN: Partial<Record<ThresholdKey, number>> = {
+	percent_change: 0,
+	list_min_added: 0,
+	list_min_removed: 0,
+	min_diff_chars: 0,
+	cooldown_minutes: 0,
+	flap_window_minutes: 0,
+	flap_max_alerts: 1,
+};
+
 /** Returns the number for a draft, or null when it is not a usable value. */
 export function parseNumericDraft(
 	raw: string,
 	integer: boolean,
+	min?: number,
 ): number | null {
 	if (raw.trim() === "") return null;
 	const n = Number(raw.trim());
 	if (!Number.isFinite(n)) return null;
 	if (integer && !Number.isInteger(n)) return null;
+	if (min !== undefined && n < min) return null;
 	return n;
 }
 /**
@@ -111,6 +124,7 @@ export function applyNumericDraft(
 	raw: string,
 	integer: boolean,
 	current: ThresholdConfig | null,
+	min: number | undefined = NUMERIC_FIELD_MIN[key],
 ): ThresholdConfig | null {
 	if (raw.trim() === "") {
 		if (current && key in current) {
@@ -120,7 +134,7 @@ export function applyNumericDraft(
 		}
 		return null;
 	}
-	const n = parseNumericDraft(raw, integer);
+	const n = parseNumericDraft(raw, integer, min);
 	if (n === null) return null;
 	if (current?.[key] === n) return null;
 	return { ...(current ?? {}), [key]: n };

@@ -83,6 +83,11 @@ describe("parseNumericDraft", () => {
 	it("rejects fractions for integer fields", () => {
 		expect(parseNumericDraft("2.5", true)).toBeNull();
 	});
+
+	it("enforces optional min bound", () => {
+		expect(parseNumericDraft("0", true, 1)).toBeNull();
+		expect(parseNumericDraft("1", true, 1)).toBe(1);
+	});
 });
 
 describe("isValidRegex", () => {
@@ -122,6 +127,13 @@ describe("applyNumericDraft", () => {
 		expect(
 			applyNumericDraft("price_below", "10", false, { price_below: 10 }),
 		).toBeNull();
+	});
+
+	it("rejects flap_max_alerts below 1", () => {
+		expect(applyNumericDraft("flap_max_alerts", "0", true, null)).toBeNull();
+		expect(applyNumericDraft("flap_max_alerts", "1", true, null)).toEqual({
+			flap_max_alerts: 1,
+		});
 	});
 });
 

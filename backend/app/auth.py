@@ -134,6 +134,12 @@ def upsert_clerk_user(db: Session, *, clerk_user_id: str, email: str) -> User:
 
 
 def ensure_default_workspace(db: Session, user: User) -> Workspace:
+    # Serialize concurrent first-login provisioning for the same user by locking
+    # their User row under PostgreSQL READ COMMITTED; otherwise two parallel /me
+    # calls can both observe zero memberships and each create a workspace.
+    if getattr(db, "get_bind", None) is not None and db.get_bind().dialect.name == "postgresql":
+        db.execute(select(User.id).where(User.id == user.id).with_for_update()).first()
+
     membership = db.scalar(
         select(WorkspaceMember).where(WorkspaceMember.user_id == user.id).limit(1)
     )

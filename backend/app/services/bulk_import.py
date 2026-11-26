@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import itertools
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -24,12 +25,20 @@ from app.schemas import (
 from app.security.ssrf import SSRFError, validate_url_for_fetch
 from app.services.plans import assert_can_create_monitor, get_plan
 
+MAX_IMPORT_ROWS = 2_000
+MAX_IMPORT_ERRORS = 100
+
 
 @dataclass
 class ImportResult:
     created: list[str] = field(default_factory=list)
     skipped: list[dict[str, str]] = field(default_factory=list)
     errors: list[dict[str, str]] = field(default_factory=list)
+
+
+def _record_error(result: ImportResult, idx: int, error: str) -> None:
+    if len(result.errors) < MAX_IMPORT_ERRORS:
+        result.errors.append({"row": str(idx), "error": error})
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -62,9 +71,12 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def parse_csv(text: str) -> list[dict[str, Any]]:
+def parse_csv(text: str, *, max_rows: int = MAX_IMPORT_ROWS) -> list[dict[str, Any]]:
     reader = csv.DictReader(io.StringIO(text))
-    return [dict(r) for r in reader]
+    rows = [dict(r) for r in itertools.islice(reader, max_rows + 1)]
+    if len(rows) > max_rows:
+        raise ValueError(f"CSV import exceeds maximum of {max_rows} rows")
+    return rows
 
 
 def import_monitors(
@@ -72,6 +84,8 @@ def import_monitors(
     workspace: Workspace,
     rows: list[dict[str, Any]],
 ) -> ImportResult:
+    if len(rows) > MAX_IMPORT_ROWS:
+        raise ValueError(f"Bulk import exceeds maximum of {MAX_IMPORT_ROWS} rows")
     settings = get_settings()
     plan = get_plan(workspace)
     result = ImportResult()
@@ -83,11 +97,11 @@ def import_monitors(
         try:
             row = _normalize_row(raw)
         except Exception as exc:  # noqa: BLE001
-            result.errors.append({"row": str(idx), "error": f"invalid row: {exc}"})
+            _record_error(result, idx, f"invalid row: {exc}")
             continue
 
         if not row["name"] or not row["url"]:
-            result.errors.append({"row": str(idx), "error": "name and url required"})
+            _record_error(result, idx, "name and url required")
             continue
         if row["url"] in existing_urls:
             result.skipped.append({"row": str(idx), "reason": "duplicate url", "url": row["url"]})
@@ -95,13 +109,11 @@ def import_monitors(
         # Same DoS-boundary caps MonitorCreate/MonitorUpdate enforce at the
         # schema layer; the ORM path here bypasses Pydantic, so re-check.
         if len(row["url"]) > MAX_URL_LEN:
-            result.errors.append({"row": str(idx), "error": f"url longer than {MAX_URL_LEN}"})
+            _record_error(result, idx, f"url longer than {MAX_URL_LEN}")
             continue
         css_sel = row.get("css_selector")
         if css_sel and len(css_sel) > MAX_SELECTOR_LEN:
-            result.errors.append(
-                {"row": str(idx), "error": f"css_selector longer than {MAX_SELECTOR_LEN}"}
-            )
+            _record_error(result, idx, f"css_selector longer than {MAX_SELECTOR_LEN}")
             continue
         try:
             raw_sel = row.get("ignore_selectors")
@@ -119,16 +131,13 @@ def import_monitors(
             row["ignore_regexes"] = _validate_regex_patterns(raw_rx)
             row["alert_config"] = _validate_alert_config(raw_alert)
         except (ValueError, TypeError) as exc:
-            result.errors.append({"row": str(idx), "error": str(exc)})
+            _record_error(result, idx, str(exc))
             continue
         if row["schedule_interval_minutes"] < plan.min_interval_minutes:
-            result.errors.append(
-                {
-                    "row": str(idx),
-                    "error": (
-                        f"interval must be >= {plan.min_interval_minutes} for plan {plan.name}"
-                    ),
-                }
+            _record_error(
+                result,
+                idx,
+                f"interval must be >= {plan.min_interval_minutes} for plan {plan.name}",
             )
             continue
 
@@ -141,34 +150,25 @@ def import_monitors(
         # "page_content" monitor would hide the typo from the user.
         mode = row["mode"]
         if mode not in MONITOR_MODES:
-            result.errors.append(
-                {
-                    "row": str(idx),
-                    "error": f"unknown mode '{mode}' (expected one of {', '.join(MONITOR_MODES)})",
-                }
+            _record_error(
+                result,
+                idx,
+                f"unknown mode '{mode}' (expected one of {', '.join(MONITOR_MODES)})",
             )
             continue
         if mode in ("list_items", "json_field") and not row["css_selector"]:
-            result.errors.append(
-                {
-                    "row": str(idx),
-                    "error": (
-                        f"{mode} mode requires a css_selector"
-                        + (" (a JSON path like $.data.price)" if mode == "json_field" else "")
-                    ),
-                }
+            _record_error(
+                result,
+                idx,
+                f"{mode} mode requires a css_selector"
+                + (" (a JSON path like $.data.price)" if mode == "json_field" else ""),
             )
             continue
         if mode in PLAIN_HTTP_MODES and row["js_required"]:
             # These modes fetch over plain HTTP; routing them through the
             # browser worker would snapshot the rendered page, not the
             # sitemap / feed / README.
-            result.errors.append(
-                {
-                    "row": str(idx),
-                    "error": f"{mode} mode does not support js_required",
-                }
-            )
+            _record_error(result, idx, f"{mode} mode does not support js_required")
             continue
         js_required = row["js_required"]
         if mode == "visual":
@@ -187,7 +187,7 @@ def import_monitors(
 
                 url = normalize_readme_url(row["url"])
             except Exception as exc:  # noqa: BLE001
-                result.errors.append({"row": str(idx), "error": str(exc)})
+                _record_error(result, idx, str(exc))
                 continue
             if url in existing_urls:
                 result.skipped.append({"row": str(idx), "reason": "duplicate url", "url": url})
@@ -197,13 +197,13 @@ def import_monitors(
             try:
                 validate_url_for_fetch(url, resolve_dns=True)
             except SSRFError as exc:
-                result.errors.append({"row": str(idx), "error": str(exc)})
+                _record_error(result, idx, str(exc))
                 continue
 
         try:
             assert_can_create_monitor(db, workspace)
         except Exception as exc:  # noqa: BLE001
-            result.errors.append({"row": str(idx), "error": str(exc)})
+            _record_error(result, idx, str(exc))
             break
 
         mon = Monitor(
