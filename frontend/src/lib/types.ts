@@ -331,6 +331,7 @@ export type ShareLinkRow = {
   enabled: boolean;
   expires_at: string | null;
   created_at: string;
+  note?: string | null;
 };
 
 export type InviteCreated = {

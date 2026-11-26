@@ -134,6 +134,14 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
       }
       if ((llmBase.trim() || "") !== (settings.llm_api_base || "")) body.llm_api_base = llmBase.trim();
       if ((llmModel.trim() || "") !== (settings.llm_model || "")) body.llm_model = llmModel.trim();
+      const hasEffectiveLlmKey = Boolean(llmKey.trim()) || (settings.as_llm_api_key && body.llm_api_key !== "");
+      const hasLlmOverride = Boolean((body.llm_api_base || "").trim() || (body.llm_model || "").trim());
+      if (hasLlmOverride && !hasEffectiveLlmKey) {
+        setErr(
+          "Enter a workspace LLM API key to save a custom LLM base URL or model override.",
+        );
+        return;
+      }
       if (resendKey.trim()) body.resend_api_key = resendKey.trim();
       if (typeof resendKey === "string" && resendKey.trim() === "" && settings.as_resend_api_key) {
         body.resend_api_key = "";
@@ -280,7 +288,7 @@ export function WorkspaceKeys({ workspaceId }: { workspaceId: string }) {
           <p className="mt-1 text-[11px] text-[var(--ink-subtle)]">
             {provider
               ? provider.free
-                ? "Free models ($0 input/output). "
+                ? "Free catalog models ($0 input/output) — requires a workspace API key to override the server default. "
                 : "Your own API key — usage is billed to you. "
               : "Loading models… "}
             {provider?.id === "kilo" ? (
