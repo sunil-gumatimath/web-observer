@@ -166,9 +166,9 @@ def discover_sitemap_urls(
         if deadline is None:
             return timeout
         remaining = deadline - time.monotonic()
-        if remaining <= 0:
+        if remaining < 1:
             return None
-        return min(timeout, max(1, int(remaining)))
+        return min(timeout, int(remaining))
 
     # 1) Try the standard sitemap locations.
     candidate_locations = _local_urls(base_url)

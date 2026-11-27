@@ -169,35 +169,58 @@ def enqueue_workspace_digest(
     if count == 0:
         return []
 
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    dialect_name = getattr(getattr(db.get_bind(), "dialect", None), "name", None)
+    dialect_insert = sqlite_insert if dialect_name == "sqlite" else pg_insert
+
     outbox_ids: list[uuid.UUID] = []
     for channel, idem in pending_channels:
-        if not try_reserve_notification_slot(db, workspace):
+        stmt = (
+            dialect_insert(NotificationOutbox)
+            .values(
+                id=uuid.uuid4(),
+                workspace_id=workspace.id,
+                change_event_id=None,
+                channel_id=channel.id,
+                payload={
+                    "kind": "digest",
+                    "monitor_name": workspace.name,
+                    "url": "",
+                    "summary": f"{count} change(s) in digest window",
+                    "body": body,
+                    "channel_type": channel.type,
+                    "to": channel.address,
+                    "_quota_reserved": True,
+                },
+                status=OutboxStatus.PENDING.value,
+                idempotency_key=idem,
+            )
+            .on_conflict_do_nothing(index_elements=["idempotency_key"])
+            .returning(NotificationOutbox.id)
+        )
+        try:
+            with db.begin_nested():
+                # pi-lens-ignore: python-sql-injection - ORM Core stmt, params bound
+                inserted_id = db.execute(stmt).scalar_one_or_none()
+                if inserted_id is None:
+                    logger.info(
+                        "digest_outbox_already_queued workspace_id=%s channel_id=%s",
+                        workspace.id,
+                        channel.id,
+                    )
+                    continue
+                if not try_reserve_notification_slot(db, workspace):
+                    raise QuotaExceeded("Daily notification quota exceeded")
+        except QuotaExceeded:
             logger.warning(
                 "digest_notification_quota_exceeded workspace_id=%s channel_id=%s",
                 workspace.id,
                 channel.id,
             )
             break
-        outbox = NotificationOutbox(
-            workspace_id=workspace.id,
-            change_event_id=None,
-            channel_id=channel.id,
-            payload={
-                "kind": "digest",
-                "monitor_name": workspace.name,
-                "url": "",
-                "summary": f"{count} change(s) in digest window",
-                "body": body,
-                "channel_type": channel.type,
-                "to": channel.address,
-                "_quota_reserved": True,
-            },
-            status=OutboxStatus.PENDING.value,
-            idempotency_key=idem,
-        )
-        db.add(outbox)
-        db.flush()
-        outbox_ids.append(outbox.id)
+        outbox_ids.append(inserted_id)
     return outbox_ids
 
 

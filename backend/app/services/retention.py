@@ -30,17 +30,20 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
-def _delete_snapshot_objects(snap: Snapshot) -> int:
+def _delete_snapshot_objects(snap: Snapshot, *, clear_keys: bool = False) -> int:
     """Delete storage objects associated with *snap* and return count deleted."""
     deleted = 0
-    for key in (snap.raw_object_key, snap.text_object_key):
-        if key:
-            delete_object(key)
-            deleted += 1
+    if snap.raw_object_key and delete_object(snap.raw_object_key) is not False:
+        deleted += 1
+        if clear_keys:
+            snap.raw_object_key = None
+    if snap.text_object_key and delete_object(snap.text_object_key) is not False:
+        deleted += 1
+        if clear_keys:
+            snap.text_object_key = None
     if snap.run_id:
         screenshot_key = f"screenshots/{snap.monitor_id}/{snap.run_id}.png"
-        if object_exists(screenshot_key):
-            delete_object(screenshot_key)
+        if object_exists(screenshot_key) and delete_object(screenshot_key) is not False:
             deleted += 1
     return deleted
 
@@ -96,14 +99,8 @@ def purge_expired_snapshots(
         if snap.id in referenced:
             skipped_referenced += 1
             created_at = _as_utc(getattr(snap, "created_at", None))
-            if (
-                created_at is not None
-                and created_at < object_cutoff
-                and (snap.raw_object_key or snap.text_object_key)
-            ):
-                objects_deleted += _delete_snapshot_objects(snap)
-                snap.raw_object_key = None
-                snap.text_object_key = None
+            if created_at is not None and created_at < object_cutoff:
+                objects_deleted += _delete_snapshot_objects(snap, clear_keys=True)
             else:
                 logger.info("retention_keep_referenced_snapshot snapshot_id=%s", snap.id)
             continue

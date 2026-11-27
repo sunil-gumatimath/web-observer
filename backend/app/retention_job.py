@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import logging
 import signal
-import time
+import threading
 
 from app.config import get_settings
 from app.db import SessionLocal
@@ -19,13 +19,12 @@ from app.services.retention import purge_expired_snapshots
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("retention_job")
 
-_running = True
+_stop_event = threading.Event()
 
 
 def _handle_signal(signum: int, _frame: object) -> None:
-    global _running
     logger.info("shutdown_signal signum=%s", signum)
-    _running = False
+    _stop_event.set()
 
 
 def run_once() -> None:
@@ -48,15 +47,17 @@ def main() -> None:
         return
 
     settings = get_settings()
+    _stop_event.clear()
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
     logger.info("retention_loop_started poll=%s", settings.retention_poll_seconds)
-    while _running:
+    while not _stop_event.is_set():
         try:
             run_once()
         except Exception:  # noqa: BLE001
             logger.exception("retention_loop_error")
-        time.sleep(settings.retention_poll_seconds)
+        if _stop_event.wait(settings.retention_poll_seconds):
+            break
 
 
 if __name__ == "__main__":

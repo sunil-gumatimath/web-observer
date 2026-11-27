@@ -530,6 +530,201 @@ def test_retention_job_run_once_invokes_purge(monkeypatch: pytest.MonkeyPatch) -
 
 
 # ---------------------------------------------------------------------------
+# CodeRabbit review follow-ups
+# ---------------------------------------------------------------------------
+
+
+def test_changed_char_count_refines_large_sparse_line_edits() -> None:
+    before = "a" + ("x" * 2499) + "\n" + ("y" * 2499) + "b"
+    after = "c" + ("x" * 2499) + "\n" + ("y" * 2499) + "d"
+    assert conditional._changed_char_count(before, after) == 2
+
+
+def test_retention_keeps_keys_on_delete_failure_and_retries_screenshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, factory = _sqlite_session_factory()
+    try:
+        monkeypatch.setattr(
+            retention,
+            "get_settings",
+            lambda: SimpleNamespace(
+                snapshot_retention_days=30,
+                run_retention_days=90,
+                snapshot_object_retention_days=90,
+            ),
+        )
+        with factory() as db:
+            ws = Workspace(name="retry-ws", plan="free")
+            db.add(ws)
+            db.flush()
+            mon = Monitor(
+                workspace_id=ws.id,
+                name="m",
+                url="https://example.com",
+                mode="page_content",
+                next_run_at=datetime.now(UTC),
+            )
+            db.add(mon)
+            db.flush()
+            run = MonitorRun(
+                monitor_id=mon.id,
+                workspace_id=ws.id,
+                config_version=1,
+                idempotency_key="r-retry",
+                scheduled_at=datetime.now(UTC),
+                status=RunStatus.SUCCEEDED.value,
+            )
+            db.add(run)
+            db.flush()
+            snap = Snapshot(
+                workspace_id=ws.id,
+                monitor_id=mon.id,
+                run_id=run.id,
+                content_hash="h",
+                raw_object_key="raw/fail.html",
+                text_object_key="text/ok.txt",
+                created_at=datetime.now(UTC) - timedelta(days=100),
+            )
+            db.add(snap)
+            db.flush()
+            db.add(
+                ChangeEvent(
+                    workspace_id=ws.id,
+                    monitor_id=mon.id,
+                    run_id=run.id,
+                    new_snapshot_id=snap.id,
+                    new_hash="h",
+                )
+            )
+            db.commit()
+
+            # Pass 1: raw delete fails, text delete succeeds, screenshot lookup fails transiently
+            monkeypatch.setattr(retention, "object_exists", lambda k: False)
+            monkeypatch.setattr(retention, "delete_object", lambda k: k != "raw/fail.html")
+            res1 = retention.purge_expired_snapshots(db)
+            assert res1.objects_deleted == 1
+            db.refresh(snap)
+            assert snap.raw_object_key == "raw/fail.html"
+            assert snap.text_object_key is None
+
+            # Pass 2: raw delete succeeds; screenshot still missing -> raw cleared
+            monkeypatch.setattr(retention, "delete_object", lambda k: True)
+            res2 = retention.purge_expired_snapshots(db)
+            assert res2.objects_deleted == 1
+            db.refresh(snap)
+            assert snap.raw_object_key is None
+
+            # Pass 3: even with raw & text None, screenshot cleanup still runs once visible
+            screenshot_key = f"screenshots/{mon.id}/{run.id}.png"
+            deleted_pass3: list[str] = []
+            monkeypatch.setattr(retention, "object_exists", lambda k: k == screenshot_key)
+            monkeypatch.setattr(
+                retention, "delete_object", lambda k: deleted_pass3.append(k) or True
+            )
+            res3 = retention.purge_expired_snapshots(db)
+            assert deleted_pass3 == [screenshot_key]
+            assert res3.objects_deleted == 1
+    finally:
+        engine.dispose()
+
+
+def test_discover_sitemap_stops_when_less_than_one_second_remains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    index_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap><loc>https://example.com/s1.xml</loc></sitemap>
+  <sitemap><loc>https://example.com/s2.xml</loc></sitemap>
+</sitemapindex>"""
+    child_1 = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/p1</loc></url>
+</urlset>"""
+
+    clock = {"t": 0.0}
+    fetched: list[str] = []
+
+    def fake_fetch(url: str, *, timeout_seconds: int, max_bytes: int) -> str:
+        fetched.append(url)
+        if url.endswith("/sitemap.xml"):
+            clock["t"] += 1.0
+            return index_xml
+        if url.endswith("/sitemap_index.xml"):
+            raise sitemap.SitemapError("http_error", "404")
+        if url.endswith("/s1.xml"):
+            clock["t"] += 3.5  # total elapsed = 4.5s -> 0.5s left (< 1s)
+            return child_1
+        raise AssertionError(f"Should not fetch {url} with < 1s remaining")
+
+    monkeypatch.setattr(sitemap, "_fetch_text", fake_fetch)
+    monkeypatch.setattr(sitemap.time, "monotonic", lambda: clock["t"])
+
+    urls = sitemap.discover_sitemap_urls(
+        "https://example.com/", timeout_seconds=8, total_timeout_seconds=5.0
+    )
+    assert urls == ["https://example.com/p1"]
+    assert "https://example.com/s2.xml" not in fetched
+
+
+def test_retention_job_handle_signal_wakes_stop_event() -> None:
+    from app import retention_job
+
+    retention_job._stop_event.clear()
+    retention_job._handle_signal(15, None)
+    assert retention_job._stop_event.is_set() is True
+    retention_job._stop_event.clear()
+
+
+def test_digest_handles_concurrent_duplicate_outbox_insert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, factory = _sqlite_session_factory()
+    try:
+        monkeypatch.setattr(digest, "build_digest_body", lambda db, ws, since: ("body", 1))
+        with factory() as db:
+            ws = Workspace(name="race-digest", plan="free")
+            db.add(ws)
+            db.flush()
+            ch = NotificationChannel(
+                workspace_id=ws.id, type="email", address="a@example.com", enabled=True
+            )
+            db.add(ch)
+            db.commit()
+
+            # Simulate another worker inserting the same digest key after the pre-check
+            # by forcing a duplicate insert before enqueue_workspace_digest reaches insert.
+            idem = f"digest:{ws.id}:daily:20261128:channel:{ch.id}"
+            orig_build = digest.build_digest_body
+
+            def race_build(session, workspace, *, since):
+                with factory() as other:
+                    other.add(
+                        NotificationOutbox(
+                            workspace_id=ws.id,
+                            channel_id=ch.id,
+                            payload={"kind": "digest"},
+                            status=OutboxStatus.PENDING.value,
+                            idempotency_key=idem,
+                        )
+                    )
+                    other.commit()
+                return orig_build(session, workspace, since=since)
+
+            monkeypatch.setattr(digest, "build_digest_body", race_build)
+            ids = digest.enqueue_workspace_digest(
+                db,
+                ws,
+                since=datetime.now(UTC) - timedelta(days=1),
+                period_key="daily:20261128",
+            )
+            db.commit()
+            assert ids == []
+    finally:
+        engine.dispose()
+
+
+# ---------------------------------------------------------------------------
 # #8: security_scan collapses newlines/whitespace
 # ---------------------------------------------------------------------------
 
