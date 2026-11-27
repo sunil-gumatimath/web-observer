@@ -100,7 +100,7 @@ Playwright Chromium is **required** for `js_required` monitors (checks routed to
 
 ## 4. Start the stack — Docker, one container
 
-One image / one container runs all six processes (API :8002, HTTP+notifications worker, browser worker, scheduler, frontend :3000, Redis on `127.0.0.1:6379` inside the container):
+One image / one container runs the full stack via `docker/supervisord.conf` (API :8002, HTTP+notifications worker, AI enrichment worker, browser worker, scheduler, digest loop, retention loop, frontend :3000, and Redis on `127.0.0.1:6379` inside the container):
 
 ```powershell
 ./scripts/docker-up.sh           # build + start (first run takes a few minutes)
@@ -135,11 +135,11 @@ dramatiq app.workers --queues ai_enrichment --processes 1 --threads 1
 
 `Screenshot failed: [Errno 9] Bad file descriptor`
 
-Digest and retention loops are **not** part of the launcher — run them manually when needed:
+When running processes manually outside Docker, digest and retention loops can be started separately (in the container `docker/supervisord.conf` runs both `--loop` jobs automatically):
 
 ```powershell
 .\.venv\Scripts\python -m app.digest_job --loop
-.\.venv\Scripts\python -m app.retention_job
+.\.venv\Scripts\python -m app.retention_job --loop   # or omit --loop for a single pass
 ```
 
 Then frontend (if not using the launcher):
@@ -364,9 +364,9 @@ only caches once a public hostname and `CACHE_HOST` are configured.
 
 | Data | Default |
 | ---- | ------- |
-| Raw HTML + normalized-text objects | 30 days (`SNAPSHOT_RETENTION_DAYS`, purged with the snapshot) |
-| Screenshot objects | 30 days (same window, deleted with the snapshot that produced them) |
-| Snapshots (DB rows) | 30 days (same window) — **but** a snapshot still referenced by a change event is kept |
+| Raw HTML + normalized-text objects | 30 days (`SNAPSHOT_RETENTION_DAYS`, purged with unreferenced snapshots; 90 days via `SNAPSHOT_OBJECT_RETENTION_DAYS` for change-referenced snapshots while keeping DB row + preview) |
+| Screenshot objects | 30 days (`SNAPSHOT_RETENTION_DAYS` for unreferenced; 90 days via `SNAPSHOT_OBJECT_RETENTION_DAYS` for change-referenced) |
+| Snapshots (DB rows) | 30 days (`SNAPSHOT_RETENTION_DAYS`) — **but** a snapshot still referenced as a change event's `new_snapshot` keeps its DB row & preview |
 | Monitor runs | 90 days (`RUN_RETENTION_DAYS`) |
 | Change events | **Never purged** by `retention_job`. Since migration `015` a change event's `run_id` is `SET NULL`, so run cleanup no longer destroys the alerts inbox, and a snapshot referenced as a change's `new_snapshot` is explicitly retained. |
 | Outbox / deliveries | Not purged by `retention_job` |

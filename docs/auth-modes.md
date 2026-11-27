@@ -90,5 +90,4 @@ traffic into 500s. See `backend/app/rate_limit.py`.
 
 ## Related
 
-- [docs/guides/clerk.md](guides/clerk.md) — dev setup and production hardening  
-- [docs/integrations/n8n-zapier.md](integrations/n8n-zapier.md) — API keys and webhooks
+- [docs/guides/clerk.md](guides/clerk.md) — dev setup and production hardening

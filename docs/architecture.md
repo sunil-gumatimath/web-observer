@@ -33,7 +33,7 @@ flowchart TB
     end
     subgraph LoopProc["Standalone loop processes (not dramatiq)"]
         DIGEST["python -m app.digest_job [--loop]\npoll digest_poll_seconds=300s"]
-        RETENT["python -m app.retention_job\nsnapshot_retention_days=30 / run_retention_days=90"]
+        RETENT["python -m app.retention_job [--loop]\nsnapshot_retention_days=30 / object_retention=90 /\nrun_retention_days=90 / retention_poll_seconds=21600s"]
     end
     subgraph External
         CLERK["Clerk (auth + JWKS)"]
@@ -100,8 +100,8 @@ flowchart LR
         db["db.py\nengine/Session"]
         cfg["config.py"]
         sch["schemas.py\nPydantic IO"]
-        rt["routers/\nmonitors (SSE stream + runs), workspaces,\nnotifications, enterprise (exports), internal"]
-        svc["services/\nfetcher, pipeline, diffing,\nextract, ai_summary, webhooks,\nemail, storage, usage, plans,\ndigest, run_logs, live_events,\nssrf helpers..."]
+        rt["routers/\nmonitors (SSE stream + runs), workspaces,\nnotifications, sharing (public share + invites),\nenterprise (exports), internal"]
+        svc["services/\nfetcher, pipeline, diffing,\nextract, ai_summary, webhooks,\nemail, storage, usage, plans,\ndigest, run_logs, live_events,\nbulk_import, api_keys, audit,\nbranding, domain_guard, run_reaper,\ncontext_dev, model_catalog, ssrf helpers..."]
         wk["workers/\nbroker, checks, browser_checks,\nnotifications, webhooks,\nrun_guard, enqueue"]
         mdl["models/\nORM entities — __init__ installs\ninstall_orm_hooks(): every process\npublishing status writes →\nRedis wakeup hints"]
         sec["security/ssrf.py"]
@@ -151,7 +151,7 @@ classDiagram
         +UUID id
         +UUID workspace_id
         +String url
-        +String mode  page_content|site_links|product_price|list_items|json_field|visual|rss_feed|readme|security_scan
+        +String mode  page_content|site_links|product_price|list_items|json_field|visual|rss_feed|readme|security_scan|html_meta
         +String css_selector  (list_items/json_field selector or JSONPath)
         +bool js_required  (true routes to browser_checks queue)
         +bool screenshots_enabled  (capture screenshot on signal)

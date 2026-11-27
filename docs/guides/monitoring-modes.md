@@ -259,5 +259,4 @@ If a check fails, open the monitor's run history to see the error code before de
 ## Related
 
 - [docs/architecture.md](../architecture.md) — where each mode is dispatched
-- [docs/roadmap.md](../roadmap.md) — planned mode work (PDF/documents, bounding-box crop)
 - [docs/local-dev.md](../local-dev.md) — running the workers each mode needs
