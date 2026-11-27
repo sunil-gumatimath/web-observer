@@ -509,6 +509,32 @@ def create_monitor(
                 )
             )
 
+    immediate_run: MonitorRun | None = None
+    if body.run_now:
+        try:
+            assert_can_run_check(db, workspace_id)
+        except QuotaExceeded:
+            logger.info(
+                "create_run_now_skipped_quota workspace_id=%s monitor_id=%s",
+                workspace_id,
+                monitor.id,
+            )
+        else:
+            immediate_run = MonitorRun(
+                monitor_id=monitor.id,
+                workspace_id=workspace_id,
+                config_version=monitor.config_version,
+                idempotency_key=f"create:{monitor.id}:{uuid4().hex}",
+                scheduled_at=now,
+                queued_at=now,
+                status=RunStatus.QUEUED.value,
+                attempt=1,
+            )
+            db.add(immediate_run)
+            # Advance next_run_at and commit MonitorRun in the same transaction
+            # so the scheduler cannot claim a duplicate initial run in flight.
+            monitor.next_run_at = now + timedelta(minutes=monitor.schedule_interval_minutes)
+
     db.commit()
     db.refresh(monitor)
     write_audit(
@@ -537,32 +563,14 @@ def create_monitor(
 
     # Optionally enqueue the first check in the same request so the frontend
     # doesn't need a second round-trip (saves ~0.7s Neon + HTTP). Fail-open:
-    # the scheduler will still pick it up via next_run_at if enqueue fails.
-    if body.run_now:
+    # if Redis publish fails, the queued MonitorRun is recovered by the reaper.
+    if immediate_run is not None:
         try:
-            from uuid import uuid4 as _uuid4
-
-            from app.models import MonitorRun
-            from app.models.entities import RunStatus
-
-            run = MonitorRun(
-                monitor_id=monitor.id,
-                workspace_id=workspace_id,
-                config_version=monitor.config_version,
-                idempotency_key=f"create:{monitor.id}:{_uuid4().hex}",
-                scheduled_at=now,
-                queued_at=now,
-                status=RunStatus.QUEUED.value,
-                attempt=1,
-            )
-            db.add(run)
-            db.commit()
-            db.refresh(run)
             enqueue_check(
-                str(run.id), needs_browser=bool(monitor.js_required or monitor.mode == "visual")
+                str(immediate_run.id),
+                needs_browser=bool(monitor.js_required or monitor.mode == "visual"),
             )
         except Exception as exc:  # noqa: BLE001
-            db.rollback()
             logger.warning("create_auto_run_enqueue_failed monitor_id=%s error=%s", monitor.id, exc)
 
     return monitor
@@ -634,7 +642,12 @@ def discover_sitemap(
             status_code=400, detail={"error_code": exc.code, "message": str(exc)}
         ) from exc
     try:
-        urls = discover_sitemap_urls(body.url, max_urls=body.max_urls)
+        urls = discover_sitemap_urls(
+            body.url,
+            max_urls=body.max_urls,
+            timeout_seconds=8,
+            total_timeout_seconds=20.0,
+        )
     except SitemapError as exc:
         raise HTTPException(
             status_code=422, detail={"error_code": exc.code, "message": exc.message}

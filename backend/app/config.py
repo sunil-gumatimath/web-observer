@@ -127,7 +127,9 @@ class Settings(BaseSettings):
 
     # Retention
     snapshot_retention_days: int = 30
+    snapshot_object_retention_days: int = 90
     run_retention_days: int = 90
+    retention_poll_seconds: float = 21600.0
 
     # Storage: "local" (default, no MinIO) | "s3" | "auto"
     storage_backend: str = "local"

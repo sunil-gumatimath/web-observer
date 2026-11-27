@@ -42,6 +42,11 @@ def _sort_key(value: str) -> str:
     return value.lower()
 
 
+def _clean(value: object) -> str:
+    """Collapse internal whitespace/newlines so fields cannot inject digest lines."""
+    return " ".join(str(value or "").split())
+
+
 def scan_digest_text(result: dict[str, Any]) -> str:
     """Stable one-fact-per-line text extracted from a URL Scanner result.
 
@@ -59,16 +64,16 @@ def scan_digest_text(result: dict[str, Any]) -> str:
             "URL Scanner result is missing the overall malicious verdict",
         )
     lines.append(f"malicious={str(overall['malicious']).lower()}")
-    categories = ",".join(sorted(str(c) for c in overall.get("categories") or []))
+    categories = ",".join(sorted(_clean(c) for c in overall.get("categories") or [] if _clean(c)))
     lines.append(f"categories={categories}")
-    tags = ",".join(sorted(str(t) for t in overall.get("tags") or []))
+    tags = ",".join(sorted(_clean(t) for t in overall.get("tags") or [] if _clean(t)))
     lines.append(f"tags={tags}")
 
     task = result.get("task") or {}
     # Only finished scans are digested, and the API may or may not echo a
     # status field (and in which case), so don't let it flip the digest.
     lines.append("task.status=finished")
-    lines.append(f"task.apexDomain={task.get('apexDomain') or ''}")
+    lines.append(f"task.apexDomain={_clean(task.get('apexDomain'))}")
 
     lists = result.get("lists") or {}
     # Certificates are objects ({issuer, subjectName, validFrom, validTo}).
@@ -76,19 +81,23 @@ def scan_digest_text(result: dict[str, Any]) -> str:
     cert_facts: set[str] = set()
     for cert in lists.get("certificates") or []:
         if isinstance(cert, dict):
-            subject = str(cert.get("subjectName") or "").strip()
-            issuer = str(cert.get("issuer") or "").strip()
+            subject = _clean(cert.get("subjectName"))
+            issuer = _clean(cert.get("issuer"))
             if subject or issuer:
                 # The live API often returns an empty issuer; omit it then.
                 suffix = f" issuer={issuer}" if issuer else ""
                 cert_facts.add(f"certificate={subject}{suffix}")
         elif cert:
-            cert_facts.add(f"certificate={cert}")
+            cleaned_cert = _clean(cert)
+            if cleaned_cert:
+                cert_facts.add(f"certificate={cleaned_cert}")
     lines.extend(sorted(cert_facts, key=_sort_key))
-    for server in sorted((str(s) for s in lists.get("servers") or []), key=_sort_key):
-        lines.append(f"server={server}")
-    for asn in sorted((str(a) for a in lists.get("asns") or []), key=_sort_key):
-        lines.append(f"asn={asn}")
+    for server in sorted((_clean(s) for s in lists.get("servers") or []), key=_sort_key):
+        if server:
+            lines.append(f"server={server}")
+    for asn in sorted((_clean(a) for a in lists.get("asns") or []), key=_sort_key):
+        if asn:
+            lines.append(f"asn={asn}")
 
     # Detected technologies: meta.processors.wappa.data[] rows, one per app
     # ({app, categories, confidence, confidenceTotal, icon, website}).
@@ -97,7 +106,7 @@ def scan_digest_text(result: dict[str, Any]) -> str:
     tech_facts: set[str] = set()
     for row in wappa.get("data") or []:
         if isinstance(row, dict):
-            app_name = str(row.get("app") or "").strip()
+            app_name = _clean(row.get("app"))
             if app_name:
                 tech_facts.add(f"tech={app_name}")
     lines.extend(sorted(tech_facts, key=_sort_key))

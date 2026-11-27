@@ -23,8 +23,13 @@ _MAX_PATTERN_LEN = 256
 _MAX_REGEX_TEXT_CHARS = 200_000
 
 # Cap on the strings compared by difflib when sizing a change. Snapshot text
-# can reach ~50k chars; SequenceMatcher is O(n*m) in the worst case.
+# can reach ~50k chars; character-level SequenceMatcher is worst-case quadratic,
+# so inputs whose differing middle exceeds _EXACT_DIFF_CHARS fall back to
+# line/chunk tokens with bounded character refinement on unequal spans.
 _MAX_DIFF_COMPARE_CHARS = 50_000
+_EXACT_DIFF_CHARS = 4_000
+_DIFF_CHUNK_CHARS = 64
+_MAX_REFINE_CHARS = 16_000
 
 
 # Seconds. A catastrophic-backtracking pattern is cut off instead of
@@ -52,6 +57,74 @@ def _bounded_search(pattern: str, text: str) -> bool | None:
         return None
 
 
+def _trim_common(a: str, b: str) -> tuple[str, str]:
+    """Strip shared prefix and suffix in O(n)."""
+    prefix = 0
+    min_len = min(len(a), len(b))
+    while prefix < min_len and a[prefix] == b[prefix]:
+        prefix += 1
+    suffix = 0
+    rem_min = min_len - prefix
+    while suffix < rem_min and a[len(a) - 1 - suffix] == b[len(b) - 1 - suffix]:
+        suffix += 1
+    a_mid = a[prefix : len(a) - suffix] if suffix else a[prefix:]
+    b_mid = b[prefix : len(b) - suffix] if suffix else b[prefix:]
+    return a_mid, b_mid
+
+
+def _chunk_tokens(text: str) -> list[str]:
+    return [text[i : i + _DIFF_CHUNK_CHARS] for i in range(0, len(text), _DIFF_CHUNK_CHARS)]
+
+
+def _diff_tokens(text: str) -> list[str]:
+    """Split large differing spans into bounded line/fixed-size tokens."""
+    lines = text.splitlines(keepends=True)
+    if 1 < len(lines) <= 1_000:
+        return lines
+    return _chunk_tokens(text)
+
+
+def _exact_char_diff(a: str, b: str) -> int:
+    matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    return sum(
+        max(i2 - i1, j2 - j1) for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag != "equal"
+    )
+
+
+def _tokenized_diff_count(
+    a_mid: str,
+    b_mid: str,
+    *,
+    use_chunks: bool = False,
+    refine_budget: list[int] | None = None,
+) -> int:
+    budget = refine_budget if refine_budget is not None else [_MAX_REFINE_CHARS]
+    a_toks = _chunk_tokens(a_mid) if use_chunks else _diff_tokens(a_mid)
+    b_toks = _chunk_tokens(b_mid) if use_chunks else _diff_tokens(b_mid)
+    matcher = difflib.SequenceMatcher(a=a_toks, b=b_toks, autojunk=False)
+    total = 0
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        seg_a = "".join(a_toks[i1:i2])
+        seg_b = "".join(b_toks[j1:j2])
+        if tag in ("delete", "insert"):
+            total += max(len(seg_a), len(seg_b))
+            continue
+        mid_a, mid_b = _trim_common(seg_a, seg_b)
+        if not mid_a and not mid_b:
+            continue
+        span = max(len(mid_a), len(mid_b))
+        if span <= _EXACT_DIFF_CHARS and budget[0] >= span:
+            budget[0] -= span
+            total += _exact_char_diff(mid_a, mid_b)
+        elif not use_chunks and span > _EXACT_DIFF_CHARS:
+            total += _tokenized_diff_count(mid_a, mid_b, use_chunks=True, refine_budget=budget)
+        else:
+            total += span
+    return total
+
+
 def _changed_char_count(before: str, after: str) -> int:
     """Number of characters that actually differ between two snapshots.
 
@@ -64,13 +137,12 @@ def _changed_char_count(before: str, after: str) -> int:
         return 0
     a = (before or "")[:_MAX_DIFF_COMPARE_CHARS]
     b = (after or "")[:_MAX_DIFF_COMPARE_CHARS]
-    matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
-    total = 0
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        if tag == "equal":
-            continue
-        total += max(i2 - i1, j2 - j1)
-    return total
+    a_mid, b_mid = _trim_common(a, b)
+    if not a_mid and not b_mid:
+        return 0
+    if max(len(a_mid), len(b_mid)) <= _EXACT_DIFF_CHARS:
+        return _exact_char_diff(a_mid, b_mid)
+    return _tokenized_diff_count(a_mid, b_mid)
 
 
 def _visual_hash(text: str, key: str) -> str | None:

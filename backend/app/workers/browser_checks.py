@@ -13,7 +13,6 @@ from app.models import ChangeEvent, Monitor, NotificationOutbox, Workspace
 from app.models.entities import PLAIN_HTTP_MODES, OutboxStatus, RunStatus
 from app.services.browser_fetch import fetch_url_browser
 from app.services.domain_guard import _redis
-from app.services.failure_notify import record_run_outcome
 from app.workers.broker import redis_broker  # noqa: F401
 from app.workers.run_guard import execute_monitored_run
 
@@ -104,17 +103,6 @@ def run_browser_check(run_id: str) -> None:
                     RunStatus.RUNNING.value,
                 ),
             )
-            outbox_ids = record_run_outcome(
-                db,
-                monitor=monitor,
-                succeeded=False,
-                error_code="quota_exceeded",
-                error_message=error_message,
-            )
-            db.commit()
-            from app.workers.run_guard import enqueue_outbox
-
-            enqueue_outbox(outbox_ids)
             return True
         return False
 

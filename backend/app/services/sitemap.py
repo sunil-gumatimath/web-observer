@@ -8,6 +8,7 @@ so outbound requests are validated and robots.txt is respected.
 from __future__ import annotations
 
 import logging
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from urllib.parse import urldefrag, urlparse, urlsplit, urlunsplit
@@ -72,10 +73,23 @@ def parse_sitemap_xml(text: str) -> list[str]:
         raise SitemapError("invalid_xml", f"Could not parse sitemap XML: {exc}") from exc
 
     local = _strip_ns(root.tag)
+    if local == "sitemapindex":
+        parent_tags = ("sitemap",)
+    elif local == "urlset":
+        parent_tags = ("url",)
+    else:
+        parent_tags = ("url", "sitemap")
+
     urls: list[str] = []
-    for elem in root.iter():
-        if _strip_ns(elem.tag) == "loc" and elem.text:
-            urls.append(elem.text.strip())
+    # Only accept <loc> directly inside <url> or <sitemap>; Google image/video
+    # extensions (<image:loc>, <video:loc>) also strip to "loc" and must not
+    # be treated as page URLs.
+    for parent in root.iter():
+        if _strip_ns(parent.tag) not in parent_tags:
+            continue
+        for child in parent:
+            if _strip_ns(child.tag) == "loc" and child.text:
+                urls.append(child.text.strip())
     # Basic sanity: a sitemap must contain at least one <loc>.
     if not urls:
         return []
@@ -125,6 +139,7 @@ def discover_sitemap_urls(
     max_response_bytes: int | None = None,
     max_urls: int = 500,
     max_depth: int = 3,
+    total_timeout_seconds: float | None = None,
     _depth: int = 0,
     _seen: set[str] | None = None,
 ) -> list[str]:
@@ -132,7 +147,8 @@ def discover_sitemap_urls(
 
     Tries ``/sitemap.xml`` and ``/sitemap_index.xml``, then falls back to
     ``Sitemap:`` entries in ``robots.txt``. Recurses through ``<sitemapindex>``
-    children (bounded by ``max_depth``). Returns de-duplicated, absolute URLs.
+    children (bounded by ``max_depth`` and optional ``total_timeout_seconds``).
+    Returns de-duplicated, absolute URLs.
     Raises :class:`SitemapError` if no sitemap can be found or parsed.
     """
     settings = get_settings()
@@ -140,6 +156,19 @@ def discover_sitemap_urls(
     max_bytes = max_response_bytes or settings.default_max_response_bytes
     limits = _DiscoveryLimits(max_urls=max_urls, max_depth=max_depth)
     seen = _seen if _seen is not None else set()
+    deadline = (
+        time.monotonic() + total_timeout_seconds
+        if total_timeout_seconds is not None and total_timeout_seconds > 0
+        else None
+    )
+
+    def _remaining_timeout() -> int | None:
+        if deadline is None:
+            return timeout
+        remaining = deadline - time.monotonic()
+        if remaining < 1:
+            return None
+        return min(timeout, int(remaining))
 
     # 1) Try the standard sitemap locations.
     candidate_locations = _local_urls(base_url)
@@ -147,11 +176,14 @@ def discover_sitemap_urls(
     child_sitemaps: list[tuple[str, int]] = []
 
     for loc in candidate_locations:
+        req_timeout = _remaining_timeout()
+        if req_timeout is None:
+            break
         if loc in seen:
             continue
         seen.add(loc)
         try:
-            text = _fetch_text(loc, timeout_seconds=timeout, max_bytes=max_bytes)
+            text = _fetch_text(loc, timeout_seconds=req_timeout, max_bytes=max_bytes)
         except SitemapError as exc:
             logger.debug("sitemap_location_failed loc=%s error=%s", loc, exc.code)
             continue
@@ -167,12 +199,21 @@ def discover_sitemap_urls(
 
     # 2) Fall back to robots.txt Sitemap: directives if nothing found yet.
     if not page_urls and not child_sitemaps:
-        for sm in _robots_sitemap_urls(base_url, timeout_seconds=timeout, max_bytes=max_bytes):
+        robots_timeout = _remaining_timeout()
+        robots_locs = (
+            _robots_sitemap_urls(base_url, timeout_seconds=robots_timeout, max_bytes=max_bytes)
+            if robots_timeout is not None
+            else []
+        )
+        for sm in robots_locs:
+            req_timeout = _remaining_timeout()
+            if req_timeout is None:
+                break
             if sm in seen:
                 continue
             seen.add(sm)
             try:
-                text = _fetch_text(sm, timeout_seconds=timeout, max_bytes=max_bytes)
+                text = _fetch_text(sm, timeout_seconds=req_timeout, max_bytes=max_bytes)
             except SitemapError as exc:
                 logger.debug("robots_sitemap_failed loc=%s error=%s", sm, exc.code)
                 continue
@@ -185,18 +226,21 @@ def discover_sitemap_urls(
             else:
                 page_urls.extend(locs)
 
-    # 3) Recurse into child sitemaps (sitemapindex), bounded by depth.
+    # 3) Recurse into child sitemaps (sitemapindex), bounded by depth and budget.
     if child_sitemaps:
         for child, child_depth in child_sitemaps:
             if child_depth > limits.max_depth:
                 continue
             if len(page_urls) >= limits.max_urls:
                 break
+            req_timeout = _remaining_timeout()
+            if req_timeout is None:
+                break
             if child in seen:
                 continue
             seen.add(child)
             try:
-                text = _fetch_text(child, timeout_seconds=timeout, max_bytes=max_bytes)
+                text = _fetch_text(child, timeout_seconds=req_timeout, max_bytes=max_bytes)
             except SitemapError as exc:
                 logger.debug("child_sitemap_failed loc=%s error=%s", child, exc.code)
                 continue

@@ -183,17 +183,18 @@ def object_exists(key: str) -> bool:
         return False
 
 
-def delete_object(key: str) -> None:
+def delete_object(key: str) -> bool:
     if _use_local():
         path = _resolve_local_path(key)
         if path is None:
-            return
+            return False
         try:
             if path.exists():
                 path.unlink()
+            return True
         except OSError as exc:
             logger.warning("storage_delete_failed key=%s error=%s", key, exc)
-        return
+            return False
 
     from botocore.exceptions import BotoCoreError, ClientError
 
@@ -202,8 +203,10 @@ def delete_object(key: str) -> None:
     # (put_bytes/get_bytes/object_exists all use _bucket_for).
     try:
         _client().delete_object(Bucket=_bucket_for(key), Key=key)
+        return True
     except (BotoCoreError, ClientError) as exc:
         logger.warning("storage_delete_failed key=%s error=%s", key, exc)
+        return False
 
 
 def presigned_get_url(key: str, *, expires_in: int = 3600) -> str:
