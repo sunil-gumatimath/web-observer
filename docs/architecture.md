@@ -102,7 +102,7 @@ flowchart LR
         sch["schemas.py\nPydantic IO"]
         rt["routers/\nmonitors (SSE stream + runs), workspaces,\nnotifications, sharing (public share + invites),\nenterprise (exports), internal"]
         svc["services/\nfetcher, pipeline, diffing,\nextract, ai_summary, webhooks,\nemail, storage, usage, plans,\ndigest, run_logs, live_events,\nbulk_import, api_keys, audit,\nbranding, domain_guard, run_reaper,\ncontext_dev, model_catalog, ssrf helpers..."]
-        wk["workers/\nbroker, checks, browser_checks,\nnotifications, webhooks,\nrun_guard, enqueue"]
+        wk["workers/\nbroker, checks, browser_checks,\nnotifications, webhooks, ai_enrich,\nbranding, run_guard, enqueue"]
         mdl["models/\nORM entities — __init__ installs\ninstall_orm_hooks(): every process\npublishing status writes →\nRedis wakeup hints"]
         sec["security/ssrf.py"]
         sched["scheduler.py"]
@@ -242,6 +242,7 @@ classDiagram
         +UUID monitor_id
         +String token_hash  (opaque token in URL, hash stored)
         +String token_prefix
+        +String note  (optional — migration 016)
         +bool enabled
     }
     class WorkspaceInvite {
@@ -386,7 +387,7 @@ sequenceDiagram
 flowchart TD
     A[FetchResult] --> B{status >= 400?}
     B -->|yes| F1[Run FAILED\nhttp_client/server_error]
-    B -->|no| C[extract_normalized by mode\npage_content / site_links / product_price /\nlist_items / json_field / rss_feed /\nreadme / visual / security_scan]
+    B -->|no| C[extract_normalized by mode\npage_content / site_links / product_price /\nlist_items / json_field / rss_feed /\nreadme / visual / security_scan / html_meta]
     C --> D{extraction OK\nand non-empty?}
     D -->|no| F2[Run FAILED\nextraction_failed]
     D -->|yes| E[content_hash + store raw + Snapshot]

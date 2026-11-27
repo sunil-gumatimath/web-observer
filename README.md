@@ -18,7 +18,7 @@ Web Observer is a web change-detection and alerting platform. You create a monit
 - **Runs anywhere** — local processes against hosted Neon Postgres and local Redis, with opt-in $0 Cloudflare edge workers for failover fetching, share-page caching, and security verdicts.
 - **Built for teams** — workspaces, RBAC, audit log, API keys, invite links, public share pages, and per-workspace BYO keys.
 
-> **Status:** Phases 0–7 complete. Post-roadmap work added the alerts inbox, conditional thresholds, AI triage, Redis dedup caching, tags, run-log exports, brand enrichment, encrypted webhook secrets, and per-principal rate limits. Schema head: Alembic `015_change_run_set_null`. Test counts change as fixes land, so [CI](.github/workflows/ci.yml) is the source of truth.
+> **Status:** Phases 0–7 complete. Post-roadmap work added the alerts inbox, conditional thresholds, AI triage, Redis dedup caching, tags, run-log exports, brand enrichment, encrypted webhook secrets, and per-principal rate limits. Schema head: Alembic `016_share_link_note`. Test counts change as fixes land, so [CI](.github/workflows/ci.yml) is the source of truth.
 
 ## Architecture
 
@@ -348,7 +348,7 @@ Logs page with outcome and monitor/date filters (`GET /api/v1/workspaces/{id}/ru
 
 ### Platform & security
 
-RBAC (owner/admin/member/viewer), audit log, expiring invite links, workspace switching · `mtw_...` API keys · free/pro/business/enterprise tiers with per-workspace quotas, Stripe checkout or simulated (solo: skip Stripe) · managed or per-workspace BYO keys (`LLM_API_*`, `RESEND_API_KEY`) · opaque-token `/share/{token}` pages (unguessable, hashed at rest, expiring, no login) · brand-aware dashboard (logo/title/description/hero re-hosted, favicon fallback in inbox) · retention: snapshots 30 days, runs 90 days, change events survive run cleanup (migration `015`) · SSRF-pinned fetcher with redirect re-validation, ReDoS/size-capped regexes, input length caps, HKDF-purposed crypto, [threat model](docs/security/threat-model.md).
+RBAC (owner/admin/member/viewer), audit log, expiring invite links, workspace switching · `mtw_...` API keys · free/pro/business/enterprise tiers with per-workspace quotas, Stripe checkout or simulated (solo: skip Stripe) · managed or per-workspace BYO keys (`LLM_API_*`, `RESEND_API_KEY`) · opaque-token `/share/{token}` pages (unguessable, hashed at rest, expiring, no login) · brand-aware dashboard (logo/title/description/hero re-hosted, favicon fallback in inbox) · retention: unreferenced snapshots 30 days, referenced snapshot objects 90 days (`SNAPSHOT_OBJECT_RETENTION_DAYS`), runs 90 days, change events survive run cleanup (migration `015`) · SSRF-pinned fetcher with redirect re-validation, ReDoS/size-capped regexes, input length caps, HKDF-purposed crypto, [threat model](docs/security/threat-model.md).
 
 ### Cloudflare free tier (optional)
 

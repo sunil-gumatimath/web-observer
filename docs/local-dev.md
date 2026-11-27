@@ -272,6 +272,8 @@ What runs natively, one row per service:
 | `scheduler` | `python -m app.scheduler` |
 | `worker` | `dramatiq app.workers` (http_checks + notifications, plus a separate ai_enrichment worker) |
 | `worker-browser` | `dramatiq app.workers --queues browser_checks` (`--threads 1`) |
+| `digest` | `python -m app.digest_job --loop` (supervised in Docker; optional standalone loop locally) |
+| `retention` | `python -m app.retention_job --loop` (supervised in Docker; optional standalone loop locally) |
 | `web` | `next dev` (frontend, port 3000) |
 
 Environments:
@@ -286,7 +288,7 @@ Staging/production are not configured (hosting config removed).
 ## 9. Release basics
 
 - Migrations via Alembic (`alembic upgrade head`) — the schema's only source of truth
-  (head revision: `015_change_run_set_null`)
+  (head revision: `016_share_link_note`)
 - Health/readiness probes (`/health`, `/ready`)
 - Prometheus metrics (`/metrics`, rate limited to 30/minute): monitors total,
   runs and changes in the last 24h, outbox and webhook backlog
@@ -392,9 +394,8 @@ headers:
 
 ## 15. Production / hosting
 
-- No deploy target or pipeline is configured (staging/production undecided — see roadmap Phase 10).
-- Enterprise deploy is undecided — see roadmap Phase 10.
-- Cloud hosting configuration (Cloud Run, Cloud Build, Render, Vercel) has not been set up — see the last section of this doc.
+- No staging/production deploy target or pipeline is configured yet (runs locally or via the all-in-one Docker container).
+- Enterprise deploy and cloud hosting targets (Cloud Run, Cloud Build, Render, Vercel) are not configured.
 
 ---
 
