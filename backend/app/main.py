@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -15,12 +17,14 @@ from sqlalchemy.orm import Session
 from app import __version__
 from app.config import get_settings
 from app.db import Base, engine, get_db
+from app.observability import init_error_tracking
 from app.rate_limit import limiter, rate_limit_exceeded_handler
 from app.schemas import HealthResponse
 from app.workers.broker import redis_broker  # noqa: F401
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+init_error_tracking(settings)
 
 Db = Annotated[Session, Depends(get_db)]
 
@@ -194,10 +198,30 @@ def ready(db: Db) -> HealthResponse:
     return HealthResponse(status="ready", version=__version__)
 
 
+_METRICS_TTL_SECONDS = 30.0
+# (monotonic timestamp, rendered body). Per-process: each API worker computes at
+# most one set of aggregate queries per TTL no matter how often it is scraped.
+_metrics_cache: tuple[float, str] | None = None
+_metrics_lock = threading.Lock()
+
+
 @app.get("/metrics")
 @limiter.limit("30/minute")
 def metrics(request: Request, db: Db):
-    """Prometheus-compatible metrics (lightweight, no extra deps)."""
+    """Prometheus-compatible metrics (lightweight, no extra deps).
+
+    The body is cached for ``_METRICS_TTL_SECONDS``: the counts below are
+    sequential scans on large tables and the route is unauthenticated, so an
+    uncached scrape loop would translate directly into database load.
+    """
+    global _metrics_cache
+    from fastapi.responses import PlainTextResponse
+
+    with _metrics_lock:
+        cached = _metrics_cache
+    if cached is not None and time.monotonic() - cached[0] < _METRICS_TTL_SECONDS:
+        return PlainTextResponse(cached[1], media_type="text/plain; version=0.0.4")
+
     from sqlalchemy import func as _func
 
     from app.models import ChangeEvent as _CE
@@ -206,6 +230,7 @@ def metrics(request: Request, db: Db):
     from app.models import NotificationOutbox as _Outbox
     from app.models import WebhookDelivery as _WD
 
+    metrics_ok = True
     try:
         from datetime import UTC as _UTC
         from datetime import datetime as _dt
@@ -228,6 +253,7 @@ def metrics(request: Request, db: Db):
         )
     except Exception as exc:
         logger.warning("metrics_failed error=%s", exc)
+        metrics_ok = False
         monitors_total = runs_24h = changes_24h = pending_outbox = pending_webhooks = 0
 
     lines = [
@@ -247,6 +273,10 @@ def metrics(request: Request, db: Db):
         "# TYPE webobserver_webhooks_pending gauge",
         f"webobserver_webhooks_pending {pending_webhooks}",
     ]
-    from fastapi.responses import PlainTextResponse
-
-    return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+    body = "\n".join(lines) + "\n"
+    if metrics_ok:
+        # Never cache the all-zero fallback: a transient DB error must not
+        # report an empty system for the next TTL.
+        with _metrics_lock:
+            _metrics_cache = (time.monotonic(), body)
+    return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
