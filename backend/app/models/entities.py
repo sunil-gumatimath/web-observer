@@ -92,6 +92,20 @@ PLAIN_HTTP_MODES: frozenset[str] = frozenset(
     )
 )
 
+# List modes where an empty item list is a legitimate, readable result
+# ("everything was removed") rather than a broken extraction: a list_items
+# selector that matches nothing, a site_links sitemap that parses with no
+# <loc> left, an rss_feed that parses but publishes zero entries. Once a
+# baseline exists these are reported as changes; with no baseline they stay
+# failures, because there is nothing established to differ from.
+EMPTY_LIST_IS_CHANGE_MODES: frozenset[str] = frozenset(
+    (
+        MonitorMode.LIST_ITEMS.value,
+        MonitorMode.SITE_LINKS.value,
+        MonitorMode.RSS_FEED.value,
+    )
+)
+
 # Modes that extract a single numeric value — they get a value-history chart
 # and numeric thresholds.
 VALUE_MODES: frozenset[str] = frozenset(

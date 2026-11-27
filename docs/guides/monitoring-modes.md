@@ -73,13 +73,23 @@ detected main content are not watched.
 - Thresholds: `percent_change` (edited characters as a share of the longer
   snapshot; same-length rewrites count),
   `min_diff_chars`, and the two regex filters.
+- When a page is served by the Context.dev fallback the input is already
+  cleaned Markdown, so `ignore_selectors` cannot be applied there — only
+  `ignore_regexes` are. Ignore selectors always apply to the normal HTTP and
+  browser fetches.
 
 ### `site_links`
 
 Fetches a sitemap and watches the URL inventory. Added and removed URLs are
 reported as a set diff, so re-ordering the sitemap is not a change.
 
-- Point the monitor at `https://example.com/sitemap.xml`.
+- Point the monitor at `https://example.com/sitemap.xml`. A URL with a path
+  (`https://example.com/blog/sitemap.xml`) is tried first and only then the
+  site's `/sitemap.xml` / `/sitemap_index.xml`, so a sub-site sitemap is
+  watched instead of the root one.
+- When the sitemap still exists but lists no pages, the check reports **every
+  URL removed** instead of failing. A sitemap that cannot be fetched at all
+  stays a `sitemap_error` failure.
 - `js_required` is rejected.
 
 ### `product_price`
@@ -124,6 +134,8 @@ Fetches an RSS or Atom feed and watches the item list. Entries are matched on
 GUID (falling back to link), so a feed that re-orders or re-dates existing
 entries is not a change.
 
+- A feed that still parses but lists no entries is reported as **every entry
+  removed**, not as a failing run.
 - `js_required` is rejected.
 
 ### `readme`
@@ -150,7 +162,11 @@ Renders the page in a browser and compares screenshots perceptually.
   hamming distance). Snapshots captured before the pHash path existed still use
   the legacy 64-bit aHash (`VISUAL_AHASH_THRESHOLD=5`).
 - The optional CSS selector clips the comparison to one region (e.g. `#hero`),
-  which is the cheapest way to stop a rotating banner from firing alerts.
+  which is the cheapest way to stop a rotating banner from firing alerts. If
+  the region disappears after a baseline exists, the change is reported as
+  **watched region missing** (and "region restored" when it comes back) rather
+  than failing every run; on the very first check a selector that matches
+  nothing is still an error, so a typo is visible immediately.
 - The change detail shows the two compared runs as a **before/after slider**
   (`screenshots/<monitor_id>/<run_id>.png`) with the perceptual-hash summary in
   a collapsible panel, so you see the pixels that actually moved, not just the

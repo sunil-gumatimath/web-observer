@@ -17,7 +17,34 @@ from pydantic import (
 )
 
 from app.config import get_settings
-from app.models.entities import MONITOR_MODES
+from app.models.entities import MONITOR_MODES, PLAIN_HTTP_MODES, MonitorMode
+
+# Why each plain-HTTP mode cannot be rendered in a browser. Describing the
+# reason next to the mode keeps the 422 message useful; any mode added to
+# PLAIN_HTTP_MODES is rejected automatically even without an entry here.
+_PLAIN_HTTP_JS_REASONS: dict[str, str] = {
+    MonitorMode.SITE_LINKS.value: "site_links monitors fetch the sitemap over plain HTTP",
+    MonitorMode.RSS_FEED.value: "rss_feed monitors fetch RSS over plain HTTP",
+    MonitorMode.README.value: "readme monitors fetch the README over plain HTTP",
+    MonitorMode.SECURITY_SCAN.value: "security_scan scans run on Cloudflare's edge",
+    MonitorMode.HTML_META.value: "html_meta monitors read raw HTML over plain HTTP",
+}
+
+
+def _reject_js_for_plain_http_modes(mode: str | None, js_required: bool | None) -> None:
+    """Reject ``js_required`` for every mode that must be fetched over HTTP.
+
+    The mode set lives in ``PLAIN_HTTP_MODES`` (entities.py) so this check can
+    never drift from the workers that bounce a misrouted job back onto the
+    HTTP queue.
+    """
+    if not js_required:
+        return
+    if mode not in PLAIN_HTTP_MODES:
+        return
+    reason = _PLAIN_HTTP_JS_REASONS.get(mode, f"{mode} monitors fetch over plain HTTP")
+    raise ValueError(f"{reason}; js_required is not supported")
+
 
 _EMAIL_ADAPTER: TypeAdapter[EmailStr] = TypeAdapter(EmailStr)
 
@@ -330,29 +357,10 @@ class MonitorCreate(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_site_links_js(self) -> MonitorCreate:
-        # site_links / readme / rss_feed fetch over plain HTTP; browser queue would snapshot wrong content.
-        if self.mode == "site_links" and self.js_required:
-            raise ValueError(
-                "site_links monitors fetch the sitemap over plain HTTP; "
-                "js_required is not supported"
-            )
-        if self.mode == "rss_feed" and self.js_required:
-            raise ValueError(
-                "rss_feed monitors fetch RSS over plain HTTP; js_required is not supported"
-            )
-        if self.mode == "readme" and self.js_required:
-            raise ValueError(
-                "readme monitors fetch the README over plain HTTP; js_required is not supported"
-            )
-        if self.mode == "security_scan" and self.js_required:
-            raise ValueError(
-                "security_scan monitors render on Cloudflare's edge via the URL Scanner; js_required is not supported"
-            )
-        if self.mode == "html_meta" and self.js_required:
-            raise ValueError(
-                "html_meta monitors read raw HTML over plain HTTP; js_required is not supported"
-            )
+    def check_plain_http_js(self) -> MonitorCreate:
+        # site_links / readme / rss_feed / security_scan / html_meta fetch over
+        # plain HTTP; the browser queue would snapshot the wrong content.
+        _reject_js_for_plain_http_modes(self.mode, self.js_required)
         return self
 
     @model_validator(mode="after")
@@ -453,28 +461,8 @@ class MonitorUpdate(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_site_links_js(self) -> MonitorUpdate:
-        if self.mode == "site_links" and self.js_required:
-            raise ValueError(
-                "site_links monitors fetch the sitemap over plain HTTP; "
-                "js_required is not supported"
-            )
-        if self.mode == "rss_feed" and self.js_required:
-            raise ValueError(
-                "rss_feed monitors fetch RSS over plain HTTP; js_required is not supported"
-            )
-        if self.mode == "readme" and self.js_required:
-            raise ValueError(
-                "readme monitors fetch the README over plain HTTP; js_required is not supported"
-            )
-        if self.mode == "security_scan" and self.js_required:
-            raise ValueError(
-                "security_scan monitors render on Cloudflare's edge via the URL Scanner; js_required is not supported"
-            )
-        if self.mode == "html_meta" and self.js_required:
-            raise ValueError(
-                "html_meta monitors read raw HTML over plain HTTP; js_required is not supported"
-            )
+    def check_plain_http_js(self) -> MonitorUpdate:
+        _reject_js_for_plain_http_modes(self.mode, self.js_required)
         return self
 
     @model_validator(mode="after")

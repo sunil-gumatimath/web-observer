@@ -51,13 +51,54 @@ def _clean_page_url(raw: str) -> str:
 
 
 def _local_urls(url: str) -> list[str]:
-    """Candidate sitemap URLs to try for a given site, in priority order."""
+    """Candidate sitemap URLs to try for a given site, in priority order.
+
+    A configured URL with a path (``https://example.com/blog/sitemap.xml``) is
+    the user's explicit statement of where the sitemap lives, so it is probed
+    before the well-known root locations. Rebuilding candidates from the host
+    alone silently replaced a sub-site sitemap with the root one.
+    """
     parsed = urlparse(url)
     host = f"{parsed.scheme}://{parsed.netloc}"
-    return [
-        f"{host}/sitemap.xml",
-        f"{host}/sitemap_index.xml",
-    ]
+    candidates: list[str] = []
+    if parsed.path and parsed.path != "/":
+        configured = f"{host}{parsed.path}"
+        if parsed.query:
+            configured = f"{configured}?{parsed.query}"
+        candidates.append(configured)
+    candidates.append(f"{host}/sitemap.xml")
+    candidates.append(f"{host}/sitemap_index.xml")
+    # A configured /sitemap.xml already equals the first well-known location.
+    unique: list[str] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+def _read_sitemap_document(
+    url: str,
+    *,
+    timeout_seconds: int,
+    max_bytes: int,
+    log_tag: str,
+) -> tuple[str | None, list[str]] | None:
+    """Fetch and parse one sitemap document.
+
+    Returns ``(root_tag, locs)``, or ``None`` when the document could not be
+    fetched or parsed. An unknown root tag is reported as-is; callers treat
+    anything other than ``sitemapindex`` as a ``<urlset>``-like leaf.
+    """
+    try:
+        text = _fetch_text(url, timeout_seconds=timeout_seconds, max_bytes=max_bytes)
+    except SitemapError as exc:
+        logger.debug("%s_failed loc=%s error=%s", log_tag, url, exc.code)
+        return None
+    try:
+        locs = parse_sitemap_xml(text)
+    except SitemapError:
+        return None
+    return _root_tag(text), locs
 
 
 def parse_sitemap_xml(text: str) -> list[str]:
@@ -145,11 +186,14 @@ def discover_sitemap_urls(
 ) -> list[str]:
     """Discover page URLs from a site's sitemap.
 
-    Tries ``/sitemap.xml`` and ``/sitemap_index.xml``, then falls back to
-    ``Sitemap:`` entries in ``robots.txt``. Recurses through ``<sitemapindex>``
-    children (bounded by ``max_depth`` and optional ``total_timeout_seconds``).
-    Returns de-duplicated, absolute URLs.
-    Raises :class:`SitemapError` if no sitemap can be found or parsed.
+    Tries the configured location first when the URL carries a path (e.g.
+    ``/blog/sitemap.xml``), then ``/sitemap.xml`` and ``/sitemap_index.xml``,
+    then falls back to ``Sitemap:`` entries in ``robots.txt``. Recurses through
+    ``<sitemapindex>`` children (bounded by ``max_depth`` and optional
+    ``total_timeout_seconds``). Returns de-duplicated, absolute URLs.
+    Raises :class:`SitemapError` with code ``no_sitemap`` if no sitemap can be
+    found or parsed, or ``sitemap_empty`` if every sitemap that could be read
+    lists no pages.
     """
     settings = get_settings()
     timeout = timeout_seconds or settings.default_timeout_seconds
@@ -170,10 +214,28 @@ def discover_sitemap_urls(
             return None
         return min(timeout, int(remaining))
 
-    # 1) Try the standard sitemap locations.
+    # 1) Try the configured sitemap location (when it has a path) and the
+    #    standard well-known ones.
     candidate_locations = _local_urls(base_url)
     page_urls: list[str] = []
     child_sitemaps: list[tuple[str, int]] = []
+    # Leaf <urlset> documents we actually fetched, and how many of them parsed
+    # with zero <loc> entries. An all-empty set is conclusive evidence the site
+    # emptied its sitemap; "every fetch failed" is not, and must stay a
+    # no_sitemap failure rather than a false "everything removed" alert.
+    leaf_documents = 0
+    empty_leaf_documents = 0
+
+    def _file_document(doc: tuple[str | None, list[str]]) -> None:
+        nonlocal leaf_documents, empty_leaf_documents
+        root_tag, locs = doc
+        if root_tag == "sitemapindex":
+            child_sitemaps.extend((child, _depth + 1) for child in locs)
+            return
+        leaf_documents += 1
+        if not locs:
+            empty_leaf_documents += 1
+        page_urls.extend(locs)
 
     for loc in candidate_locations:
         req_timeout = _remaining_timeout()
@@ -182,20 +244,15 @@ def discover_sitemap_urls(
         if loc in seen:
             continue
         seen.add(loc)
-        try:
-            text = _fetch_text(loc, timeout_seconds=req_timeout, max_bytes=max_bytes)
-        except SitemapError as exc:
-            logger.debug("sitemap_location_failed loc=%s error=%s", loc, exc.code)
+        doc = _read_sitemap_document(
+            loc,
+            timeout_seconds=req_timeout,
+            max_bytes=max_bytes,
+            log_tag="sitemap_location",
+        )
+        if doc is None:
             continue
-        try:
-            locs = parse_sitemap_xml(text)
-        except SitemapError:
-            continue
-        root_tag = _root_tag(text)
-        if root_tag == "sitemapindex":
-            child_sitemaps.extend((child, _depth + 1) for child in locs)
-        else:
-            page_urls.extend(locs)
+        _file_document(doc)
 
     # 2) Fall back to robots.txt Sitemap: directives if nothing found yet.
     if not page_urls and not child_sitemaps:
@@ -212,19 +269,15 @@ def discover_sitemap_urls(
             if sm in seen:
                 continue
             seen.add(sm)
-            try:
-                text = _fetch_text(sm, timeout_seconds=req_timeout, max_bytes=max_bytes)
-            except SitemapError as exc:
-                logger.debug("robots_sitemap_failed loc=%s error=%s", sm, exc.code)
+            doc = _read_sitemap_document(
+                sm,
+                timeout_seconds=req_timeout,
+                max_bytes=max_bytes,
+                log_tag="robots_sitemap",
+            )
+            if doc is None:
                 continue
-            try:
-                locs = parse_sitemap_xml(text)
-            except SitemapError:
-                continue
-            if _root_tag(text) == "sitemapindex":
-                child_sitemaps.extend((child, _depth + 1) for child in locs)
-            else:
-                page_urls.extend(locs)
+            _file_document(doc)
 
     # 3) Recurse into child sitemaps (sitemapindex), bounded by depth and budget.
     if child_sitemaps:
@@ -239,20 +292,23 @@ def discover_sitemap_urls(
             if child in seen:
                 continue
             seen.add(child)
-            try:
-                text = _fetch_text(child, timeout_seconds=req_timeout, max_bytes=max_bytes)
-            except SitemapError as exc:
-                logger.debug("child_sitemap_failed loc=%s error=%s", child, exc.code)
+            doc = _read_sitemap_document(
+                child,
+                timeout_seconds=req_timeout,
+                max_bytes=max_bytes,
+                log_tag="child_sitemap",
+            )
+            if doc is None:
                 continue
-            try:
-                locs = parse_sitemap_xml(text)
-            except SitemapError:
-                continue
-            if _root_tag(text) == "sitemapindex":
+            root_tag, locs = doc
+            if root_tag == "sitemapindex":
                 if child_depth < limits.max_depth:
                     child_sitemaps.extend((nested, child_depth + 1) for nested in locs)
-            else:
-                page_urls.extend(locs)
+                continue
+            leaf_documents += 1
+            if not locs:
+                empty_leaf_documents += 1
+            page_urls.extend(locs)
 
     # 4) Normalize + de-duplicate, drop fragments and query strings.
     parsed: list[str] = []
@@ -271,9 +327,18 @@ def discover_sitemap_urls(
             break
 
     if not parsed:
+        # Every leaf sitemap that could be read was empty: the inventory was
+        # emptied rather than never existing. Kept distinct from no_sitemap so
+        # a site_links monitor can report "all URLs removed" after a baseline.
+        if leaf_documents and empty_leaf_documents == leaf_documents:
+            raise SitemapError(
+                "sitemap_empty",
+                "The site's sitemap parsed but lists no page URLs.",
+            )
+        tried = ", ".join(_local_urls(base_url))
         raise SitemapError(
             "no_sitemap",
-            "No sitemap found for this site (tried /sitemap.xml, /sitemap_index.xml, and robots.txt).",
+            f"No sitemap found for this site (tried {tried}, and robots.txt).",
         )
     return parsed
 
@@ -296,9 +361,10 @@ def sitemap_monitor_urls(
 ) -> list[str]:
     """Return the de-duplicated list of page URLs for a ``site_links`` monitor.
 
-    Reuses :func:`discover_sitemap_urls` (standard locations + robots.txt +
-    sitemap-index recursion). Raises :class:`SitemapError` if no sitemap is
-    found.
+    Reuses :func:`discover_sitemap_urls` (the configured location, the standard
+    ones, robots.txt, and sitemap-index recursion). Raises
+    :class:`SitemapError` if no sitemap is found. ``code`` is ``sitemap_empty``
+    when the sitemap exists but lists no pages.
     """
     try:
         return discover_sitemap_urls(
@@ -308,6 +374,10 @@ def sitemap_monitor_urls(
             max_urls=max_urls,
         )
     except SitemapError as exc:
+        # An emptied sitemap is a readable answer ("everything was removed"),
+        # not a missing one — mapping URLs from the provider would hide it.
+        if exc.code == "sitemap_empty":
+            raise
         if not context_dev.is_configured():
             raise
         settings = get_settings()

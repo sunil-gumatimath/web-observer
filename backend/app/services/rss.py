@@ -86,5 +86,8 @@ def extract_rss_items(text: str, *, include_identity: bool = False) -> list[str]
                 )
 
     if not items:
-        raise ExtractionError("extraction_failed", "RSS feed contained no items")
+        # A feed that parses but carries zero entries is a readable result, not
+        # a broken extraction: the pipeline reports the empty list as a change
+        # once a baseline exists. Invalid XML above keeps "extraction_failed".
+        raise ExtractionError("no_items", "RSS feed contained no items")
     return items
