@@ -8,7 +8,7 @@
 
 Web Observer is a web change-detection and alerting platform. You create a monitor; workers check it on a schedule, hash what they see, and notify you only when a change matters.
 
-[Architecture](#architecture) · [Quick start](#quick-start) · [Documentation](docs/) · [Roadmap](docs/roadmap.md)
+[Architecture](#architecture) · [Quick start](#quick-start) · [Documentation](docs/)
 
 ## Highlights
 
@@ -200,13 +200,9 @@ Full diagrams: [docs/architecture.md](docs/architecture.md).
 | [docs/architecture.md](docs/architecture.md) | Deep architecture: modules, ERD, manual-run + pipeline sequences |
 | [docs/auth-modes.md](docs/auth-modes.md) | Auth modes (dev token / Clerk) |
 | [docs/guides/clerk.md](docs/guides/clerk.md) | Clerk auth (dev setup + production hardening) |
-| [docs/guides/resend-setup.md](docs/guides/resend-setup.md) | Email alerts |
 | [docs/guides/cloudflare-free-features.md](docs/guides/cloudflare-free-features.md) | Cloudflare free tier end-to-end |
 | [docs/guides/monitoring-modes.md](docs/guides/monitoring-modes.md) | The 10 monitoring modes, options, and limits |
-| [docs/roadmap.md](docs/roadmap.md) | Feature roadmap (Phases 8–10) |
 | [docs/security/threat-model.md](docs/security/threat-model.md) | Security policy: SSRF, tenant isolation, out of scope |
-| [docs/adrs/](docs/adrs/) | Architecture decision records |
-| [docs/integrations/n8n-zapier.md](docs/integrations/n8n-zapier.md) | n8n / Zapier automation |
 
 ## Quick start
 
@@ -299,12 +295,12 @@ Redis must be running. Start these processes from `backend/` (the frontend one f
 
 The browser worker is required for `js_required` monitors and opt-in screenshots. Use `--threads 1` on Windows; Playwright runs in a subprocess to avoid `[Errno 9] Bad file descriptor`.
 
-Optional jobs, on a schedule/cron: `python -m app.digest_job --loop` (daily/weekly digests) and `python -m app.retention_job` (purge old snapshots/runs).
+Optional jobs for manual/non-Docker runs: `python -m app.digest_job --loop` (daily/weekly digests) and `python -m app.retention_job [--loop]` (purge old snapshots/runs).
 
-Docker alternative — one container with everything inside:
+Docker alternative — one container with everything inside (includes `digest` and `retention` loops via `docker/supervisord.conf`):
 
 ```bash
-./scripts/docker-up.sh              # build + start (API :8002, frontend :3000, workers, scheduler, redis)
+./scripts/docker-up.sh              # build + start (API :8002, frontend :3000, workers, scheduler, digest, retention, redis)
 ./scripts/docker-up.sh down         # stop
 ./scripts/docker-up.sh logs -f      # follow logs
 ./scripts/docker-up.sh ps           # container status

@@ -128,13 +128,6 @@ decision is recorded as an ADR.
 - CAPTCHA / bot-defense bypass (**will not implement**)  
 - Full legal clearance for every jurisdiction (document policy; user responsibility for targets)  
 
-The stealth-evasion proposal in roadmap §5.2 directly contradicts the
-bot-defense prohibition above. That contradiction is resolved by
-[ADR 007](../adrs/007-stealth-evasion-policy.md) — **Proposed, not
-accepted**: no stealth-evasion implementation until legal review, target-site
-ToS assessment, and abuse controls are approved. Any future stealth work
-requires a new ADR that supersedes it.
-
 ## Security requirements checklist
 
 Status: **implemented** — the controls shipped in the core detection, browser,
@@ -155,4 +148,3 @@ for the operational limits and retention rules.
 
 - [docs/architecture.md](../architecture.md) — component map and security notes
 - [docs/local-dev.md](../local-dev.md) — quotas, retention, secrets
-- [docs/adrs/007-stealth-evasion-policy.md](../adrs/007-stealth-evasion-policy.md) — stealth-evasion policy (Proposed)

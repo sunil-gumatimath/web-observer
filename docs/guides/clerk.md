@@ -166,4 +166,3 @@ Switching to Production removes **Development mode**, not always the branding.
 
 - [docs/auth-modes.md](../auth-modes.md) — the three credentials the API accepts
 - [docs/local-dev.md](../local-dev.md) — running the stack locally
-- [docs/integrations/n8n-zapier.md](../integrations/n8n-zapier.md) — API keys and webhooks
