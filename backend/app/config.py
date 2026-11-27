@@ -103,7 +103,6 @@ class Settings(BaseSettings):
     max_monitors_per_workspace: int = 25
     max_checks_per_day: int = 500
     max_browser_checks_per_day: int = 50
-    max_notification_deliveries_per_day: int = 200
     # Daily notification ceiling for workspaces without a plan override.
     # 0 disables the check.
     max_notifications_per_day: int = 200

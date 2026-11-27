@@ -145,8 +145,9 @@ def enqueue_workspace_digest(
         return []
 
     # Check per-channel outbox idempotency BEFORE generating the AI briefing:
-    # digest_job polls every 5 minutes during digest_hour_utc, so otherwise the
-    # LLM call would be repeated ~12x per window only for sends to be deduped.
+    # digest_job polls every 5 minutes for the whole DIGEST_CATCHUP_HOURS window,
+    # so otherwise the LLM call would be repeated on every pass only for the
+    # sends to be deduped.
     candidate_keys = [
         f"digest:{workspace.id}:{period_key}:channel:{channel.id}" for channel in channels
     ]
@@ -224,25 +225,40 @@ def enqueue_workspace_digest(
     return outbox_ids
 
 
+#: A digest still goes out if the job was down or slow at the scheduled hour, for
+#: this many hours afterwards. Per-channel outbox idempotency keys make repeated
+#: passes inside the window harmless, so a restart no longer skips a whole day.
+DIGEST_CATCHUP_HOURS = 6
+
+
 def due_digest_workspaces(
     db: Session, *, now: datetime | None = None
 ) -> list[tuple[Workspace, str, datetime]]:
-    """Return workspaces that should receive a digest now: (workspace, period_key, since)."""
-    now = now or datetime.now(UTC)
+    """Return workspaces that should receive a digest now: (workspace, period_key, since).
+
+    A workspace is due from its ``digest_hour_utc`` until ``DIGEST_CATCHUP_HOURS``
+    later. The period key and ``since`` come from the *scheduled* time, not from
+    ``now``, so every pass in the window targets the same period (and is
+    deduplicated by the outbox) even when the window crosses midnight.
+    """
+    now = (now or datetime.now(UTC)).astimezone(UTC)
     results: list[tuple[Workspace, str, datetime]] = []
     workspaces = db.scalars(
         select(Workspace).where(Workspace.digest_cadence.in_(["daily", "weekly"]))
     ).all()
     for ws in workspaces:
         hour = int(ws.digest_hour_utc if ws.digest_hour_utc is not None else 14)
-        if now.hour != hour:
+        scheduled = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        if scheduled > now:
+            scheduled -= timedelta(days=1)
+        if now - scheduled >= timedelta(hours=DIGEST_CATCHUP_HOURS):
             continue
         if ws.digest_cadence == "daily":
-            period_key = f"daily:{now.strftime('%Y%m%d')}"
-            since = now - timedelta(days=1)
+            period_key = f"daily:{scheduled.strftime('%Y%m%d')}"
+            since = scheduled - timedelta(days=1)
             results.append((ws, period_key, since))
-        elif ws.digest_cadence == "weekly" and now.weekday() == 0:  # Monday
-            period_key = f"weekly:{now.strftime('%Y-W%W')}"
-            since = now - timedelta(days=7)
+        elif ws.digest_cadence == "weekly" and scheduled.weekday() == 0:  # Monday
+            period_key = f"weekly:{scheduled.strftime('%Y-W%W')}"
+            since = scheduled - timedelta(days=7)
             results.append((ws, period_key, since))
     return results

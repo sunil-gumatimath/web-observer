@@ -268,6 +268,7 @@ class MonitorRun(Base):
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_monitor_run_idempotency"),
         Index("ix_monitor_runs_monitor_created", "monitor_id", "created_at"),
+        Index("ix_monitor_runs_workspace_created", "workspace_id", "created_at"),
         Index(
             "ix_monitor_runs_config_status_finished",
             "monitor_id",
@@ -360,6 +361,7 @@ class ChangeEvent(Base):
     __table_args__ = (
         UniqueConstraint("run_id", name="uq_change_event_run"),
         Index("ix_change_events_monitor_created", "monitor_id", "created_at"),
+        Index("ix_change_events_workspace_created", "workspace_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)

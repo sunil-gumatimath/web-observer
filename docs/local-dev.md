@@ -288,10 +288,17 @@ Staging/production are not configured (hosting config removed).
 ## 9. Release basics
 
 - Migrations via Alembic (`alembic upgrade head`) — the schema's only source of truth
-  (head revision: `016_share_link_note`)
+  (head revision: `017_workspace_created_indexes`)
 - Health/readiness probes (`/health`, `/ready`)
-- Prometheus metrics (`/metrics`, rate limited to 30/minute): monitors total,
-  runs and changes in the last 24h, outbox and webhook backlog
+- Prometheus metrics (`/metrics`, rate limited to 30/minute, cached for 30s):
+  monitors total, runs and changes in the last 24h, outbox and webhook backlog
+- Optional Sentry error tracking for the API (`SENTRY_DSN`)
+- Digests are sent from the workspace's `digest_hour_utc` and still go out if the
+  digest job was down at that hour, for up to 6 hours afterwards (per-channel
+  idempotency keys prevent duplicates)
+- Webhook deliveries retry only transient failures (network errors, 408/425/429,
+  5xx) with 30s → 2m → 8m → 30m backoff, honouring `Retry-After`; other 4xx
+  responses fail the delivery immediately
 - Worker concurrency via env
 
 ## 10. Service targets
