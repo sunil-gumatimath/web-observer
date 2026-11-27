@@ -121,10 +121,6 @@ def enqueue_workspace_digest(
     since: datetime,
     period_key: str,
 ) -> list[uuid.UUID]:
-    body, count = build_digest_body(db, workspace, since=since)
-    if count == 0:
-        return []
-
     from app.services.usage import (
         QuotaExceeded,
         assert_can_use_notifications,
@@ -145,14 +141,36 @@ def enqueue_workspace_digest(
             NotificationChannel.enabled.is_(True),
         )
     ).all()
+    if not channels:
+        return []
+
+    # Check per-channel outbox idempotency BEFORE generating the AI briefing:
+    # digest_job polls every 5 minutes during digest_hour_utc, so otherwise the
+    # LLM call would be repeated ~12x per window only for sends to be deduped.
+    candidate_keys = [
+        f"digest:{workspace.id}:{period_key}:channel:{channel.id}" for channel in channels
+    ]
+    existing_keys = set(
+        db.scalars(
+            select(NotificationOutbox.idempotency_key).where(
+                NotificationOutbox.idempotency_key.in_(candidate_keys)
+            )
+        ).all()
+    )
+    pending_channels = [
+        (channel, idem)
+        for channel, idem in zip(channels, candidate_keys, strict=True)
+        if idem not in existing_keys
+    ]
+    if not pending_channels:
+        return []
+
+    body, count = build_digest_body(db, workspace, since=since)
+    if count == 0:
+        return []
+
     outbox_ids: list[uuid.UUID] = []
-    for channel in channels:
-        idem = f"digest:{workspace.id}:{period_key}:channel:{channel.id}"
-        existing = db.scalar(
-            select(NotificationOutbox).where(NotificationOutbox.idempotency_key == idem)
-        )
-        if existing is not None:
-            continue
+    for channel, idem in pending_channels:
         if not try_reserve_notification_slot(db, workspace):
             logger.warning(
                 "digest_notification_quota_exceeded workspace_id=%s channel_id=%s",

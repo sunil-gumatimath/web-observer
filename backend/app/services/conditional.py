@@ -23,8 +23,12 @@ _MAX_PATTERN_LEN = 256
 _MAX_REGEX_TEXT_CHARS = 200_000
 
 # Cap on the strings compared by difflib when sizing a change. Snapshot text
-# can reach ~50k chars; SequenceMatcher is O(n*m) in the worst case.
+# can reach ~50k chars; character-level SequenceMatcher is worst-case quadratic,
+# so inputs whose differing middle exceeds _EXACT_DIFF_CHARS fall back to
+# line/chunk tokens.
 _MAX_DIFF_COMPARE_CHARS = 50_000
+_EXACT_DIFF_CHARS = 4_000
+_DIFF_CHUNK_CHARS = 64
 
 
 # Seconds. A catastrophic-backtracking pattern is cut off instead of
@@ -52,6 +56,14 @@ def _bounded_search(pattern: str, text: str) -> bool | None:
         return None
 
 
+def _diff_tokens(text: str) -> list[str]:
+    """Split large differing spans into bounded line/fixed-size tokens."""
+    lines = text.splitlines(keepends=True)
+    if 1 < len(lines) <= 1_000:
+        return lines
+    return [text[i : i + _DIFF_CHUNK_CHARS] for i in range(0, len(text), _DIFF_CHUNK_CHARS)]
+
+
 def _changed_char_count(before: str, after: str) -> int:
     """Number of characters that actually differ between two snapshots.
 
@@ -64,12 +76,34 @@ def _changed_char_count(before: str, after: str) -> int:
         return 0
     a = (before or "")[:_MAX_DIFF_COMPARE_CHARS]
     b = (after or "")[:_MAX_DIFF_COMPARE_CHARS]
-    matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    # Trim shared prefix and suffix in O(n) so localized edits stay fast and exact.
+    prefix = 0
+    min_len = min(len(a), len(b))
+    while prefix < min_len and a[prefix] == b[prefix]:
+        prefix += 1
+    suffix = 0
+    rem_min = min_len - prefix
+    while suffix < rem_min and a[len(a) - 1 - suffix] == b[len(b) - 1 - suffix]:
+        suffix += 1
+    a_mid = a[prefix : len(a) - suffix] if suffix else a[prefix:]
+    b_mid = b[prefix : len(b) - suffix] if suffix else b[prefix:]
+    if not a_mid and not b_mid:
+        return 0
+    if max(len(a_mid), len(b_mid)) <= _EXACT_DIFF_CHARS:
+        matcher = difflib.SequenceMatcher(a=a_mid, b=b_mid, autojunk=False)
+        return sum(
+            max(i2 - i1, j2 - j1) for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag != "equal"
+        )
+    a_toks = _diff_tokens(a_mid)
+    b_toks = _diff_tokens(b_mid)
+    matcher = difflib.SequenceMatcher(a=a_toks, b=b_toks, autojunk=False)
     total = 0
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
             continue
-        total += max(i2 - i1, j2 - j1)
+        a_chars = sum(len(t) for t in a_toks[i1:i2])
+        b_chars = sum(len(t) for t in b_toks[j1:j2])
+        total += max(a_chars, b_chars)
     return total
 
 

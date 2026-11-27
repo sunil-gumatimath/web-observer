@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import ChangeEvent, MonitorRun, Snapshot
-from app.services.storage import delete_object
+from app.services.storage import delete_object, object_exists
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,27 @@ class RetentionResult:
     snapshots_deleted: int
     runs_deleted: int
     objects_deleted: int
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+
+
+def _delete_snapshot_objects(snap: Snapshot) -> int:
+    """Delete storage objects associated with *snap* and return count deleted."""
+    deleted = 0
+    for key in (snap.raw_object_key, snap.text_object_key):
+        if key:
+            delete_object(key)
+            deleted += 1
+    if snap.run_id:
+        screenshot_key = f"screenshots/{snap.monitor_id}/{snap.run_id}.png"
+        if object_exists(screenshot_key):
+            delete_object(screenshot_key)
+            deleted += 1
+    return deleted
 
 
 def purge_expired_snapshots(
@@ -35,13 +56,21 @@ def purge_expired_snapshots(
     Change events are inbox history: ``ChangeEvent.new_snapshot_id`` is
     NOT NULL with ON DELETE CASCADE, so deleting a snapshot it points at
     would destroy the event. Snapshots still referenced as ``new_snapshot``
-    are therefore *kept* (event and its metadata survive intact); only
-    unreferenced snapshots are purged. Runs older than run retention are
-    removed when no longer needed.
+    are therefore *kept* (event and DB preview survive intact); once past
+    ``snapshot_object_retention_days`` their large storage objects are still
+    reclaimed so storage does not grow unboundedly.
     """
     settings = get_settings()
     now = now or datetime.now(UTC)
     snapshot_cutoff = now - timedelta(days=settings.snapshot_retention_days)
+    object_retention_days = int(
+        getattr(
+            settings,
+            "snapshot_object_retention_days",
+            max(settings.snapshot_retention_days, 90),
+        )
+    )
+    object_cutoff = now - timedelta(days=object_retention_days)
     run_cutoff = now - timedelta(days=settings.run_retention_days)
 
     snap_q = select(Snapshot).where(Snapshot.created_at < snapshot_cutoff)
@@ -61,26 +90,29 @@ def purge_expired_snapshots(
             ).all()
         )
     skipped_referenced = 0
+    objects_deleted = 0
     purged: list = []
     for snap in snapshots:
         if snap.id in referenced:
             skipped_referenced += 1
-            logger.info("retention_keep_referenced_snapshot snapshot_id=%s", snap.id)
+            created_at = _as_utc(getattr(snap, "created_at", None))
+            if (
+                created_at is not None
+                and created_at < object_cutoff
+                and (snap.raw_object_key or snap.text_object_key)
+            ):
+                objects_deleted += _delete_snapshot_objects(snap)
+                snap.raw_object_key = None
+                snap.text_object_key = None
+            else:
+                logger.info("retention_keep_referenced_snapshot snapshot_id=%s", snap.id)
             continue
         purged.append(snap)
-    objects_deleted = 0
     for snap in purged:
-        # Raw HTML snapshot, normalized-text object, and (when captured) the
+        # Raw HTML snapshot, normalized-text object, and (when present) the
         # screenshot for this run all live in object storage under different
         # keys — purge all of them so retention actually frees space.
-        for key in (snap.raw_object_key, snap.text_object_key):
-            if key:
-                delete_object(key)
-                objects_deleted += 1
-        if snap.run_id:
-            screenshot_key = f"screenshots/{snap.monitor_id}/{snap.run_id}.png"
-            delete_object(screenshot_key)
-            objects_deleted += 1
+        objects_deleted += _delete_snapshot_objects(snap)
         # Clear run FK to snapshot before delete if needed
         runs = db.scalars(select(MonitorRun).where(MonitorRun.snapshot_id == snap.id)).all()
         for run in runs:
