@@ -8,10 +8,14 @@ from urllib.parse import quote
 from app.services.extract import ExtractionError
 
 ATOM_NS = "http://www.w3.org/2005/Atom"
+# Namespaces are compared lowercased (see ``_split_tag``), so the Atom namespace
+# needs its comparable form: matching the verbatim URL meant ``<atom:link>``
+# inside an RSS ``<item>`` was never recognised as part of the feed.
+_ATOM_NS_LOWER = ATOM_NS.lower()
 
-# Atom link relations that identify the entry itself. Anything else
-# ("self", "enclosure", "replies", ...) points at the feed or an asset, so it
-# may only be used when the entry carries no alternate link at all.
+# Link relations that identify the item itself. Anything else ("self",
+# "enclosure", "replies", ...) points at the feed or an asset, so it may only be
+# used when the item carries no alternate link at all.
 _ENTRY_LINK_RELS = frozenset(("", "alternate"))
 
 
@@ -37,7 +41,7 @@ def _belongs_to_feed(node: ET.Element, parent_ns: str, root_ns: str) -> bool:
     namespaces are skipped.
     """
     namespace, _ = _split_tag(node.tag)
-    return not namespace or namespace in (parent_ns, root_ns, ATOM_NS)
+    return not namespace or namespace in (parent_ns, root_ns, _ATOM_NS_LOWER)
 
 
 def _atom_entry_fields(entry: ET.Element, root_ns: str) -> tuple[str, str, str]:
@@ -122,6 +126,7 @@ def extract_rss_items(text: str, *, include_identity: bool = False) -> list[str]
             item_ns = _split_tag(node.tag)[0]
             title = ""
             link = ""
+            fallback_link = ""
             guid = ""
             for child in node:
                 if not _belongs_to_feed(child, item_ns, root_ns):
@@ -133,15 +138,25 @@ def extract_rss_items(text: str, *, include_identity: bool = False) -> list[str]
                         title = value
                 elif name == "link":
                     # RSS carries the URL as text; Atom-style href is tolerated.
+                    # Same relation policy as ``_atom_entry_fields``: a native
+                    # link or an Atom alternate wins over rel="self" no matter
+                    # where in the item the producer put them.
                     href = (child.text or "").strip()
                     if not href:
                         href = (child.attrib.get("href") or "").strip()
-                    if href and not link:
-                        link = href
+                    if not href:
+                        continue
+                    rel = (child.attrib.get("rel") or "").strip().lower()
+                    if rel in _ENTRY_LINK_RELS:
+                        if not link:
+                            link = href
+                    elif not fallback_link:
+                        fallback_link = href
                 elif name in ("guid", "id"):
                     value = (child.text or "").strip()
                     if value and not guid:
                         guid = value
+            link = link or fallback_link
             label = title or guid or link
             if not label:
                 continue

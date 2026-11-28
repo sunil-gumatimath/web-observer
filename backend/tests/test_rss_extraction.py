@@ -119,3 +119,36 @@ def test_plain_rss_and_atom_still_extract() -> None:
         "</feed>"
     )
     assert extract_rss_items(atom) == ["[Atom one](https://example.com/a1)"]
+
+
+def test_rss_atom_alternate_link_is_used_as_the_item_link() -> None:
+    """An RSS item whose only link is <atom:link> keeps it (Atom children of an
+    RSS item used to be dropped by a case-sensitive namespace comparison)."""
+    feed = (
+        "<rss version='2.0' xmlns:atom='http://www.w3.org/2005/Atom'><channel><item>"
+        "<title>Episode 12</title>"
+        "<atom:link rel='alternate' href='https://example.com/ep12'/>"
+        "</item></channel></rss>"
+    )
+    assert extract_rss_items(feed) == ["[Episode 12](https://example.com/ep12)"]
+
+
+def test_rss_atom_self_link_does_not_replace_the_native_link() -> None:
+    feed = (
+        "<rss version='2.0' xmlns:atom='http://www.w3.org/2005/Atom'><channel><item>"
+        "<title>Episode 12</title>"
+        "<atom:link rel='self' href='https://example.com/feed.xml'/>"
+        "<link>https://example.com/ep12</link>"
+        "</item></channel></rss>"
+    )
+    assert extract_rss_items(feed) == ["[Episode 12](https://example.com/ep12)"]
+
+
+def test_rss_atom_self_link_is_only_a_last_resort() -> None:
+    feed = (
+        "<rss version='2.0' xmlns:atom='http://www.w3.org/2005/Atom'><channel><item>"
+        "<title>Episode 12</title>"
+        "<atom:link rel='self' href='https://example.com/self.xml'/>"
+        "</item></channel></rss>"
+    )
+    assert extract_rss_items(feed) == ["[Episode 12](https://example.com/self.xml)"]
