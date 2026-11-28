@@ -327,8 +327,7 @@ def _capture_screenshot_inline(
                         # baseline exists), not a generic time-out.
                         raise FetchError(
                             "clip_selector_not_found",
-                            f"Clip selector {clip_selector!r} matched nothing on "
-                            f"{validated.url}",
+                            f"Clip selector {clip_selector!r} matched nothing on {validated.url}",
                         ) from exc
                     png = loc.screenshot(type="png")
                 else:

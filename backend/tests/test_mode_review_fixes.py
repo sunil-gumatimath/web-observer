@@ -153,6 +153,21 @@ def test_unreachable_child_sitemaps_are_not_reported_as_empty(monkeypatch) -> No
     assert exc.value.code == "no_sitemap"
 
 
+def test_non_sitemap_xml_is_not_an_emptied_sitemap(monkeypatch) -> None:  # noqa: ANN001
+    """A feed at the configured URL must not read as "all pages removed"."""
+
+    def fake_fetch(url, *, timeout_seconds, max_bytes):  # noqa: ANN001, ANN202
+        if url == "https://example.com/feed.xml":
+            return "<feed xmlns='http://www.w3.org/2005/Atom'><title>Feed</title></feed>"
+        raise SitemapError("http_error", "HTTP 404")
+
+    monkeypatch.setattr(sitemap, "_fetch_text", fake_fetch)
+
+    with pytest.raises(SitemapError) as exc:
+        discover_sitemap_urls("https://example.com/feed.xml", timeout_seconds=5)
+    assert exc.value.code == "no_sitemap"
+
+
 def test_sitemap_monitor_urls_does_not_map_an_emptied_sitemap(monkeypatch) -> None:  # noqa: ANN001
     """The provider fallback would hide "all URLs removed"."""
 

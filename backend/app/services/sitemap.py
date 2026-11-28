@@ -226,16 +226,24 @@ def discover_sitemap_urls(
     leaf_documents = 0
     empty_leaf_documents = 0
 
-    def _file_document(doc: tuple[str | None, list[str]]) -> None:
+    def _record_leaf(root_tag: str | None, locs: list[str]) -> None:
         nonlocal leaf_documents, empty_leaf_documents
+        if locs:
+            leaf_documents += 1
+            page_urls.extend(locs)
+        elif root_tag == "urlset":
+            # Only a real <urlset> with no <loc> proves the inventory emptied.
+            # A well-formed non-sitemap document (a feed or XHTML page served
+            # at the configured URL) reads as "no sitemap", not "no pages".
+            leaf_documents += 1
+            empty_leaf_documents += 1
+
+    def _file_document(doc: tuple[str | None, list[str]]) -> None:
         root_tag, locs = doc
         if root_tag == "sitemapindex":
             child_sitemaps.extend((child, _depth + 1) for child in locs)
             return
-        leaf_documents += 1
-        if not locs:
-            empty_leaf_documents += 1
-        page_urls.extend(locs)
+        _record_leaf(root_tag, locs)
 
     for loc in candidate_locations:
         req_timeout = _remaining_timeout()
@@ -305,10 +313,7 @@ def discover_sitemap_urls(
                 if child_depth < limits.max_depth:
                     child_sitemaps.extend((nested, child_depth + 1) for nested in locs)
                 continue
-            leaf_documents += 1
-            if not locs:
-                empty_leaf_documents += 1
-            page_urls.extend(locs)
+            _record_leaf(root_tag, locs)
 
     # 4) Normalize + de-duplicate, drop fragments and query strings.
     parsed: list[str] = []

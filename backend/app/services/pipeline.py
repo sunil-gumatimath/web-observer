@@ -1200,15 +1200,19 @@ def _visual_region_change(
     """Summary/diff for a clip region that appeared or disappeared, or *None*.
 
     A visual monitor whose clip selector stops matching records the
-    ``REGION_MISSING_MARKER`` instead of failing every run; ``None`` means
-    neither capture is a marker, so the caller compares perceptual hashes as
-    usual.
+    ``REGION_MISSING_MARKER`` instead of failing every run. ``None`` means the
+    two captures are the same (a still-missing region is not a new change), or
+    neither is a marker, so the caller compares perceptual hashes as usual.
     """
     from app.services.visual import REGION_MISSING_MARKER
 
     region = selector or "(none)"
     prev_value = (prev_text or "").strip()
     new_value = (new_text or "").strip()
+    if new_value == prev_value:
+        # The marker is stable, so a region that is still missing settles
+        # instead of alerting on every run.
+        return None
     if new_value == REGION_MISSING_MARKER:
         return (
             "Visual change detected (watched region missing)",
