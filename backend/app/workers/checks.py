@@ -139,7 +139,18 @@ def run_http_check(run_id: str) -> None:
                     max_response_bytes=monitor.max_response_bytes,
                 )
             except SitemapError as exc:
-                raise FetchError("sitemap_error", str(exc)) from exc
+                # A sitemap that exists but lists no pages is a readable
+                # result: report it as an emptied inventory so the pipeline
+                # records "all URLs removed" instead of failing every run.
+                # Only once a baseline exists — otherwise there is nothing to
+                # have removed, and the run keeps the sitemap_error failure.
+                if exc.code != "sitemap_empty":
+                    raise FetchError("sitemap_error", str(exc)) from exc
+                from app.services.pipeline import has_previous_success
+
+                if not has_previous_success(db, monitor):
+                    raise FetchError("sitemap_error", str(exc)) from exc
+                text = ""
             content = text.encode("utf-8")
             if len(content) > monitor.max_response_bytes:
                 raise FetchError(

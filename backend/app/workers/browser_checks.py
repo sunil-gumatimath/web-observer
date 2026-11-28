@@ -108,25 +108,51 @@ def run_browser_check(run_id: str) -> None:
 
     def _fetch(monitor: Monitor, db):
         if monitor.mode == "visual":
-            from app.services.visual import capture_with_provider_fallback, visual_to_fetch_result
-
-            capture = capture_with_provider_fallback(
-                monitor.url,
-                timeout_seconds=max(monitor.timeout_seconds, 45),
-                clip_selector=monitor.css_selector,
+            from app.services.fetcher import FetchError, FetchResult
+            from app.services.visual import (
+                REGION_MISSING_MARKER,
+                capture_with_provider_fallback,
+                visual_to_fetch_result,
             )
+
             try:
-                from app.services.storage import put_bytes
-
-                put_bytes(
-                    key=f"screenshots/{monitor.id}/{run_id}.png",
-                    data=capture.png_bytes,
-                    content_type="image/png",
+                capture = capture_with_provider_fallback(
+                    monitor.url,
+                    timeout_seconds=max(monitor.timeout_seconds, 45),
+                    clip_selector=monitor.css_selector,
                 )
-            except Exception as s_exc:
-                logger.debug("visual_screenshot_path_save_failed error=%s", s_exc)
+            except FetchError as exc:
+                # The clip region the monitor watches no longer exists. Once a
+                # baseline exists that is a change ("region missing"), not a
+                # permanently failing run. Without a baseline the run fails so
+                # the user sees the selector is wrong.
+                if exc.code != "clip_selector_not_found":
+                    raise
+                from app.services.pipeline import has_previous_success
 
-            result = visual_to_fetch_result(capture, url=monitor.url)
+                if not has_previous_success(db, monitor):
+                    raise
+                result = FetchResult(
+                    final_url=monitor.url,
+                    status_code=200,
+                    content=b"",
+                    text=REGION_MISSING_MARKER,
+                    content_type="text/plain; charset=utf-8",
+                    latency_ms=0,
+                )
+            else:
+                try:
+                    from app.services.storage import put_bytes
+
+                    put_bytes(
+                        key=f"screenshots/{monitor.id}/{run_id}.png",
+                        data=capture.png_bytes,
+                        content_type="image/png",
+                    )
+                except Exception as s_exc:
+                    logger.debug("visual_screenshot_path_save_failed error=%s", s_exc)
+
+                result = visual_to_fetch_result(capture, url=monitor.url)
         else:
             from app.workers.checks import fetch_page_with_provider_fallback
 

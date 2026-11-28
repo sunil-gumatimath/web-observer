@@ -92,6 +92,20 @@ PLAIN_HTTP_MODES: frozenset[str] = frozenset(
     )
 )
 
+# List modes where an empty item list is a legitimate, readable result
+# ("everything was removed") rather than a broken extraction: a list_items
+# selector that matches nothing, a site_links sitemap that parses with no
+# <loc> left, an rss_feed that parses but publishes zero entries. Once a
+# baseline exists these are reported as changes; with no baseline they stay
+# failures, because there is nothing established to differ from.
+EMPTY_LIST_IS_CHANGE_MODES: frozenset[str] = frozenset(
+    (
+        MonitorMode.LIST_ITEMS.value,
+        MonitorMode.SITE_LINKS.value,
+        MonitorMode.RSS_FEED.value,
+    )
+)
+
 # Modes that extract a single numeric value — they get a value-history chart
 # and numeric thresholds.
 VALUE_MODES: frozenset[str] = frozenset(
@@ -268,6 +282,7 @@ class MonitorRun(Base):
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_monitor_run_idempotency"),
         Index("ix_monitor_runs_monitor_created", "monitor_id", "created_at"),
+        Index("ix_monitor_runs_workspace_created", "workspace_id", "created_at"),
         Index(
             "ix_monitor_runs_config_status_finished",
             "monitor_id",
@@ -360,6 +375,7 @@ class ChangeEvent(Base):
     __table_args__ = (
         UniqueConstraint("run_id", name="uq_change_event_run"),
         Index("ix_change_events_monitor_created", "monitor_id", "created_at"),
+        Index("ix_change_events_workspace_created", "workspace_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)

@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+from dramatiq.errors import Retry
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
@@ -69,7 +70,19 @@ def enqueue_change_webhooks(
 
 def _backoff_seconds(attempt: int) -> int:
     # Exponential backoff: 30s, 2m, 8m, 30m capped
-    return min(30 * (4 ** (attempt - 1)), 1800)
+    return min(30 * (4 ** max(attempt - 1, 0)), 1800)
+
+
+# 4xx responses other than these mean the receiver understood and refused the
+# request (404/410 gone, 401/403 auth, 400/422 bad payload). Retrying an
+# identical body is pointless, so they fail the delivery immediately.
+_RETRYABLE_CLIENT_ERRORS = frozenset({408, 425, 429})
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    if 400 <= status_code < 500:
+        return status_code in _RETRYABLE_CLIENT_ERRORS
+    return True
 
 
 def reap_stuck_webhook_deliveries(db: Session, older_than_seconds: int = 600) -> int:
@@ -222,14 +235,25 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
                     retry_after = None
             except (ValueError, AttributeError):
                 retry_after = None
-        delivery.status = "pending" if delivery.attempts < 5 else "failed"
         error_text = f"HTTP {resp.status_code}: {resp.text[:500]}"
         if retry_after:
             error_text += f" (retry_after={retry_after}s)"
         delivery.last_error = error_text
+        if not _is_retryable_status(resp.status_code):
+            # The receiver rejected the request itself (bad URL, auth, gone...).
+            # Re-sending the identical payload cannot succeed, so stop here.
+            delivery.status = "failed"
+            db.commit()
+            logger.warning(
+                "webhook_delivery_rejected id=%s status=%d", delivery_id, resp.status_code
+            )
+            return
+        delivery.status = "pending" if delivery.attempts < 5 else "failed"
         db.commit()
         if delivery.status == "pending":
-            # Exponential backoff before next attempt — raise to trigger dramatiq retry
+            # Ask Dramatiq to redeliver after our own backoff (or the receiver's
+            # Retry-After). Without an explicit delay its generic 15s-doubling
+            # backoff applied and the computed value was only logged.
             backoff = retry_after or _backoff_seconds(delivery.attempts)
             logger.info(
                 "webhook_delivery_retry id=%s attempt=%d backoff=%ds status=%d",
@@ -238,8 +262,8 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
                 backoff,
                 resp.status_code,
             )
-            raise RuntimeError(f"webhook retry pending: HTTP {resp.status_code} backoff {backoff}s")
-    except RuntimeError:
+            raise Retry(f"webhook retry pending: HTTP {resp.status_code}", delay=backoff * 1000)
+    except Retry:
         raise
     except Exception as exc:  # noqa: BLE001
         delivery.status = "pending" if delivery.attempts < 5 else "failed"
@@ -247,4 +271,7 @@ def deliver_webhook(db: Session, delivery_id: uuid.UUID) -> None:
         db.commit()
         logger.exception("webhook_delivery_failed id=%s", delivery_id)
         if delivery.status == "pending":
-            raise
+            raise Retry(
+                f"webhook delivery error: {type(exc).__name__}",
+                delay=_backoff_seconds(delivery.attempts) * 1000,
+            ) from exc

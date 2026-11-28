@@ -46,6 +46,7 @@ MAX_VALUE_CHARS = 300
 MAX_SCRIPT_URLS = 50
 MAX_ALTERNATE_LINKS = 40
 MAX_CANONICAL_LINKS = 5
+MAX_JSONLD_TYPES = 20
 MAX_TOTAL_ITEMS = 150
 
 # Meta values that are URLs: normalize them like canonical/script links so a
@@ -109,7 +110,7 @@ def _jsonld_types(html: str) -> list[str]:
             walk(json.loads(raw))
         except (ValueError, TypeError, RecursionError):
             continue
-    return sorted(found)[:20]
+    return sorted(found)[:MAX_JSONLD_TYPES]
 
 
 def extract_html_meta_items(html: str, final_url: str) -> list[str]:
@@ -210,8 +211,12 @@ def extract_html_meta_items(html: str, final_url: str) -> list[str]:
                 head_facts.append(f"alternate {hreflang}: {_stable_url(href, final_url)}")
                 alternate_links += 1
     # Sort the remaining head facts deterministically; document and title stay
-    # pinned first so the total cap never evicts them.
-    items.extend(sorted(set(head_facts)))
+    # pinned first so the total cap never evicts them. The head group is also
+    # capped by what the JSON-LD and script groups still need, so a page with
+    # many canonical/alternate links cannot evict the facts appended after it —
+    # a guarantee by construction, not by the caps happening to add up.
+    head_budget = MAX_TOTAL_ITEMS - len(items) - MAX_JSONLD_TYPES - MAX_SCRIPT_URLS
+    items.extend(sorted(set(head_facts))[: max(head_budget, 0)])
 
     for schema_type in _jsonld_types(html):
         items.append(f"jsonld type: {schema_type}")

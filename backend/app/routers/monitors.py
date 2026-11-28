@@ -1991,38 +1991,20 @@ def alerts_summary(
     db: Db,
     _workspace: AnyWs,
 ) -> AlertsSummary:
-    total = (
-        db.scalar(
-            select(func.count())
-            .select_from(ChangeEvent)
-            .where(ChangeEvent.workspace_id == workspace_id)
-        )
-        or 0
-    )
-    unread = (
-        db.scalar(
-            select(func.count())
-            .select_from(ChangeEvent)
-            .where(
-                ChangeEvent.workspace_id == workspace_id,
+    # One pass over the workspace's events instead of three separate counts.
+    total, unread, noise = db.execute(
+        select(
+            func.count(),
+            func.count().filter(
                 ChangeEvent.is_read.is_(False),
                 ChangeEvent.is_noise.is_(False),
-            )
+            ),
+            func.count().filter(ChangeEvent.is_noise.is_(True)),
         )
-        or 0
-    )
-    noise = (
-        db.scalar(
-            select(func.count())
-            .select_from(ChangeEvent)
-            .where(
-                ChangeEvent.workspace_id == workspace_id,
-                ChangeEvent.is_noise.is_(True),
-            )
-        )
-        or 0
-    )
-    return AlertsSummary(total=total, unread=unread, noise=noise)
+        .select_from(ChangeEvent)
+        .where(ChangeEvent.workspace_id == workspace_id)
+    ).one()
+    return AlertsSummary(total=total or 0, unread=unread or 0, noise=noise or 0)
 
 
 @router.post(

@@ -18,7 +18,7 @@ Web Observer is a web change-detection and alerting platform. You create a monit
 - **Runs anywhere** — local processes against hosted Neon Postgres and local Redis, with opt-in $0 Cloudflare edge workers for failover fetching, share-page caching, and security verdicts.
 - **Built for teams** — workspaces, RBAC, audit log, API keys, invite links, public share pages, and per-workspace BYO keys.
 
-> **Status:** Phases 0–7 complete. Post-roadmap work added the alerts inbox, conditional thresholds, AI triage, Redis dedup caching, tags, run-log exports, brand enrichment, encrypted webhook secrets, and per-principal rate limits. Schema head: Alembic `016_share_link_note`. Test counts change as fixes land, so [CI](.github/workflows/ci.yml) is the source of truth.
+> **Status:** Phases 0–7 complete. Post-roadmap work added the alerts inbox, conditional thresholds, AI triage, Redis dedup caching, tags, run-log exports, brand enrichment, encrypted webhook secrets, and per-principal rate limits. Schema head: Alembic `017_workspace_created_indexes`. Test counts change as fixes land, so [CI](.github/workflows/ci.yml) is the source of truth.
 
 ## Architecture
 

@@ -22,6 +22,7 @@ from app.models import (
     Workspace,
 )
 from app.models.entities import (
+    EMPTY_LIST_IS_CHANGE_MODES,
     LIST_DIFF_MODES,
     PLAIN_HTTP_MODES,
     MonitorMode,
@@ -276,8 +277,13 @@ class _ChangeContext:
 # ---------------------------------------------------------------------------
 
 
-def _has_previous_success(db: Session, monitor: Monitor) -> bool:
-    """True when this monitor/config_version already has a succeeded run."""
+def has_previous_success(db: Session, monitor: Monitor) -> bool:
+    """True when this monitor/config_version already has a succeeded run.
+
+    Public because the workers use the same answer: a vanished target (an
+    emptied sitemap, a clip region that no longer exists) is a *change* only
+    once a baseline exists to differ from.
+    """
     return (
         db.scalar(
             select(MonitorRun.id)
@@ -302,15 +308,30 @@ def _is_price_removal(db: Session, monitor: Monitor, error_code: str) -> bool:
         return False
     if monitor.mode != MODE_PRODUCT_PRICE:
         return False
-    return _has_previous_success(db, monitor)
+    return has_previous_success(db, monitor)
+
+
+# Extraction error codes that mean "the list is empty now", not "the check
+# broke": a list_items selector that matches nothing, or a feed that parses but
+# publishes no entries.
+_LIST_REMOVAL_CODES: frozenset[str] = frozenset({"selector_not_found", "no_items"})
 
 
 def _is_list_removal(db: Session, monitor: Monitor, error_code: str) -> bool:
-    if error_code != "selector_not_found":
+    """An emptied list counts as a change once a baseline exists.
+
+    Covers a ``list_items`` selector that no longer matches
+    (``selector_not_found``) and an RSS/Atom feed that parses but publishes
+    zero entries (``no_items``): both are readable results ("everything was
+    removed"), not broken checks. Kept boolean-operator-free so the
+    ``no-boolean-in-except`` lint rule does not fire on callers that use it
+    from inside an ``except`` clause.
+    """
+    if error_code not in _LIST_REMOVAL_CODES:
         return False
-    if monitor.mode != "list_items":
+    if monitor.mode not in EMPTY_LIST_IS_CHANGE_MODES:
         return False
-    return _has_previous_success(db, monitor)
+    return has_previous_success(db, monitor)
 
 
 def _is_json_field_removal(db: Session, monitor: Monitor, error_code: str) -> bool:
@@ -318,7 +339,7 @@ def _is_json_field_removal(db: Session, monitor: Monitor, error_code: str) -> bo
         return False
     if monitor.mode != MonitorMode.JSON_FIELD.value:
         return False
-    return _has_previous_success(db, monitor)
+    return has_previous_success(db, monitor)
 
 
 def _mode_summary(mode: str, prev_text: str, new_text: str) -> str:
@@ -425,7 +446,9 @@ def _extract_and_store_snapshot(
             )
 
     empty_list_after_baseline = (
-        monitor.mode == "list_items" and items == [] and _has_previous_success(db, monitor)
+        monitor.mode in EMPTY_LIST_IS_CHANGE_MODES
+        and items == []
+        and has_previous_success(db, monitor)
     )
     if not normalized and not empty_list_after_baseline:
         # SPA hint: page has substantial HTML with script but extraction produced nothing
@@ -662,18 +685,25 @@ def _detect_change(
 
         settings = get_settings()
         ahash_threshold, phash_threshold = _visual_thresholds(monitor, settings)
-        v_summary, v_diff = visual_diff_summary(
-            prev_text,
-            normalized,
-            threshold=ahash_threshold,
-            phash_threshold=phash_threshold,
-        )
-        if "Visual similar" in v_summary:
-            if not _finish_early_run(db, monitor, run):
-                return _reaped_result(run)
-            return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
-        ctx.summary = v_summary
-        ctx.diff_text = v_diff
+        # A clip selector that stopped matching is captured as the missing-
+        # region marker instead of failing the run; report it in words rather
+        # than letting the hash comparison call the marker "unreadable".
+        region_change = _visual_region_change(prev_text, normalized, monitor.css_selector)
+        if region_change is not None:
+            ctx.summary, ctx.diff_text = region_change
+        else:
+            v_summary, v_diff = visual_diff_summary(
+                prev_text,
+                normalized,
+                threshold=ahash_threshold,
+                phash_threshold=phash_threshold,
+            )
+            if "Visual similar" in v_summary:
+                if not _finish_early_run(db, monitor, run):
+                    return _reaped_result(run)
+                return PipelineResult(status=run.status, content_hash=digest, unchanged=True)
+            ctx.summary = v_summary
+            ctx.diff_text = v_diff
     elif monitor.mode in LIST_DIFF_MODES:
         # When the previous snapshot's full text is missing (storage miss) and
         # only the truncated DB preview survives, reconstructing items from a
@@ -1160,6 +1190,44 @@ def _finish_early_run(db: Session, monitor: Monitor, run: MonitorRun) -> bool:
 
     note_check_outcome(monitor, changed=False, succeeded=True)
     return _commit_terminal_success(db, run)
+
+
+def _visual_region_change(
+    prev_text: str,
+    new_text: str,
+    selector: str | None,
+) -> tuple[str, str] | None:
+    """Summary/diff for a clip region that appeared or disappeared, or *None*.
+
+    A visual monitor whose clip selector stops matching records the
+    ``REGION_MISSING_MARKER`` instead of failing every run. ``None`` means the
+    two captures are the same (a still-missing region is not a new change), or
+    neither is a marker, so the caller compares perceptual hashes as usual.
+    """
+    from app.services.visual import REGION_MISSING_MARKER
+
+    region = selector or "(none)"
+    prev_value = (prev_text or "").strip()
+    new_value = (new_text or "").strip()
+    if new_value == prev_value:
+        # The marker is stable, so a region that is still missing settles
+        # instead of alerting on every run.
+        return None
+    if new_value == REGION_MISSING_MARKER:
+        return (
+            "Visual change detected (watched region missing)",
+            f"watched region selector: {region}\n"
+            f"previous capture: {prev_value or '(none)'}\n"
+            "new capture:      (region missing)\n",
+        )
+    if prev_value == REGION_MISSING_MARKER:
+        return (
+            "Visual change detected (watched region restored)",
+            f"watched region selector: {region}\n"
+            "previous capture: (region missing)\n"
+            f"new capture:      {new_value}\n",
+        )
+    return None
 
 
 def _visual_thresholds(monitor: Monitor, settings: object) -> tuple[int, int]:

@@ -135,6 +135,13 @@ class VisualCapture:
     final_url: str | None = None
 
 
+# Normalized text recorded when a visual monitor's clip selector no longer
+# matches anything on the page. The watched region vanishing is a change once a
+# baseline exists, not a broken check — repeating the same marker keeps later
+# runs "unchanged" instead of alerting forever.
+REGION_MISSING_MARKER = "(watched region missing)"
+
+
 _DEFAULT_BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -312,7 +319,16 @@ def _capture_screenshot_inline(
 
                 if clip_selector:
                     loc = page.locator(clip_selector).first
-                    loc.wait_for(timeout=min(15_000, timeout_ms))
+                    try:
+                        loc.wait_for(timeout=min(15_000, timeout_ms))
+                    except PlaywrightTimeout as exc:
+                        # A renamed/removed region is a specific, readable
+                        # outcome (the workers report it as a change once a
+                        # baseline exists), not a generic time-out.
+                        raise FetchError(
+                            "clip_selector_not_found",
+                            f"Clip selector {clip_selector!r} matched nothing on {validated.url}",
+                        ) from exc
                     png = loc.screenshot(type="png")
                 else:
                     try:
